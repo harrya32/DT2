@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -27,8 +28,12 @@ class Config:
     # Training parameters
     LR = 1e-4
     EPOCHS = 10 # Increased slightly for more complex task
-    GAMMA = 0.01
+    GAMMA = 0.1
     GUMBEL_TAU = 1.0
+    VAL_SPLIT = 0.2
+    EARLY_STOPPING_PATIENCE = 3
+    EARLY_STOPPING_MIN_DELTA = 1e-4
+    RNG_SEED = 0
 
 # --- 2. The Toy World with Policies ---
 class PKPDWorld:
@@ -103,14 +108,15 @@ class AutoregressiveSimulator(nn.Module):
 # --- 4. Helper and Simulation Functions ---
 def generate_data(world, n_samples):
     initial_states = torch.rand(n_samples, 1) * 10.0
-    behavioral_policies = torch.randint(0, world.config.N_POLICIES, (n_samples,))
-    
+    #make all behavioural policies be policy 2
+    behavioural_policies = torch.full((n_samples,), 2)
+
     true_trajectories = torch.zeros(n_samples, world.config.SEQ_LEN)
     true_actions = torch.zeros(n_samples, world.config.SEQ_LEN)
     for i in range(n_samples):
-        true_trajectories[i], true_actions[i] = world.simulate(initial_states[i], behavioral_policies[i])
-        
-    return initial_states, behavioral_policies, true_trajectories, true_actions
+        true_trajectories[i], true_actions[i] = world.simulate(initial_states[i], behavioural_policies[i])
+
+    return initial_states, behavioural_policies, true_trajectories, true_actions
 
 def value_function(trajectory):
     target = 5.0
@@ -128,62 +134,130 @@ def perform_autoregressive_simulation(model, world, initial_states, policy_id):
         # Predict the NEXT state using the model
         next_states = model(current_states, actions)
         sim_traj[:, t] = next_states.squeeze(-1)
-        current_states = next_states # The feedback loop!
+        current_states = next_states 
 
     return sim_traj
 
 # --- 5. The Training and Evaluation Loops ---
-def train(model, world, train_loader, optimizer, config, gamma):
+def compute_loss_terms(model, world, initial_states, true_trajs, true_actions, config, gamma):
+    loss_sim_steps = []
+    for t in range(config.SEQ_LEN - 1):
+        s_t = true_trajs[:, t].unsqueeze(1) if t == 0 else true_trajs[:, t-1].unsqueeze(1)
+        a_t = true_actions[:, t].unsqueeze(1)
+        s_t_plus_1_true = true_trajs[:, t].unsqueeze(1)
+
+        s_t_plus_1_pred = model(s_t, a_t)
+        loss_sim_steps.append(F.mse_loss(s_t_plus_1_pred, s_t_plus_1_true))
+
+    loss_sim = torch.mean(torch.stack(loss_sim_steps))
+
+    if gamma > 0:
+        with torch.no_grad():
+            true_trajectories_all_policies = torch.stack([
+                world.simulate(initial_states[i], p_id)[0]
+                for i in range(initial_states.size(0)) for p_id in range(config.N_POLICIES)
+            ]).view(initial_states.size(0), config.N_POLICIES, config.SEQ_LEN)
+            true_values = value_function(true_trajectories_all_policies)
+
+        sim_trajectories_all_policies = torch.stack([
+            perform_autoregressive_simulation(model, world, initial_states, p_id)
+            for p_id in range(config.N_POLICIES)
+        ], dim=1)
+
+        sim_values = value_function(sim_trajectories_all_policies)
+        plan_probs = F.gumbel_softmax(-sim_values, tau=config.GUMBEL_TAU, hard=False)
+        loss_dec = torch.mean(torch.sum(plan_probs * true_values, dim=-1))
+    else:
+        loss_dec = torch.tensor(0.0, device=initial_states.device)
+
+    total_loss = (1 - gamma) * loss_sim + gamma * loss_dec
+    return total_loss, loss_sim, loss_dec
+
+
+def train_epoch(model, world, train_loader, optimizer, config, gamma):
     model.train()
-    total_loss, total_sim_loss, total_dec_loss = 0, 0, 0
-    
-    for initial_states, policy_ids, true_trajs, true_actions in tqdm(train_loader, "Training", leave=False):
+    total_loss, total_sim_loss, total_dec_loss = 0.0, 0.0, 0.0
+
+    for initial_states, _, true_trajs, true_actions in tqdm(train_loader, "Training", leave=False):
         optimizer.zero_grad()
-        
-        # --- Simulation Loss Calculation (L_sim) ---
-        # We train the one-step predictor on all steps of the sequence.
-        loss_sim_steps = []
-        for t in range(config.SEQ_LEN - 1):
-            s_t = true_trajs[:, t].unsqueeze(1) if t == 0 else true_trajs[:, t-1].unsqueeze(1)
-            a_t = true_actions[:, t].unsqueeze(1)
-            s_t_plus_1_true = true_trajs[:, t].unsqueeze(1)
-            
-            s_t_plus_1_pred = model(s_t, a_t)
-            loss_sim_steps.append(F.mse_loss(s_t_plus_1_pred, s_t_plus_1_true))
-        
-        loss_sim = torch.mean(torch.stack(loss_sim_steps))
-
-        # --- Decision Loss Calculation (L_dec) ---
-        if gamma > 0:
-            with torch.no_grad(): # Don't need gradients for ground truth calculation
-                 true_trajectories_all_policies = torch.stack([
-                    world.simulate(initial_states[i], p_id)[0] 
-                    for i in range(initial_states.size(0)) for p_id in range(config.N_POLICIES)
-                 ]).view(initial_states.size(0), config.N_POLICIES, config.SEQ_LEN)
-                 true_values = value_function(true_trajectories_all_policies)
-
-            # Perform full autoregressive simulations for all policies to get simulated values
-            sim_trajectories_all_policies = torch.stack([
-                perform_autoregressive_simulation(model, world, initial_states, p_id)
-                for p_id in range(config.N_POLICIES)
-            ], dim=1)
-            
-            sim_values = value_function(sim_trajectories_all_policies)
-            plan_probs = F.gumbel_softmax(-sim_values, tau=config.GUMBEL_TAU, hard=False)
-            loss_dec = torch.mean(torch.sum(plan_probs * true_values, dim=-1))
-        else:
-            loss_dec = torch.tensor(0.0, device=initial_states.device)
-            
-        # --- Combine losses ---
-        loss = (1 - gamma) * loss_sim + gamma * loss_dec
+        loss, loss_sim, loss_dec = compute_loss_terms(model, world, initial_states, true_trajs, true_actions, config, gamma)
         loss.backward()
         optimizer.step()
-        
+
         total_loss += loss.item()
         total_sim_loss += loss_sim.item()
         total_dec_loss += loss_dec.item()
-        
-    return total_loss / len(train_loader), total_sim_loss / len(train_loader), total_dec_loss / len(train_loader)
+
+    num_batches = len(train_loader)
+    return total_loss / num_batches, total_sim_loss / num_batches, total_dec_loss / num_batches
+
+
+def evaluate_epoch(model, world, data_loader, config, gamma):
+    model.eval()
+    total_loss, total_sim_loss, total_dec_loss = 0.0, 0.0, 0.0
+
+    with torch.no_grad():
+        for initial_states, _, true_trajs, true_actions in data_loader:
+            loss, loss_sim, loss_dec = compute_loss_terms(model, world, initial_states, true_trajs, true_actions, config, gamma)
+            total_loss += loss.item()
+            total_sim_loss += loss_sim.item()
+            total_dec_loss += loss_dec.item()
+
+    num_batches = len(data_loader)
+    return total_loss / num_batches, total_sim_loss / num_batches, total_dec_loss / num_batches
+
+
+def fit_model(model, world, train_loader, val_loader, optimizer, config, gamma):
+    best_state = copy.deepcopy(model.state_dict())
+    best_val_loss = float("inf")
+    best_epoch = 0
+    best_metrics = {}
+    patience_counter = 0
+    train_loss = val_loss = train_sim_loss = train_dec_loss = val_sim_loss = val_dec_loss = float("nan")
+
+    for epoch in range(1, config.EPOCHS + 1):
+        train_loss, train_sim_loss, train_dec_loss = train_epoch(model, world, train_loader, optimizer, config, gamma)
+        val_loss, val_sim_loss, val_dec_loss = evaluate_epoch(model, world, val_loader, config, gamma)
+
+        improvement = val_loss + config.EARLY_STOPPING_MIN_DELTA < best_val_loss
+        if improvement:
+            best_val_loss = val_loss
+            best_state = copy.deepcopy(model.state_dict())
+            best_epoch = epoch
+            best_metrics = {
+                "train_loss": train_loss,
+                "train_sim_loss": train_sim_loss,
+                "train_dec_loss": train_dec_loss,
+                "val_loss": val_loss,
+                "val_sim_loss": val_sim_loss,
+                "val_dec_loss": val_dec_loss,
+            }
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        print(
+            f"Epoch {epoch}/{config.EPOCHS} | Train Loss: {train_loss:.4f} (Sim: {train_sim_loss:.4f}, Dec: {train_dec_loss:.4f}) "
+            f"| Val Loss: {val_loss:.4f} (Sim: {val_sim_loss:.4f}, Dec: {val_dec_loss:.4f}) "
+            f"| Patience: {patience_counter}/{config.EARLY_STOPPING_PATIENCE}"
+        )
+
+        if patience_counter >= config.EARLY_STOPPING_PATIENCE:
+            print(f"Early stopping triggered at epoch {epoch}.")
+            break
+
+    if not best_metrics:
+        best_metrics = {
+            "train_loss": train_loss,
+            "train_sim_loss": train_sim_loss,
+            "train_dec_loss": train_dec_loss,
+            "val_loss": val_loss,
+            "val_sim_loss": val_sim_loss,
+            "val_dec_loss": val_dec_loss,
+        }
+
+    model.load_state_dict(best_state)
+    return {"best_epoch": best_epoch, **best_metrics}
 
 
 def evaluate(model, world, test_data):
@@ -213,7 +287,6 @@ def evaluate(model, world, test_data):
         all_true_a_t = torch.stack([world.get_action(p, s) for p in range(world.config.N_POLICIES) for s in all_true_s_t]).squeeze()
         all_true_s_t1 = true_trajectories_all[:, :, 1:].reshape(-1, 1)
         
-        # This MSE calculation is tricky with policies. For simplicity, we'll evaluate the full trajectory MSE.
         total_mse = F.mse_loss(sim_trajectories_all, true_trajectories_all).item()
         correct_decisions = (optimal_policy_ids == model_policy_ids).sum().item()
         
@@ -233,16 +306,27 @@ if __name__ == "__main__":
     test_data_device = tuple(t.to(device) for t in test_data)
     
     train_dataset = torch.utils.data.TensorDataset(*train_data_device)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True)
+    val_size = max(1, int(len(train_dataset) * cfg.VAL_SPLIT))
+    train_size = len(train_dataset) - val_size
+    if train_size <= 0:
+        raise ValueError("Validation split is too large relative to the training data size.")
+
+    generator = torch.Generator().manual_seed(cfg.RNG_SEED)
+    train_subset, val_subset = torch.utils.data.random_split(train_dataset, [train_size, val_size], generator=generator)
+
+    train_loader = torch.utils.data.DataLoader(train_subset, batch_size=cfg.BATCH_SIZE, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_subset, batch_size=cfg.BATCH_SIZE, shuffle=False)
     
     # --- Train and Evaluate Naive Model (gamma=0) ---
     print("\n--- Training Naive Autoregressive Simulator (gamma = 0) ---")
     S_naive = AutoregressiveSimulator(cfg).to(device)
     optimizer_naive = optim.Adam(S_naive.parameters(), lr=cfg.LR)
     
-    for epoch in range(cfg.EPOCHS):
-        train_loss, sim_loss, dec_loss = train(S_naive, world, train_loader, optimizer_naive, cfg, gamma=0)
-        print(f"Epoch {epoch+1}/{cfg.EPOCHS} | Loss: {train_loss:.4f} (Sim: {sim_loss:.4f}, Dec: {dec_loss:.4f})")
+    naive_stats = fit_model(S_naive, world, train_loader, val_loader, optimizer_naive, cfg, gamma=0)
+    print(
+        f"Best Naive Epoch: {naive_stats['best_epoch']} | Val Loss: {naive_stats['val_loss']:.4f} "
+        f"(Sim: {naive_stats['val_sim_loss']:.4f}, Dec: {naive_stats['val_dec_loss']:.4f})"
+    )
     
     print("\nEvaluating Naive Simulator...")
     mse_naive, acc_naive = evaluate(S_naive, world, test_data_device)
@@ -253,9 +337,11 @@ if __name__ == "__main__":
     S_biased = AutoregressiveSimulator(cfg).to(device)
     optimizer_biased = optim.Adam(S_biased.parameters(), lr=cfg.LR)
 
-    for epoch in range(cfg.EPOCHS):
-        train_loss, sim_loss, dec_loss = train(S_biased, world, train_loader, optimizer_biased, cfg, gamma=cfg.GAMMA)
-        print(f"Epoch {epoch+1}/{cfg.EPOCHS} | Loss: {train_loss:.4f} (Sim: {sim_loss:.4f}, Dec: {dec_loss:.4f})")
+    biased_stats = fit_model(S_biased, world, train_loader, val_loader, optimizer_biased, cfg, gamma=cfg.GAMMA)
+    print(
+        f"Best Biased Epoch: {biased_stats['best_epoch']} | Val Loss: {biased_stats['val_loss']:.4f} "
+        f"(Sim: {biased_stats['val_sim_loss']:.4f}, Dec: {biased_stats['val_dec_loss']:.4f})"
+    )
 
     print("\nEvaluating Decision-Biased Simulator...")
     mse_biased, acc_biased = evaluate(S_biased, world, test_data_device)
@@ -274,29 +360,46 @@ if __name__ == "__main__":
     S_naive.eval()
     S_biased.eval()
     
-    n_viz = 4
-    fig, axs = plt.subplots(n_viz, 1, figsize=(12, 3 * n_viz), sharex=True)
-    fig.suptitle("Comparison of Autoregressive Simulator Trajectories (Policy 1 shown)", fontsize=16)
-    initial_states_viz = test_data_device[0][:n_viz]
+    # Visualize one example across all policies to inspect value outcomes
+    fig, axs = plt.subplots(cfg.N_POLICIES, 1, figsize=(12, 3 * cfg.N_POLICIES), sharex=True)
+    fig.suptitle("Single Initial State: True vs. Simulated Trajectories Across Policies", fontsize=16)
+    if cfg.N_POLICIES == 1:
+        axs = [axs]
+
+    initial_state_single = test_data_device[0][0:1]
+    initial_state_value = initial_state_single.squeeze().detach().cpu().item()
 
     with torch.no_grad():
-        for i in range(n_viz):
-            initial_state_single = initial_states_viz[i:i+1]
-            
-            # Perform autoregressive simulation for visualization
-            sim_naive = perform_autoregressive_simulation(S_naive, world, initial_state_single, policy_id=1).cpu().numpy().flatten()
-            sim_biased = perform_autoregressive_simulation(S_biased, world, initial_state_single, policy_id=1).cpu().numpy().flatten()
-            
-            # Get true trajectory
-            true_traj = world.simulate(initial_state_single, policy_id=1)[0].cpu().numpy().flatten()
-            
-            axs[i].plot(true_traj, 'k-', label='Ground Truth', linewidth=2.5, alpha=0.8)
-            axs[i].plot(sim_naive, 'b--', label=f'Naive Sim')
-            axs[i].plot(sim_biased, 'r:', label=f'Biased Sim')
-            axs[i].set_title(f"Example {i+1} (Initial State: {initial_state_single.item():.2f})")
-            axs[i].set_ylabel("State (Sugar Level)")
-            axs[i].legend()
-            axs[i].grid(True, linestyle='--', alpha=0.6)
+        for policy_idx in range(cfg.N_POLICIES):
+            # Generate trajectories for current policy
+            true_traj = world.simulate(initial_state_single, policy_idx)[0]
+            sim_naive = perform_autoregressive_simulation(S_naive, world, initial_state_single, policy_idx)
+            sim_biased = perform_autoregressive_simulation(S_biased, world, initial_state_single, policy_idx)
+
+            # Compute value function scores for display
+            true_val = value_function(true_traj.unsqueeze(0)).item()
+            naive_val = value_function(sim_naive).item()
+            biased_val = value_function(sim_biased).item()
+
+            true_np = true_traj.cpu().numpy().flatten()
+            naive_np = sim_naive.cpu().numpy().flatten()
+            biased_np = sim_biased.cpu().numpy().flatten()
+
+            axs[policy_idx].plot(true_np, 'k-', label='Ground Truth', linewidth=2.5, alpha=0.8)
+            axs[policy_idx].plot(naive_np, 'b--', label='Naive Sim')
+            axs[policy_idx].plot(biased_np, 'r:', label='Biased Sim')
+            axs[policy_idx].set_title(f"Policy {policy_idx} (Initial State: {initial_state_value:.2f})")
+            axs[policy_idx].set_ylabel("State (Sugar Level)")
+            axs[policy_idx].legend()
+            axs[policy_idx].grid(True, linestyle='--', alpha=0.6)
+            axs[policy_idx].text(
+                0.02,
+                0.95,
+                f"V_true={true_val:.2f}\nV_naive={naive_val:.2f}\nV_biased={biased_val:.2f}",
+                transform=axs[policy_idx].transAxes,
+                verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7)
+            )
 
     axs[-1].set_xlabel("Time Step")
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
