@@ -1,4 +1,5 @@
 import copy
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,16 +9,35 @@ import matplotlib.pyplot as plt
 import math
 from tqdm import tqdm
 
+class EpisodeDataset(torch.utils.data.Dataset):
+    """Dataset yielding all transitions for a single episode."""
+
+    def __init__(self, data_tuple):
+        initial_states, _, true_trajs, true_actions = data_tuple
+        self.initial_states = initial_states
+        self.true_trajs = true_trajs
+        self.true_actions = true_actions
+
+    def __len__(self):
+        return self.initial_states.size(0)
+
+    def __getitem__(self, idx):
+        states = self.true_trajs[idx, :-1].unsqueeze(-1)
+        actions = self.true_actions[idx, :-1].unsqueeze(-1)
+        next_states = self.true_trajs[idx, 1:].unsqueeze(-1)
+        init_state = self.initial_states[idx]
+        return states, actions, next_states, init_state
+
+
 # --- 1. Configuration ---
 class Config:
-    # World parameters
-    SEQ_LEN = 20
+    SEQ_LEN = 30
     N_POLICIES = 3  # Changed from N_PLANS
     STATE_DIM = 1
     ACTION_DIM = 1 # Explicitly define action dimension
     
     # Data parameters
-    N_TRAIN_SAMPLES = 10000
+    N_TRAIN_SAMPLES = 50000
     N_TEST_SAMPLES = 1000
     BATCH_SIZE = 64
     
@@ -27,11 +47,11 @@ class Config:
     
     # Training parameters
     LR = 1e-4
-    EPOCHS = 10 # Increased slightly for more complex task
+    EPOCHS = 100 # Increased slightly for more complex task
     GAMMA = 0.1
     GUMBEL_TAU = 1.0
     VAL_SPLIT = 0.2
-    EARLY_STOPPING_PATIENCE = 3
+    EARLY_STOPPING_PATIENCE = 5
     EARLY_STOPPING_MIN_DELTA = 1e-4
     RNG_SEED = 0
 
@@ -139,28 +159,22 @@ def perform_autoregressive_simulation(model, world, initial_states, policy_id):
     return sim_traj
 
 # --- 5. The Training and Evaluation Loops ---
-def compute_loss_terms(model, world, initial_states, true_trajs, true_actions, config, gamma):
-    loss_sim_steps = []
-    for t in range(config.SEQ_LEN - 1):
-        s_t = true_trajs[:, t].unsqueeze(1) if t == 0 else true_trajs[:, t-1].unsqueeze(1)
-        a_t = true_actions[:, t].unsqueeze(1)
-        s_t_plus_1_true = true_trajs[:, t].unsqueeze(1)
-
-        s_t_plus_1_pred = model(s_t, a_t)
-        loss_sim_steps.append(F.mse_loss(s_t_plus_1_pred, s_t_plus_1_true))
-
-    loss_sim = torch.mean(torch.stack(loss_sim_steps))
+def compute_loss_terms(model, world, states, actions, next_states, init_states, config, gamma):
+    pred_next = model(states, actions)
+    loss_sim = F.mse_loss(pred_next, next_states)
 
     if gamma > 0:
+        unique_init = torch.unique(init_states, dim=0)
+
         with torch.no_grad():
             true_trajectories_all_policies = torch.stack([
-                world.simulate(initial_states[i], p_id)[0]
-                for i in range(initial_states.size(0)) for p_id in range(config.N_POLICIES)
-            ]).view(initial_states.size(0), config.N_POLICIES, config.SEQ_LEN)
+                world.simulate(unique_init[i:i+1], p_id)[0]
+                for i in range(unique_init.size(0)) for p_id in range(config.N_POLICIES)
+            ]).view(unique_init.size(0), config.N_POLICIES, config.SEQ_LEN)
             true_values = value_function(true_trajectories_all_policies)
 
         sim_trajectories_all_policies = torch.stack([
-            perform_autoregressive_simulation(model, world, initial_states, p_id)
+            perform_autoregressive_simulation(model, world, unique_init, p_id)
             for p_id in range(config.N_POLICIES)
         ], dim=1)
 
@@ -168,19 +182,26 @@ def compute_loss_terms(model, world, initial_states, true_trajs, true_actions, c
         plan_probs = F.gumbel_softmax(-sim_values, tau=config.GUMBEL_TAU, hard=False)
         loss_dec = torch.mean(torch.sum(plan_probs * true_values, dim=-1))
     else:
-        loss_dec = torch.tensor(0.0, device=initial_states.device)
+        loss_dec = torch.tensor(0.0, device=states.device)
 
     total_loss = (1 - gamma) * loss_sim + gamma * loss_dec
     return total_loss, loss_sim, loss_dec
 
 
-def train_epoch(model, world, train_loader, optimizer, config, gamma):
+def train_epoch(model, world, train_loader, optimizer, config, gamma, device):
     model.train()
     total_loss, total_sim_loss, total_dec_loss = 0.0, 0.0, 0.0
 
-    for initial_states, _, true_trajs, true_actions in tqdm(train_loader, "Training", leave=False):
+    for states_seq, actions_seq, next_states_seq, init_states in tqdm(train_loader, "Training", leave=False):
+        states = states_seq.reshape(-1, states_seq.size(-1)).to(device)
+        actions = actions_seq.reshape(-1, actions_seq.size(-1)).to(device)
+        next_states = next_states_seq.reshape(-1, next_states_seq.size(-1)).to(device)
+        init_states = init_states.to(device)
+        if init_states.dim() == 1:
+            init_states = init_states.unsqueeze(-1)
+
         optimizer.zero_grad()
-        loss, loss_sim, loss_dec = compute_loss_terms(model, world, initial_states, true_trajs, true_actions, config, gamma)
+        loss, loss_sim, loss_dec = compute_loss_terms(model, world, states, actions, next_states, init_states, config, gamma)
         loss.backward()
         optimizer.step()
 
@@ -192,13 +213,20 @@ def train_epoch(model, world, train_loader, optimizer, config, gamma):
     return total_loss / num_batches, total_sim_loss / num_batches, total_dec_loss / num_batches
 
 
-def evaluate_epoch(model, world, data_loader, config, gamma):
+def evaluate_epoch(model, world, data_loader, config, gamma, device):
     model.eval()
     total_loss, total_sim_loss, total_dec_loss = 0.0, 0.0, 0.0
 
     with torch.no_grad():
-        for initial_states, _, true_trajs, true_actions in data_loader:
-            loss, loss_sim, loss_dec = compute_loss_terms(model, world, initial_states, true_trajs, true_actions, config, gamma)
+        for states_seq, actions_seq, next_states_seq, init_states in data_loader:
+            states = states_seq.reshape(-1, states_seq.size(-1)).to(device)
+            actions = actions_seq.reshape(-1, actions_seq.size(-1)).to(device)
+            next_states = next_states_seq.reshape(-1, next_states_seq.size(-1)).to(device)
+            init_states = init_states.to(device)
+            if init_states.dim() == 1:
+                init_states = init_states.unsqueeze(-1)
+
+            loss, loss_sim, loss_dec = compute_loss_terms(model, world, states, actions, next_states, init_states, config, gamma)
             total_loss += loss.item()
             total_sim_loss += loss_sim.item()
             total_dec_loss += loss_dec.item()
@@ -207,7 +235,7 @@ def evaluate_epoch(model, world, data_loader, config, gamma):
     return total_loss / num_batches, total_sim_loss / num_batches, total_dec_loss / num_batches
 
 
-def fit_model(model, world, train_loader, val_loader, optimizer, config, gamma):
+def fit_model(model, world, train_loader, val_loader, optimizer, config, gamma, device):
     best_state = copy.deepcopy(model.state_dict())
     best_val_loss = float("inf")
     best_epoch = 0
@@ -216,8 +244,8 @@ def fit_model(model, world, train_loader, val_loader, optimizer, config, gamma):
     train_loss = val_loss = train_sim_loss = train_dec_loss = val_sim_loss = val_dec_loss = float("nan")
 
     for epoch in range(1, config.EPOCHS + 1):
-        train_loss, train_sim_loss, train_dec_loss = train_epoch(model, world, train_loader, optimizer, config, gamma)
-        val_loss, val_sim_loss, val_dec_loss = evaluate_epoch(model, world, val_loader, config, gamma)
+        train_loss, train_sim_loss, train_dec_loss = train_epoch(model, world, train_loader, optimizer, config, gamma, device)
+        val_loss, val_sim_loss, val_dec_loss = evaluate_epoch(model, world, val_loader, config, gamma, device)
 
         improvement = val_loss + config.EARLY_STOPPING_MIN_DELTA < best_val_loss
         if improvement:
@@ -295,34 +323,55 @@ def evaluate(model, world, test_data):
 # --- 6. Main Execution ---
 if __name__ == "__main__":
     cfg = Config()
+    rng_seed = cfg.RNG_SEED
+    random.seed(rng_seed)
+    np.random.seed(rng_seed)
+    torch.manual_seed(rng_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(rng_seed)
+
     world = PKPDWorld(cfg)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Generate and move data to device
+    # Generate data (stay on CPU for dataset construction)
     train_data = generate_data(world, cfg.N_TRAIN_SAMPLES)
     test_data = generate_data(world, cfg.N_TEST_SAMPLES)
-    train_data_device = tuple(t.to(device) for t in train_data)
-    test_data_device = tuple(t.to(device) for t in test_data)
     
-    train_dataset = torch.utils.data.TensorDataset(*train_data_device)
-    val_size = max(1, int(len(train_dataset) * cfg.VAL_SPLIT))
-    train_size = len(train_dataset) - val_size
+    num_episodes = train_data[0].size(0)
+    val_size = max(1, int(num_episodes * cfg.VAL_SPLIT))
+    train_size = num_episodes - val_size
     if train_size <= 0:
         raise ValueError("Validation split is too large relative to the training data size.")
 
-    generator = torch.Generator().manual_seed(cfg.RNG_SEED)
-    train_subset, val_subset = torch.utils.data.random_split(train_dataset, [train_size, val_size], generator=generator)
+    generator = torch.Generator().manual_seed(rng_seed)
+    perm = torch.randperm(num_episodes, generator=generator)
+    val_idx = perm[:val_size]
+    train_idx = perm[val_size:]
 
-    train_loader = torch.utils.data.DataLoader(train_subset, batch_size=cfg.BATCH_SIZE, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_subset, batch_size=cfg.BATCH_SIZE, shuffle=False)
+    def select_episode_data(data_tuple, indices):
+        return tuple(t[indices] for t in data_tuple)
+
+    train_episode_data = select_episode_data(train_data, train_idx)
+    val_episode_data = select_episode_data(train_data, val_idx)
+
+    train_dataset = EpisodeDataset(train_episode_data)
+    val_dataset = EpisodeDataset(val_episode_data)
+
+    transitions_per_episode = cfg.SEQ_LEN - 1
+    episodes_per_batch = max(1, math.ceil(cfg.BATCH_SIZE / transitions_per_episode))
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=episodes_per_batch, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=episodes_per_batch, shuffle=False)
+
+    test_data_device = tuple(t.to(device) for t in test_data)
     
     # --- Train and Evaluate Naive Model (gamma=0) ---
     print("\n--- Training Naive Autoregressive Simulator (gamma = 0) ---")
     S_naive = AutoregressiveSimulator(cfg).to(device)
     optimizer_naive = optim.Adam(S_naive.parameters(), lr=cfg.LR)
     
-    naive_stats = fit_model(S_naive, world, train_loader, val_loader, optimizer_naive, cfg, gamma=0)
+    naive_stats = fit_model(S_naive, world, train_loader, val_loader, optimizer_naive, cfg, gamma=0, device=device)
     print(
         f"Best Naive Epoch: {naive_stats['best_epoch']} | Val Loss: {naive_stats['val_loss']:.4f} "
         f"(Sim: {naive_stats['val_sim_loss']:.4f}, Dec: {naive_stats['val_dec_loss']:.4f})"
@@ -337,7 +386,7 @@ if __name__ == "__main__":
     S_biased = AutoregressiveSimulator(cfg).to(device)
     optimizer_biased = optim.Adam(S_biased.parameters(), lr=cfg.LR)
 
-    biased_stats = fit_model(S_biased, world, train_loader, val_loader, optimizer_biased, cfg, gamma=cfg.GAMMA)
+    biased_stats = fit_model(S_biased, world, train_loader, val_loader, optimizer_biased, cfg, gamma=cfg.GAMMA, device=device)
     print(
         f"Best Biased Epoch: {biased_stats['best_epoch']} | Val Loss: {biased_stats['val_loss']:.4f} "
         f"(Sim: {biased_stats['val_sim_loss']:.4f}, Dec: {biased_stats['val_dec_loss']:.4f})"
