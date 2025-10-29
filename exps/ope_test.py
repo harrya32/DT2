@@ -40,7 +40,7 @@ ope = OffPolicyEvaluation(
         action=action,
         reward=reward,
         pscore=pscore,
-        position=np.zeros_like(action),  # not used in simple bandits
+        position=np.zeros_like(action),
         action_dist=action_dist
     ),
     ope_estimators=[InverseProbabilityWeighting()]
