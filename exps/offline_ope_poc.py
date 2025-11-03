@@ -1,12 +1,8 @@
-
-# offline_ope_poc.py
-# -----------------------------------------------------------
-# Offline OPE PoC on a continuous MDP (Gymnasium: Pendulum-v1)
-# Compares three methods:
-# (1) Model-based MC: Learn p(s'|s,a), then roll out under target π.
-# (2) Fitted V evaluation (state-value): Learn V^\pi off-policy (state-only),
-#     optionally with per-step importance sampling (IS) ratios.
-# (3) Value-aware model: Freeze V^\pi from (2), then train p(s'|s,a) with
+"""
+# -----------------------
+# Environment & Reward
+# -----------------------
+"""
 #     supervised MSE + Bellman TD residual where s' is sampled from the model
 #     using target policy actions. Evaluate via model rollouts.
 #
@@ -27,8 +23,10 @@
 #   python offline_ope_poc.py
 # -----------------------------------------------------------
 
+import argparse
 import math
 import random
+from collections import defaultdict
 import numpy as np
 import torch
 import torch.nn as nn
@@ -37,6 +35,151 @@ from torch.utils.data import DataLoader, TensorDataset
 import gymnasium as gym
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+METHOD_CHOICES = ("model", "value", "qvalue", "value-aware", "q-aware", "ground-truth")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Offline OPE proof-of-concept runner for LunarLanderContinuous-v3."
+    )
+    parser.add_argument(
+        "--methods",
+        nargs="+",
+        choices=METHOD_CHOICES,
+        default=list(METHOD_CHOICES),
+        help="Subset of evaluation methods to run. Defaults to all methods.",
+    )
+    parser.add_argument("--seed", type=int, default=1, help="Base random seed for reproducibility.")
+    parser.add_argument(
+        "--num-seeds",
+        type=int,
+        default=5,
+        help="Number of consecutive seeds to run (starting from --seed).",
+    )
+    parser.add_argument("--gamma", type=float, default=0.97, help="Discount factor.")
+    parser.add_argument(
+        "--horizon",
+        type=int,
+        default=500,
+        help="Rollout horizon for model rollouts and ground truth.",
+    )
+    parser.add_argument(
+        "--dataset-episodes",
+        type=int,
+        default=100,
+        help="Number of behavior-policy episodes collected for the offline dataset.",
+    )
+    parser.add_argument(
+        "--dataset-max-steps",
+        type=int,
+        default=500,
+        help="Maximum number of steps per behavior-policy episode.",
+    )
+    parser.add_argument(
+        "--eval-episodes",
+        type=int,
+        default=50,
+        help="Number of evaluation episodes for model-based and ground-truth estimates.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1024,
+        help="Mini-batch size used across training routines.",
+    )
+    parser.add_argument(
+        "--dyn-epochs",
+        type=int,
+        default=200,
+        help="Training epochs for the supervised dynamics model.",
+    )
+    parser.add_argument(
+        "--dyn-lr",
+        type=float,
+        default=1e-3,
+        help="Learning rate for the supervised dynamics model.",
+    )
+    parser.add_argument(
+        "--value-epochs",
+        type=int,
+        default=500,
+        help="Training epochs for state-value FQE.",
+    )
+    parser.add_argument(
+        "--value-lr",
+        type=float,
+        default=1e-3,
+        help="Learning rate for state-value FQE.",
+    )
+    parser.add_argument(
+        "--q-epochs",
+        type=int,
+        default=500,
+        help="Training epochs for Q-function FQE.",
+    )
+    parser.add_argument(
+        "--q-lr",
+        type=float,
+        default=1e-3,
+        help="Learning rate for Q-function FQE.",
+    )
+    parser.add_argument(
+        "--q-action-samples",
+        type=int,
+        default=10,
+        help="Number of action samples per next-state when building Q targets.",
+    )
+    parser.add_argument(
+        "--q-eval-samples",
+        type=int,
+        default=64,
+        help="Number of action samples per initial state when estimating values from Q.",
+    )
+    parser.add_argument(
+        "--value-aware-epochs",
+        type=int,
+        default=200,
+        help="Training epochs for the value-aware dynamics model.",
+    )
+    parser.add_argument(
+        "--value-aware-lambda",
+        type=float,
+        default=0.1,
+        help="Weight on the TD consistency term for the value-aware dynamics model.",
+    )
+    parser.add_argument(
+        "--value-aware-lr",
+        type=float,
+        default=1e-3,
+        help="Learning rate for the value-aware dynamics model.",
+    )
+    parser.add_argument(
+        "--q-aware-epochs",
+        type=int,
+        default=200,
+        help="Training epochs for the Q-aware dynamics model.",
+    )
+    parser.add_argument(
+        "--q-aware-lr",
+        type=float,
+        default=5e-4,
+        help="Learning rate for the Q-aware dynamics model.",
+    )
+    parser.add_argument(
+        "--q-aware-lambda",
+        type=float,
+        default=0.1,
+        help="Weight on the TD consistency term for the Q-aware dynamics model.",
+    )
+    parser.add_argument(
+        "--q-aware-action-samples",
+        type=int,
+        default=4,
+        help="Number of target-policy action samples when computing Q-aware TD targets.",
+    )
+    return parser.parse_args()
+
 
 # -----------------------
 # Utilities & Seeding
@@ -307,6 +450,18 @@ class QNet(nn.Module):
 # -----------------------
 # Fitted V and Q evaluation (state-only), with optional per-step IS
 # -----------------------
+def _log_prob_gaussian_torch(a, s, policy, device=DEVICE):
+    """Torch version of GaussianLinearPolicy.log_prob for vectorized batches."""
+    if not hasattr(policy, "_W_torch"):
+        policy._W_torch = torch.tensor(policy.W, dtype=torch.float32, device=device)
+        policy._std_torch = torch.tensor(policy.std, dtype=torch.float32, device=device)
+
+    mu = s @ policy._W_torch.t()                     # (B, act_dim)
+    var = policy._std_torch**2
+    logp = -0.5 * ((a - mu) ** 2 / var + torch.log(2 * torch.pi * var))
+    return logp.sum(dim=-1)                          # (B,)
+
+
 def train_value_fqe_state(
     dataset,
     target_policy,
@@ -317,11 +472,8 @@ def train_value_fqe_state(
     lr=1e-3,
     use_is=True,
     seed=0,
+    use_amp=True,
 ):
-    """
-    Fitted Value Evaluation (state-only) with reward normalization.
-    Works across continuous-control tasks (e.g. LunarLanderContinuous-v3, Pendulum-v1).
-    """
     set_seed(seed)
     s = torch.tensor(dataset["s"], dtype=torch.float32, device=DEVICE)
     a = torch.tensor(dataset["a"], dtype=torch.float32, device=DEVICE)
@@ -329,63 +481,75 @@ def train_value_fqe_state(
     s_next = torch.tensor(dataset["s_next"], dtype=torch.float32, device=DEVICE)
     done = torch.tensor(dataset["done"], dtype=torch.float32, device=DEVICE)
 
-    # --- Reward normalization (preserve long-horizon scale) ---
-    r_mean = r.mean().item()
-    r_std = r.std().item()
+    N, state_dim = s.shape
+    r_mean, r_std = r.mean().item(), r.std().item()
     r_norm = (r - r_mean) / (r_std + 1e-6)
 
-    # --- Networks ---
-    V = ValueNet(state_dim=s.shape[1], hidden=256).to(DEVICE)
-    V_target = ValueNet(state_dim=s.shape[1], hidden=256).to(DEVICE)
-    V_target.load_state_dict(V.state_dict())
+    # ---- Networks ----
+    V = ValueNet(state_dim=state_dim, hidden=256).to(DEVICE)
+    V_t = ValueNet(state_dim=state_dim, hidden=256).to(DEVICE)
+    V_t.load_state_dict(V.state_dict())
+    for p in V_t.parameters():
+        p.requires_grad_(False)
+
     opt = torch.optim.Adam(V.parameters(), lr=lr)
+    scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and DEVICE.type == "cuda"))
+    idx = torch.arange(N, device=DEVICE)
 
-    # --- Optional importance weights ---
+    # ---- Importance weights ----
     if use_is:
-        a_np = a.cpu().numpy()
-        s_np = s.cpu().numpy()
-        logp_pi = target_policy.log_prob(a_np, s_np)
-        logp_beta = behavior_policy.log_prob(a_np, s_np)
-        w = np.exp(logp_pi - logp_beta)
-        w = np.clip(w, 1e-4, 100.0)
-        w = torch.tensor(w, dtype=torch.float32, device=DEVICE)
+        logp_pi = _log_prob_gaussian_torch(a, s, target_policy)
+        logp_beta = _log_prob_gaussian_torch(a, s, behavior_policy)
+        w = torch.exp(logp_pi - logp_beta).clamp(1e-4, 100.0)
     else:
-        w = torch.ones(len(s), dtype=torch.float32, device=DEVICE)
+        w = torch.ones(N, device=DEVICE)
+    w = w / (w.mean() + 1e-8) 
 
-    ds = TensorDataset(s, a, r_norm, s_next, done, w)
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False)
-
+    # ---- Training ----
     for ep in range(epochs):
-        for sb, ab, rb, snb, db, wb in loader:
+        perm = idx[torch.randperm(N, device=DEVICE)]
+        for start in range(0, N, batch_size):
+            sel = perm[start:start+batch_size]
+            sb, snb, rb, db, wb = s[sel], s_next[sel], r_norm[sel], done[sel], w[sel]
+
             with torch.no_grad():
-                # Compute target using normalized reward but unscaled bootstrap
-                y = rb + gamma * (1.0 - db) * V_target(snb)
-            v = V(sb)
-            loss = ((v - y) ** 2) * wb
-            loss = loss.mean()
+                y = rb + gamma * (1.0 - db) * V_t(snb)
 
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+            if use_amp and DEVICE.type == "cuda":
+                with torch.amp.autocast('cuda'):
+                    v = V(sb)
+                    loss = ((v - y) ** 2 * wb).mean()
+                scaler.scale(loss).backward()
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(V.parameters(), 10.0)
+                scaler.step(opt)
+                scaler.update()
+                opt.zero_grad(set_to_none=True)
+            else:
+                v = V(sb)
+                loss = ((v - y) ** 2 * wb).mean()
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(V.parameters(), 10.0)
+                opt.step()
 
-        # --- Hard target update ---
         if (ep + 1) % 5 == 0:
-            V_target.load_state_dict(V.state_dict())
+            V_t.load_state_dict(V.state_dict())
 
+    # ---- Rescaling wrapper ----
     class RescaledVWrapper(nn.Module):
         def __init__(self, V, r_mean, r_std, gamma):
             super().__init__()
             self.V = V
             self.r_mean = r_mean
             self.r_std = r_std
-            self.gamma = gamma  
-
+            self.gamma = gamma
         def forward(self, s):
             v_norm = self.V(s)
-            # rescale: undo reward normalization and restore discount scaling
             return v_norm * self.r_std + self.r_mean / (1 - self.gamma)
 
     return RescaledVWrapper(V, r_mean, r_std, gamma)
+
 
 
 
@@ -525,8 +689,35 @@ def expect_Q_under_pi(Q, s_next, policy, K=10):
     q = Q(s_rep, a).view(n, K)
     return q.mean(dim=1)
 
-def train_q_fqe(dataset, target_policy, gamma=0.99,
-                epochs=200, batch_size=1024, lr=3e-4, seed=0, K=10):
+def _sample_actions_pi_torch(states, policy, K, act_low=-1.0, act_high=1.0, device=DEVICE):
+    """
+    Vectorized, on-GPU action sampling for GaussianLinearPolicy.
+    states: (B, state_dim) torch.float32 on device
+    Returns: (B*K, act_dim) torch.float32 on device
+    """
+    B, state_dim = states.shape
+    act_dim = policy.W.shape[0]
+
+    # W: (act_dim, state_dim) -> to torch on device once
+    if not hasattr(policy, "_W_torch"):
+        policy._W_torch = torch.tensor(policy.W, dtype=torch.float32, device=device)
+        policy._std_torch = torch.tensor(policy.std, dtype=torch.float32, device=device)
+
+    # mu = s @ W^T  -> (B, act_dim), then repeat for K samples
+    mu = states @ policy._W_torch.t()                       # (B, act_dim)
+    mu_rep = mu.unsqueeze(1).expand(B, K, act_dim).reshape(B*K, act_dim)
+
+    noise = torch.randn(B*K, act_dim, device=device) * policy._std_torch
+    a = mu_rep + noise
+    if act_low is not None and act_high is not None:
+        a = a.clamp(min=act_low, max=act_high)
+    return a
+
+
+def train_q_fqe(
+    dataset, target_policy, gamma=0.99, epochs=200, batch_size=1024, lr=3e-4, seed=0, K=16,
+    act_low=-1.0, act_high=1.0, use_amp=True
+):
     set_seed(seed)
     s = torch.tensor(dataset["s"], dtype=torch.float32, device=DEVICE)
     a = torch.tensor(dataset["a"], dtype=torch.float32, device=DEVICE)
@@ -534,42 +725,74 @@ def train_q_fqe(dataset, target_policy, gamma=0.99,
     s_next = torch.tensor(dataset["s_next"], dtype=torch.float32, device=DEVICE)
     done = torch.tensor(dataset["done"], dtype=torch.float32, device=DEVICE)
 
+    # Reward normalization
+    r_mean = r.mean().item()
+    r_std = r.std().item()
+    r_norm = (r - r_mean) / (r_std + 1e-6)
+
     state_dim = s.shape[1]
     act_dim = a.shape[1]
+
     Q = QNet(state_dim, act_dim).to(DEVICE)
     Q_t = QNet(state_dim, act_dim).to(DEVICE)
     Q_t.load_state_dict(Q.state_dict())
+    for p in Q_t.parameters():
+        p.requires_grad_(False)
 
     opt = torch.optim.Adam(Q.parameters(), lr=lr)
-    ds = TensorDataset(s, a, r, s_next, done)
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False)
+    scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and DEVICE.type == "cuda"))
+
+    N = s.size(0)
+    idx = torch.arange(N, device=DEVICE)
 
     for ep in range(epochs):
-        for sb, ab, rb, snb, db in loader:
+        perm = idx[torch.randperm(N, device=DEVICE)]
+        for start in range(0, N, batch_size):
+            sel = perm[start:start+batch_size]
+            sb, ab, rb_norm, snb, db = s[sel], a[sel], r_norm[sel], s_next[sel], done[sel]
+
             with torch.no_grad():
-                # Sample K actions from target policy for each next state
-                s_rep = snb.repeat_interleave(K, dim=0)
-                s_np = s_rep.cpu().numpy()
-                a_pi = np.array([target_policy.sample(si, np.random.default_rng()) for si in s_np],
-                                dtype=np.float32)
-                a_pi_t = torch.tensor(a_pi, dtype=torch.float32, device=DEVICE)
-                q_next = Q_t(s_rep, a_pi_t).view(len(snb), K)
-                v_next = q_next.mean(dim=1)
-                y = rb + gamma * (1.0 - db) * v_next
+                s_rep = snb.repeat_interleave(K, dim=0)  
+                a_pi = _sample_actions_pi_torch(snb, target_policy, K, act_low, act_high, device=DEVICE)
+                q_next = Q_t(s_rep, a_pi).view(snb.size(0), K).mean(dim=1)
+                y = rb_norm + gamma * (1.0 - db) * q_next
 
-            q = Q(sb, ab)
-            loss = F.mse_loss(q, y)
+            # Forward & loss (AMP)
+            if use_amp and DEVICE.type == "cuda":
+                with torch.amp.autocast('cuda'):
+                    q = Q(sb, ab)
+                    loss = F.mse_loss(q, y)
+                scaler.scale(loss).backward()
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(Q.parameters(), 10.0)
+                scaler.step(opt)
+                scaler.update()
+                opt.zero_grad(set_to_none=True)
+            else:
+                q = Q(sb, ab)
+                loss = F.mse_loss(q, y)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(Q.parameters(), 10.0)
+                opt.step()
 
-            opt.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(Q.parameters(), 10.0)
-            opt.step()
-
-        # --- Hard target update ---
-        if (ep + 1) % 5 == 0:   # update every few epochs
+        if (ep + 1) % 5 == 0:
             Q_t.load_state_dict(Q.state_dict())
 
-    return Q
+    class RescaledQWrapper(nn.Module):
+        def __init__(self, Q_norm, r_mean, r_std, gamma):
+            super().__init__()
+            self.Q_norm = Q_norm
+            self.r_mean = r_mean
+            self.r_std = r_std
+            self.gamma = gamma
+
+        def forward(self, s, a):
+            q_norm = self.Q_norm(s, a)
+            return q_norm * self.r_std + self.r_mean / (1 - self.gamma)
+
+    return RescaledQWrapper(Q, r_mean, r_std, gamma)
+
 
 
 @torch.no_grad()
@@ -641,55 +864,87 @@ def evaluate_with_model_rollouts(env, model: DynamicsNet, target_policy: Gaussia
 # -----------------------
 # Value-aware model training (Method 3)
 # -----------------------
-def train_value_aware_model(dataset, target_policy: GaussianLinearPolicy, V_fixed: ValueNet,
-                            gamma=0.97, lambda_td=1.0, epochs=20, batch_size=1024, lr=5e-4, seed=0):
+def train_value_aware_model(
+    dataset,
+    target_policy: GaussianLinearPolicy,
+    V_fixed: nn.Module,
+    gamma=0.97,
+    lambda_td=1.0,
+    epochs=20,
+    batch_size=1024,
+    lr=5e-4,
+    seed=0,
+    use_amp=True,
+    act_low=-1.0,
+    act_high=1.0,
+):
+    """
+    Value-aware dynamics training optimized for GPU:
+      - torch-native, vectorized policy sampling
+      - AMP mixed precision
+      - in-GPU batching (no DataLoader)
+    """
     set_seed(seed)
-    s = torch.tensor(dataset["s"], dtype=torch.float32, device=DEVICE)
-    a = torch.tensor(dataset["a"], dtype=torch.float32, device=DEVICE)
-    s_next = torch.tensor(dataset["s_next"], dtype=torch.float32, device=DEVICE)
+    device = DEVICE
+    s = torch.tensor(dataset["s"], dtype=torch.float32, device=device)
+    a = torch.tensor(dataset["a"], dtype=torch.float32, device=device)
+    s_next = torch.tensor(dataset["s_next"], dtype=torch.float32, device=device)
+    N, state_dim = s.shape
+    act_dim = a.shape[1]
 
-    V_fixed = V_fixed.to(DEVICE)
+    # Freeze value network
+    V_fixed = V_fixed.to(device)
     for p in V_fixed.parameters():
         p.requires_grad_(False)
 
-    model = DynamicsNet(state_dim=s.shape[1], act_dim=a.shape[1]).to(DEVICE)
+    model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
+    scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and device.type == "cuda"))
+    idx = torch.arange(N, device=device)
 
-    ds = TensorDataset(s, a, s_next)
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False)
+    # Cache policy tensors on GPU
+    if not hasattr(target_policy, "_W_torch"):
+        target_policy._W_torch = torch.tensor(target_policy.W, dtype=torch.float32, device=device)
+        target_policy._std_torch = torch.tensor(target_policy.std, dtype=torch.float32, device=device)
 
-    rng = np.random.default_rng(seed + 123)
+    def sample_actions_pi_torch(states, K=1):
+        """Vectorized GaussianLinearPolicy sampling on GPU."""
+        mu = states @ target_policy._W_torch.t()       # (B, act_dim)
+        noise = torch.randn_like(mu) * target_policy._std_torch
+        a_pi = mu + noise
+        return a_pi.clamp(min=act_low, max=act_high)
 
     for ep in range(epochs):
-        for sb, ab, snb in loader:
-            # Supervised fit on observed transitions (behavior actions)
-            mse_loss = model.nll(sb, ab, snb)
+        perm = idx[torch.randperm(N, device=device)]
+        for start in range(0, N, batch_size):
+            sel = perm[start:start+batch_size]
+            sb, ab, snb = s[sel], a[sel], s_next[sel]
 
-            # TD consistency under target policy: sample a_pi, then s'_model ~ p_theta(.|s, a_pi)
-            with torch.no_grad():
-                s_np = sb.cpu().numpy()
-                a_pi = np.array([target_policy.sample(si, rng) for si in s_np], dtype=np.float32)
-                if a_pi.ndim == 1:  # handle scalar-action envs like Pendulum
-                    a_pi = a_pi[:, None]
-            a_pi_t = torch.tensor(a_pi, dtype=torch.float32, device=DEVICE)  # (B, act_dim)
-            sp_model = model.sample_next(sb, a_pi_t)
+            with torch.amp.autocast('cuda', enabled=(use_amp and device.type == "cuda")):
+                # 1. Supervised dynamics fit
+                mean, logvar = model.forward(sb, ab)
+                inv_var = torch.exp(-logvar)
+                nll = 0.5 * (logvar + (snb - mean).pow(2) * inv_var + math.log(2 * math.pi))
+                mse_loss = nll.sum(dim=-1).mean()
 
-            # Bellman residual: (V(s) - [r(s,a_pi,sp_model) + gamma V(sp_model)])^2
-            V_s = V_fixed(sb)
-            r_tensor = lunarlander_reward_torch(sb, a_pi_t.squeeze(-1))
+                # 2. TD consistency (sample a_pi and s'_model)
+                a_pi_t = sample_actions_pi_torch(sb)
+                s_next_model = model.sample_next(sb, a_pi_t)
+                r_tensor = lunarlander_reward_torch(sb, a_pi_t.squeeze(-1))
+                td = V_fixed(sb) - (r_tensor + gamma * V_fixed(s_next_model))
+                td_loss = (td.pow(2)).mean()
 
-            V_sp = V_fixed(sp_model)
-            td = V_s - (r_tensor + gamma * V_sp)
-            td_loss = (td ** 2).mean()
+                loss = (1 - lambda_td) * mse_loss + lambda_td * td_loss
 
-            loss = (1 - lambda_td) * mse_loss + lambda_td * td_loss
-
-            opt.zero_grad()
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
-            opt.step()
+            scaler.step(opt)
+            scaler.update()
+            opt.zero_grad(set_to_none=True)
 
     return model
+
 
 @torch.no_grad()
 def evaluate_in_real_env(env, target_policy: GaussianLinearPolicy,
@@ -719,6 +974,300 @@ def evaluate_in_real_env(env, target_policy: GaussianLinearPolicy,
     mean = float(np.mean(returns))
     se = float(np.std(returns) / math.sqrt(n_episodes))
     return mean, se
+
+
+def run_model_based_mc(env, dataset, targets, gamma, horizon, eval_episodes,
+                       batch_size, epochs, lr, seed):
+    """Train a supervised dynamics model and evaluate targets via rollouts."""
+    print("\n=== Method 1: Model-based MC (supervised dynamics) ===")
+    dyn_model = train_dynamics_supervised(dataset, epochs=epochs, batch_size=batch_size, lr=lr, seed=seed)
+    estimates = {}
+    for pi in targets:
+        est_mean, est_se = evaluate_with_model_rollouts(
+            env, dyn_model, pi, n_episodes=eval_episodes, H=horizon, gamma=gamma, seed=seed
+        )
+        print(f"[{pi.name}] V^pi (model rollouts, supervised dyn): {est_mean:.3f} ± {1.96*est_se:.3f}")
+        estimates[pi.name] = est_mean
+    return dyn_model, estimates
+
+
+def run_value_fqe_block(dataset, targets, behavior_policy, gamma, epochs, batch_size,
+                        lr, seed, report_estimates=True):
+    """Train state-value FQE networks for each target policy."""
+    if report_estimates:
+        print("\n=== Method 2: Fitted V Evaluation (state-only) ===")
+    V_nets = {}
+    s0 = torch.tensor(dataset["s0"], dtype=torch.float32, device=DEVICE)
+    estimates = {}
+    for pi in targets:
+        V_pi = train_value_fqe_state(
+            dataset,
+            target_policy=pi,
+            behavior_policy=behavior_policy,
+            gamma=gamma,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            use_is=True,
+            seed=seed,
+        )
+        V_nets[pi.name] = V_pi
+        with torch.no_grad():
+            v_est = V_pi(s0).mean().item()
+        estimates[pi.name] = v_est
+        if report_estimates:
+            print(f"[{pi.name}] V^pi (FQE on s0): {v_est:.3f}")
+    return V_nets, estimates
+
+
+def run_q_fqe_block(dataset, targets, gamma, epochs, batch_size, lr, seed, action_samples, eval_samples):
+    """Train Q-function FQE networks and report their value estimates."""
+    print("\n=== Method 2b: FQE with Q-network ===")
+    Q_nets = {}
+    estimates = {}
+    for pi in targets:
+        Q_pi = train_q_fqe(
+            dataset,
+            target_policy=pi,
+            gamma=gamma,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            seed=seed,
+            K=action_samples,
+        )
+        Q_nets[pi.name] = Q_pi
+        v_est = estimate_V_from_Q_on_s0(Q_pi, dataset["s0"], pi, K=eval_samples)
+        print(f"[{pi.name}] V^pi (Q-FQE on s0): {v_est:.3f}")
+        estimates[pi.name] = v_est
+    return Q_nets, estimates
+
+
+def run_value_aware_block(dataset, targets, value_nets, gamma, lambda_td, epochs,
+                          batch_size, lr, seed, env, horizon, eval_episodes):
+    """Train value-aware dynamics models using frozen state-value networks."""
+    if not value_nets:
+        raise ValueError("Value-aware training requires pre-trained value networks.")
+    print("\n=== Method 3: Value-aware model (freeze V) ===")
+    estimates = {}
+    for pi in targets:
+        V_fixed = value_nets.get(pi.name)
+        if V_fixed is None:
+            raise KeyError(f"Missing value network for policy {pi.name}")
+        dyn_va = train_value_aware_model(
+            dataset,
+            pi,
+            V_fixed,
+            gamma=gamma,
+            lambda_td=lambda_td,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            seed=seed,
+        )
+        est_mean, est_se = evaluate_with_model_rollouts(
+            env, dyn_va, pi, n_episodes=eval_episodes, H=horizon, gamma=gamma, seed=seed
+        )
+        print(f"[{pi.name}] V^pi (model rollouts, value-aware dyn): {est_mean:.3f} ± {1.96*est_se:.3f}")
+        estimates[pi.name] = est_mean
+    return estimates
+
+
+def run_ground_truth_block(env, targets, gamma, horizon, eval_episodes, seed):
+    """Evaluate target policies in the true environment."""
+    print("\n=== Ground-truth Monte Carlo ===")
+    estimates = {}
+    for pi in targets:
+        true_mean, true_se = evaluate_in_real_env(
+            env, pi, n_episodes=eval_episodes, H=horizon, gamma=gamma, seed=seed
+        )
+        print(f"[{pi.name}] True V^pi (real env): {true_mean:.3f} ± {1.96*true_se:.3f}")
+        estimates[pi.name] = true_mean
+    return estimates
+
+
+def run_q_aware_block(
+    dataset,
+    targets,
+    q_nets,
+    gamma,
+    lambda_td,
+    epochs,
+    batch_size,
+    lr,
+    seed,
+    env,
+    horizon,
+    eval_episodes,
+    action_samples,
+):
+    """Train Q-aware dynamics models leveraging frozen Q networks."""
+    if not q_nets:
+        raise ValueError("Q-aware training requires pre-trained Q networks.")
+
+    print("\n=== Method 3b: Q-aware model (freeze Q) ===")
+    estimates = {}
+    for pi in targets:
+        Q_fixed = q_nets.get(pi.name)
+        if Q_fixed is None:
+            raise KeyError(f"Missing Q network for policy {pi.name}")
+        dyn_qaware = train_q_aware_model(
+            dataset,
+            target_policy=pi,
+            Q_fixed=Q_fixed,
+            gamma=gamma,
+            lambda_td=lambda_td,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            seed=seed,
+            K=action_samples,
+        )
+        est_mean, est_se = evaluate_with_model_rollouts(
+            env, dyn_qaware, pi, n_episodes=eval_episodes, H=horizon, gamma=gamma, seed=seed
+        )
+        print(f"[{pi.name}] V^pi (model rollouts, Q-aware dyn): {est_mean:.3f} ± {1.96*est_se:.3f}")
+        estimates[pi.name] = est_mean
+    return estimates
+
+
+def train_q_aware_model(
+    dataset,
+    target_policy: GaussianLinearPolicy,
+    Q_fixed: nn.Module,                 # frozen FQE Q(s,a)
+    gamma=0.97,
+    lambda_td=1.0,                      # weight on Q-TD consistency term
+    epochs=20,
+    batch_size=1024,
+    lr=5e-4,
+    seed=0,
+    use_amp=True,
+    act_low=-1.0,
+    act_high=1.0,
+    K=4,                                # action samples for E_{a'~pi} Q(s',a')
+):
+    """
+    Q-aware dynamics training:
+      L = (1 - lambda_td) * NLL(s'|s,a) + lambda_td * E_{a_pi}[ ( Q(s,a_pi) - (r(s,a_pi) + gamma * E_{a'~pi} Q(s'_model,a')) )^2 ]
+    Optimized with:
+      - torch-native, vectorized policy sampling on GPU
+      - AMP mixed precision
+      - in-GPU batching (no DataLoader)
+      - vectorized K-sample expectation for next-step Q
+    """
+    set_seed(seed)
+    device = DEVICE
+
+    # ---- Load dataset tensors to device ----
+    s      = torch.tensor(dataset["s"],      dtype=torch.float32, device=device)
+    a      = torch.tensor(dataset["a"],      dtype=torch.float32, device=device)
+    s_next = torch.tensor(dataset["s_next"], dtype=torch.float32, device=device)
+
+    N, state_dim = s.shape
+    act_dim = a.shape[1]
+
+    # ---- Freeze Q network ----
+    Q_fixed = Q_fixed.to(device)
+    for p in Q_fixed.parameters():
+        p.requires_grad_(False)
+
+    # ---- Dynamics model ----
+    model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and device.type == "cuda"))
+    idx = torch.arange(N, device=device)
+
+    # ---- Cache policy tensors on GPU ----
+    if not hasattr(target_policy, "_W_torch"):
+        target_policy._W_torch  = torch.tensor(target_policy.W,  dtype=torch.float32, device=device)
+        target_policy._std_torch = torch.tensor(target_policy.std, dtype=torch.float32, device=device)
+
+    def sample_actions_pi_torch(states, Ksamples=1):
+        """
+        Vectorized GaussianLinearPolicy sampler on GPU.
+        states: (B, state_dim)
+        returns: (B, act_dim) if Ksamples=1 else (B*K, act_dim) aligned with repeat_interleave
+        """
+        B = states.shape[0]
+        # mu = s @ W^T  -> (B, act_dim)
+        mu = states @ target_policy._W_torch.t()
+        if Ksamples == 1:
+            a_pi = mu + torch.randn_like(mu) * target_policy._std_torch
+            return a_pi.clamp(min=act_low, max=act_high)
+        else:
+            mu_rep = mu.unsqueeze(1).expand(B, Ksamples, act_dim).reshape(B * Ksamples, act_dim)
+            noise  = torch.randn(B * Ksamples, act_dim, device=device) * target_policy._std_torch
+            a_pi   = mu_rep + noise
+            return a_pi.clamp(min=act_low, max=act_high)
+
+    for ep in range(epochs):
+        perm = idx[torch.randperm(N, device=device)]
+        for start in range(0, N, batch_size):
+            sel = perm[start:start + batch_size]
+            sb, ab, snb = s[sel], a[sel], s_next[sel]
+
+            with torch.amp.autocast('cuda', enabled=(use_amp and device.type == "cuda")):
+                # ---- 1) Supervised dynamics NLL on observed (s,a)->s' ----
+                mean, logvar = model.forward(sb, ab)
+                inv_var = torch.exp(-logvar)
+                # Gaussian NLL per dim
+                nll = 0.5 * (logvar + (snb - mean).pow(2) * inv_var + math.log(2 * math.pi))
+                nll_loss = nll.sum(dim=-1).mean()
+
+                # ---- 2) Q-aware TD consistency term ----
+                # Sample action from target policy at current state
+                a_pi = sample_actions_pi_torch(sb, Ksamples=1)                # (B, act_dim)
+                # Model one step: s'_model ~ p_theta(.|s, a_pi)
+                s_next_model = model.sample_next(sb, a_pi)                     # (B, state_dim)
+
+                # Immediate reward r(s, a_pi) on GPU (use your env's reward fn)
+                # lunarlander_reward_torch expects (B, state_dim) and (B, act_dim)
+                r_tensor = lunarlander_reward_torch(sb, a_pi)                  # (B,)
+
+                # Q_next(s'_model) = E_{a'~pi}[ Q(s'_model, a') ] via K samples
+                if K > 1:
+                    s_rep  = s_next_model.repeat_interleave(K, dim=0)         # (B*K, state_dim)
+                    a_next = sample_actions_pi_torch(s_next_model, Ksamples=K) # (B*K, act_dim)
+                    q_next = Q_fixed(s_rep, a_next).view(s_next_model.size(0), K).mean(dim=1)  # (B,)
+                else:
+                    a_next = sample_actions_pi_torch(s_next_model, Ksamples=1) # (B, act_dim)
+                    q_next = Q_fixed(s_next_model, a_next)                      # (B,)
+
+                # Q-TD residual: Q(s, a_pi) - (r + gamma * E_{a'} Q(s', a'))
+                q_curr = Q_fixed(sb, a_pi)                                      # (B,)
+                td = q_curr - (r_tensor + gamma * q_next)
+                td_loss = (td.pow(2)).mean()
+
+                # ---- Total loss ----
+                loss = (1.0 - lambda_td) * nll_loss + lambda_td * td_loss
+
+            # ---- Optimize ----
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
+            scaler.step(opt)
+            scaler.update()
+            opt.zero_grad(set_to_none=True)
+
+    return model
+
+
+def compare_estimates_to_ground_truth(ground_truth, method_estimates):
+    """Compute and print average absolute deviation from ground truth for each method."""
+    if not ground_truth:
+        print("\n[Compare] Ground-truth estimates unavailable; skipping comparison.")
+        return
+
+    gt_keys = set(ground_truth.keys())
+    print("\n=== Method Comparison vs. Ground Truth ===")
+    for method, estimates in method_estimates.items():
+        overlap = gt_keys.intersection(estimates.keys())
+        if not overlap:
+            print(f"[Compare] {method}: no overlapping policies with ground truth.")
+            continue
+        diffs = [abs(estimates[k] - ground_truth[k]) for k in overlap]
+        avg_diff = float(np.mean(diffs)) if diffs else float('nan')
+        print(f"[Compare] {method}: avg |estimate - ground_truth| = {avg_diff:.3f} over {len(overlap)} policies")
 
 
 # -----------------------
@@ -793,75 +1342,190 @@ def evaluate_in_real_env(env, target_policy: GaussianLinearPolicy,
 
 
 def main():
-    set_seed(1)
-    env = make_env()
-    gamma = 0.97
-    H = 500
+    args = parse_args()
+    methods = list(dict.fromkeys(args.methods))
+    print(f"Selected methods: {', '.join(methods)}")
 
-    state_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
+    seeds = [args.seed + i for i in range(args.num_seeds)]
+    method_estimates_acc = defaultdict(lambda: defaultdict(list))
+    ground_truth_acc = defaultdict(list)
 
-    # Define simple linear Gaussian policies
-    W_base = np.zeros((act_dim, state_dim))
-    beta = GaussianLinearPolicy(W=0.3 * np.random.randn(act_dim, state_dim), std=0.3, name="behavior")
+    for run_seed in seeds:
+        print(f"\n===== Seed {run_seed} =====")
+        set_seed(run_seed)
+        env = make_env()
+        gamma = args.gamma
+        horizon = args.horizon
 
-    targets = [
-        GaussianLinearPolicy(W=0.1 * np.random.randn(act_dim, state_dim), std=0.6, name="pi_noisy"),
-        GaussianLinearPolicy(W=0.5 * np.random.randn(act_dim, state_dim), std=0.3, name="pi_moderate"),
-        GaussianLinearPolicy(W=1.0 * np.random.randn(act_dim, state_dim), std=0.2, name="pi_strong"),
-    ]
+        state_dim = env.observation_space.shape[0]
+        act_dim = env.action_space.shape[0]
 
-    print("Behavior:", beta)
-    print("Targets:", targets)
+        beta = GaussianLinearPolicy(W=0.3 * np.random.randn(act_dim, state_dim), std=0.3, name="behavior")
+        targets = [
+            GaussianLinearPolicy(W=0.1 * np.random.randn(act_dim, state_dim), std=0.6, name="pi_noisy"),
+            GaussianLinearPolicy(W=0.5 * np.random.randn(act_dim, state_dim), std=0.3, name="pi_moderate"),
+            GaussianLinearPolicy(W=1.0 * np.random.randn(act_dim, state_dim), std=0.2, name="pi_strong"),
+        ]
 
-    # Smaller dataset (harder for model)
-    dataset = collect_dataset(env, beta, n_episodes=100, max_steps=500, seed=0)
-    print("Dataset sizes:", {k: v.shape if hasattr(v, "shape") else len(v) for k, v in dataset.items()})
+        print("Behavior:", beta)
+        print("Targets:", targets)
 
-    # 1. Train supervised dynamics
-    dyn_supervised = train_dynamics_supervised(dataset, epochs=200, batch_size=1024, lr=1e-3, seed=0)
+        dataset = collect_dataset(
+            env,
+            beta,
+            n_episodes=args.dataset_episodes,
+            max_steps=args.dataset_max_steps,
+            seed=run_seed,
+        )
+        print("Dataset sizes:", {k: v.shape if hasattr(v, "shape") else len(v) for k, v in dataset.items()})
 
-    print("\n=== Method 1: Model-based MC (supervised dynamics) ===")
-    for pi in targets:
-        est_mean, est_se = evaluate_with_model_rollouts(env, dyn_supervised, pi, n_episodes=50, H=H, gamma=gamma, seed=0)
-        print(f"[{pi.name}] V^pi (model rollouts, supervised dyn): {est_mean:.3f} ± {1.96*est_se:.3f}")
+        run_method_estimates = {}
+        value_nets = None
+        q_nets = None
 
-    # 2. Fitted V evaluation (with hard target + optional n-step)
-    print("\n=== Method 2: Fitted V Evaluation (state-only) ===")
-    V_nets = {}
-    for pi in targets:
-        V_pi = train_value_fqe_state(
-            dataset, target_policy=pi, behavior_policy=beta,
-            gamma=gamma, epochs=500, batch_size=1024, lr=1e-3, use_is=True, seed=0)
-        V_nets[pi.name] = V_pi
-        s0 = torch.tensor(dataset["s0"], dtype=torch.float32, device=DEVICE)
-        with torch.no_grad():
-            v_est = V_pi(s0).mean().item()
-        print(f"[{pi.name}] V^pi (FQE on s0): {v_est:.3f}")
+        if "model" in methods:
+            _, model_estimates = run_model_based_mc(
+                env,
+                dataset,
+                targets,
+                gamma,
+                horizon,
+                args.eval_episodes,
+                args.batch_size,
+                args.dyn_epochs,
+                args.dyn_lr,
+                run_seed,
+            )
+            run_method_estimates["model"] = model_estimates
 
-    """print("\n=== Method 2b: FQE with Q-network (hard updates) ===")
-    Q_nets = {}
-    for pi in targets:
-        Q_pi = train_q_fqe(dataset, pi, gamma=gamma, epochs=200,
-                        batch_size=1024, lr=3e-4, seed=0, K=10)
-        Q_nets[pi.name] = Q_pi
-        v_est = estimate_V_from_Q_on_s0(Q_pi, dataset["s0"], pi, K=64)
-        print(f"[{pi.name}] V^pi (Q-FQE on s0): {v_est:.3f}")"""
+        if "value" in methods:
+            value_nets, value_estimates = run_value_fqe_block(
+                dataset,
+                targets,
+                beta,
+                gamma,
+                args.value_epochs,
+                args.batch_size,
+                args.value_lr,
+                run_seed,
+                report_estimates=True,
+            )
+            run_method_estimates["value"] = value_estimates
 
-    # 3. Value-aware model
-    print("\n=== Method 3: Value-aware model (freeze V) ===")
-    for pi in targets:
-        V_fixed = V_nets[pi.name]
-        dyn_va = train_value_aware_model(dataset, pi, V_fixed, gamma=gamma, lambda_td=0.1,
-                                         epochs=200, batch_size=1024, lr=1e-3, seed=0)
-        est_mean, est_se = evaluate_with_model_rollouts(env, dyn_va, pi, n_episodes=50, H=H, gamma=gamma, seed=0)
-        print(f"[{pi.name}] V^pi (model rollouts, value-aware dyn): {est_mean:.3f} ± {1.96*est_se:.3f}")
+        if "qvalue" in methods:
+            q_nets, qvalue_estimates = run_q_fqe_block(
+                dataset,
+                targets,
+                gamma,
+                args.q_epochs,
+                args.batch_size,
+                args.q_lr,
+                run_seed,
+                args.q_action_samples,
+                args.q_eval_samples,
+            )
+            run_method_estimates["qvalue"] = qvalue_estimates
 
-    # 4. Ground-truth
-    print("\n=== Ground-truth Monte Carlo ===")
-    for pi in targets:
-        true_mean, true_se = evaluate_in_real_env(env, pi, n_episodes=50, H=H, gamma=gamma, seed=0)
-        print(f"[{pi.name}] True V^pi (real env): {true_mean:.3f} ± {1.96*true_se:.3f}")
+        if "value-aware" in methods:
+            if value_nets is None:
+                value_nets, _ = run_value_fqe_block(
+                    dataset,
+                    targets,
+                    beta,
+                    gamma,
+                    args.value_epochs,
+                    args.batch_size,
+                    args.value_lr,
+                    run_seed,
+                    report_estimates=False,
+                )
+                print("\nPrepared state-value networks for value-aware modeling.")
+            value_aware_estimates = run_value_aware_block(
+                dataset,
+                targets,
+                value_nets,
+                gamma,
+                args.value_aware_lambda,
+                args.value_aware_epochs,
+                args.batch_size,
+                args.value_aware_lr,
+                run_seed,
+                env,
+                horizon,
+                args.eval_episodes,
+            )
+            run_method_estimates["value-aware"] = value_aware_estimates
+
+        if "q-aware" in methods:
+            if q_nets is None:
+                q_nets, _ = run_q_fqe_block(
+                    dataset,
+                    targets,
+                    gamma,
+                    args.q_epochs,
+                    args.batch_size,
+                    args.q_lr,
+                    run_seed,
+                    args.q_action_samples,
+                    args.q_eval_samples,
+                )
+                print("\nPrepared Q networks for Q-aware modeling.")
+            q_aware_estimates = run_q_aware_block(
+                dataset,
+                targets,
+                q_nets,
+                gamma,
+                args.q_aware_lambda,
+                args.q_aware_epochs,
+                args.batch_size,
+                args.q_aware_lr,
+                run_seed,
+                env,
+                horizon,
+                args.eval_episodes,
+                args.q_aware_action_samples,
+            )
+            run_method_estimates["q-aware"] = q_aware_estimates
+
+        ground_truth_estimates = {}
+        if "ground-truth" in methods:
+            ground_truth_estimates = run_ground_truth_block(
+                env,
+                targets,
+                gamma,
+                horizon,
+                args.eval_episodes,
+                run_seed,
+            )
+
+        for method_name, estimates in run_method_estimates.items():
+            for policy_name, value in estimates.items():
+                method_estimates_acc[method_name][policy_name].append(value)
+
+        for policy_name, value in ground_truth_estimates.items():
+            ground_truth_acc[policy_name].append(value)
+
+        env.close()
+
+    method_estimates_avg = {
+        method: {policy: float(np.mean(vals)) for policy, vals in policy_dict.items()}
+        for method, policy_dict in method_estimates_acc.items()
+    }
+    ground_truth_avg = {policy: float(np.mean(vals)) for policy, vals in ground_truth_acc.items()}
+
+    if method_estimates_avg:
+        print("\n=== Average Estimates Across Seeds ===")
+        for method, pol_dict in method_estimates_avg.items():
+            print(f"{method}:")
+            for policy, val in pol_dict.items():
+                print(f"  {policy}: {val:.3f}")
+
+    if ground_truth_avg:
+        print("\n=== Ground Truth (Average Across Seeds) ===")
+        for policy, val in ground_truth_avg.items():
+            print(f"{policy}: {val:.3f}")
+
+    compare_estimates_to_ground_truth(ground_truth_avg, method_estimates_avg)
 
 if __name__ == "__main__":
     main()
