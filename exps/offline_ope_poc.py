@@ -347,7 +347,9 @@ class DynamicsNet(nn.Module):
         mean, logvar = self.forward(s, a)
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return mean + std * eps
+        s_next = mean + std * eps
+        # prevent explosions
+        return torch.clamp(s_next, -5.0, 5.0)
 
 class QNet(nn.Module):
     def __init__(self, state_dim=3, act_dim=1, hidden=128):
