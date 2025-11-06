@@ -25,8 +25,9 @@ def run_model_based_mc(
     epochs: int,
     lr: float,
     seed: int,
-    hidden: int = 256,
+    hidden: int = 128,
 ) -> Tuple[torch.nn.Module, Dict[str, float]]:
+    print("\n=== Naive model-based estimate ===")
     dynamics = train_dynamics_supervised(
         dataset,
         epochs=epochs,
@@ -46,7 +47,7 @@ def run_model_based_mc(
             gamma=gamma,
             seed=seed,
         )
-        print(f"[{policy.name}] V^pi (model rollouts): {mean:.3f} ± {1.96 * stderr:.3f}")
+        print(f"[{policy.name}] J^pi (model rollouts): {mean:.3f} ± {1.96 * stderr:.3f}")
         estimates[policy.name] = mean
     return dynamics, estimates
 
@@ -60,9 +61,11 @@ def run_value_fqe_block(
     batch_size: int,
     lr: float,
     seed: int,
-    hidden: int = 256,
+    hidden: int = 128,
     report: bool = True,
 ) -> Tuple[Dict[str, torch.nn.Module], Dict[str, float]]:
+    print("\n=== FVE estimate ===")
+
     value_networks: Dict[str, torch.nn.Module] = {}
     estimates: Dict[str, float] = {}
     tensors = dataset.as_dict() if isinstance(dataset, OfflineDataset) else dataset
@@ -84,7 +87,7 @@ def run_value_fqe_block(
         estimate = float(value_net(torch.tensor(initial_states, dtype=torch.float32, device=DEVICE)).mean().item())
         estimates[policy.name] = estimate
         if report:
-            print(f"[{policy.name}] V^pi (FQE on s0): {estimate:.3f}")
+            print(f"[{policy.name}] J^pi (FVE on s0): {estimate:.3f}")
     return value_networks, estimates
 
 
@@ -98,9 +101,12 @@ def run_q_fqe_block(
     seed: int,
     action_samples: int,
     eval_samples: int,
-    hidden: int = 256,
+    hidden: int = 128,
     report: bool = True,
 ) -> Tuple[Dict[str, torch.nn.Module], Dict[str, float]]:
+
+    print("\n=== FQE estimate ===")
+
     q_networks: Dict[str, torch.nn.Module] = {}
     estimates: Dict[str, float] = {}
     tensors = dataset.as_dict() if isinstance(dataset, OfflineDataset) else dataset
@@ -122,7 +128,7 @@ def run_q_fqe_block(
         estimate = estimate_V_from_Q_on_s0(q_net, initial_states, policy, K=eval_samples, device=DEVICE)
         estimates[policy.name] = estimate
         if report:
-            print(f"[{policy.name}] V^pi (Q-FQE on s0): {estimate:.3f}")
+            print(f"[{policy.name}] J^pi (FQE on s0): {estimate:.3f}")
     return q_networks, estimates
 
 
@@ -141,6 +147,7 @@ def run_value_aware_block(
     episodes: int,
     hidden: int = 128,
 ) -> Dict[str, float]:
+    print("\n=== FVE-aware model-based estimate ===")
     estimates: Dict[str, float] = {}
     for policy in target_policies:
         value_net = value_networks[policy.name]
@@ -165,7 +172,7 @@ def run_value_aware_block(
             gamma=gamma,
             seed=seed,
         )
-        print(f"[{policy.name}] V^pi (value-aware dyn): {mean:.3f} ± {1.96 * stderr:.3f}")
+        print(f"[{policy.name}] J^pi (FVE-aware model): {mean:.3f} ± {1.96 * stderr:.3f}")
         estimates[policy.name] = mean
     return estimates
 
@@ -186,6 +193,7 @@ def run_q_aware_block(
     action_samples: int,
     hidden: int = 128,
 ) -> Dict[str, float]:
+    print("\n=== FQE-aware model-based estimate ===")
     estimates: Dict[str, float] = {}
     for policy in target_policies:
         q_net = q_networks[policy.name]
@@ -211,7 +219,7 @@ def run_q_aware_block(
             gamma=gamma,
             seed=seed,
         )
-        print(f"[{policy.name}] V^pi (Q-aware dyn): {mean:.3f} ± {1.96 * stderr:.3f}")
+        print(f"[{policy.name}] J^pi (FQE-aware model): {mean:.3f} ± {1.96 * stderr:.3f}")
         estimates[policy.name] = mean
     return estimates
 
@@ -233,6 +241,7 @@ def run_ranking_aware_block(
     rollout_episodes: int,
     hidden: int = 128,
 ) -> Dict[str, float]:
+    print("\n=== Ranking-aware model-based estimate ===")
     policy_q_pairs = [(policy, q_networks[policy.name]) for policy in target_policies]
     dynamics = train_ranking_aware_model(
         dataset,
@@ -259,7 +268,7 @@ def run_ranking_aware_block(
             gamma=gamma,
             seed=seed,
         )
-        print(f"[{policy.name}] V^pi (ranking-aware dyn): {mean:.3f} ± {1.96 * stderr:.3f}")
+        print(f"[{policy.name}] J^pi (ranking-aware model): {mean:.3f} ± {1.96 * stderr:.3f}")
         estimates[policy.name] = mean
     return estimates
 
@@ -272,6 +281,7 @@ def run_ground_truth_block(
     episodes: int,
     seed: int,
 ) -> Dict[str, float]:
+    print("\n=== Ground-truth ===")
     estimates: Dict[str, float] = {}
     for policy in target_policies:
         mean, stderr = evaluate_policy_in_env(
@@ -282,7 +292,7 @@ def run_ground_truth_block(
             gamma=gamma,
             seed=seed,
         )
-        print(f"[{policy.name}] True V^pi: {mean:.3f} ± {1.96 * stderr:.3f}")
+        print(f"[{policy.name}] True J^pi: {mean:.3f} ± {1.96 * stderr:.3f}")
         estimates[policy.name] = mean
     return estimates
 

@@ -56,7 +56,7 @@ def train_value_aware_model(
         param.requires_grad_(False)
 
     model = DynamicsNet(state_dim=state_dim, act_dim=act_dim, hidden=hidden).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and device.type == "cuda"))
     indices = torch.arange(N, device=device)
 
@@ -111,8 +111,9 @@ def train_q_aware_model(
     act_low: float = -1.0,
     act_high: float = 1.0,
     samples: int = 4,
-    hidden: int = 256,
+    hidden: int = 128,
 ) -> DynamicsNet:
+    
     set_seed(seed)
     device = DEVICE
     data = _as_dict(dataset)
@@ -127,7 +128,7 @@ def train_q_aware_model(
         param.requires_grad_(False)
 
     model = DynamicsNet(state_dim=state_dim, act_dim=act_dim, hidden=hidden).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and device.type == "cuda"))
     indices = torch.arange(N, device=device)
 
@@ -208,7 +209,7 @@ def train_ranking_aware_model(
     act_dim = actions.shape[1]
 
     model = DynamicsNet(state_dim=state_dim, act_dim=act_dim, hidden=hidden).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and device.type == "cuda"))
     indices = torch.arange(N, device=device)
 

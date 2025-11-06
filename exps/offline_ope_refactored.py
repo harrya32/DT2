@@ -151,7 +151,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--value-aware-lr",
         type=float,
-        default=1e-3,
+        default=5e-4,
         help="Learning rate for the value-aware dynamics model.",
     )
     parser.add_argument(
@@ -230,11 +230,7 @@ def main() -> None:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
 
-        beta = GaussianLinearPolicy(
-            W=0.3 * np.random.randn(act_dim, state_dim),
-            std=0.3,
-            name="behavior",
-        )
+        beta = GaussianLinearPolicy(W=0.3 * np.random.randn(act_dim, state_dim), std=0.3, name="behavior")
         targets = [
             GaussianLinearPolicy(W=0.1 * np.random.randn(act_dim, state_dim), std=0.6, name="pi_noisy"),
             GaussianLinearPolicy(W=0.5 * np.random.randn(act_dim, state_dim), std=0.3, name="pi_moderate"),

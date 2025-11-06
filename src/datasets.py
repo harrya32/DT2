@@ -53,6 +53,7 @@ def collect_dataset(
     reward_fn: Optional[Callable[[np.ndarray, np.ndarray], float]] = lunarlander_reward_fn,
 ) -> OfflineDataset:
     """Gather transitions from a behavior policy into an OfflineDataset."""
+
     rng = np.random.default_rng(seed)
     transitions = []
     initial_states = []

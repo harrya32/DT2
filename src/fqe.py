@@ -94,7 +94,7 @@ def train_value_fqe_state(
     for param in target.parameters():
         param.requires_grad_(False)
 
-    optimizer = torch.optim.Adam(value.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(value.parameters(), lr=lr)
     use_amp = use_amp and device.type == "cuda"
     scaler = torch.amp.GradScaler('cuda', enabled=use_amp) if use_amp else None
     autocast = torch.amp.autocast if use_amp else nullcontext
@@ -174,7 +174,7 @@ def train_value_fqe_state_nstep(
     target_value = ValueNet(state_dim=states.shape[1], hidden=hidden).to(device)
     target_value.load_state_dict(value.state_dict())
 
-    optimizer = torch.optim.Adam(value.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(value.parameters(), lr=lr)
 
     if use_is:
         logp_pi = target_policy.torch_log_prob(actions, states).cpu().numpy()
@@ -257,10 +257,11 @@ def train_q_fqe(
     samples: int = 16,
     act_low: float = -1.0,
     act_high: float = 1.0,
-    hidden: int = 256,
+    hidden: int = 128,
     device: Optional[torch.device] = None,
     use_amp: bool = True,
 ) -> RescaledQ:
+    
     set_seed(seed)
     device = device or DEVICE
     tensors = _dataset_to_tensors(dataset, device)
@@ -277,7 +278,7 @@ def train_q_fqe(
     for param in target_q.parameters():
         param.requires_grad_(False)
 
-    optimizer = torch.optim.Adam(q_net.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(q_net.parameters(), lr=lr)
     use_amp = use_amp and device.type == "cuda"
     scaler = torch.amp.GradScaler('cuda', enabled=use_amp) if use_amp else None
     autocast = torch.amp.autocast if use_amp else nullcontext
@@ -332,6 +333,7 @@ def estimate_v_from_q(
     samples: int = 64,
     device: Optional[torch.device] = None,
 ) -> float:
+    
     device = device or DEVICE
     s0 = torch.tensor(initial_states, dtype=torch.float32, device=device)
     s_rep = s0.repeat_interleave(samples, dim=0)

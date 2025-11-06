@@ -33,15 +33,16 @@ def train_dynamics_supervised(
     batch_size: int = 1024,
     lr: float = 1e-3,
     seed: int = 0,
-    hidden: int = 256,
+    hidden: int = 128,
     device: Optional[torch.device] = None,
 ) -> DynamicsNet:
+    
     set_seed(seed)
     device = device or DEVICE
     states, actions, next_states = _dataset_tensors(dataset, device)
 
     model = DynamicsNet(state_dim=states.shape[1], act_dim=actions.shape[1], hidden=hidden).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
     loader = DataLoader(
         TensorDataset(states, actions, next_states),
@@ -53,7 +54,7 @@ def train_dynamics_supervised(
     for _ in range(epochs):
         for sb, ab, snb in loader:
             loss = model.nll(sb, ab, snb)
-            optimizer.zero_grad(set_to_none=True)
+            optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
             optimizer.step()
@@ -73,7 +74,7 @@ def evaluate_with_model_rollouts(
     reward_fn: Callable[[np.ndarray, np.ndarray], float] = lunarlander_reward_fn,
     device: Optional[torch.device] = None,
 ) -> Tuple[float, float]:
-    set_seed(seed)
+    
     device = device or DEVICE
     rng = np.random.default_rng(seed)
     initial_states = []
