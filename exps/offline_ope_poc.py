@@ -324,35 +324,15 @@ class ValueNet(nn.Module):
         return self.net(s).squeeze(-1)  # (B,)
 
 class DynamicsNet(nn.Module):
-    def __init__(self, state_dim=8, act_dim=1, hidden=128):
+    def __init__(self, state_dim=3, act_dim=1, hidden=128):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(state_dim + act_dim, hidden), nn.ReLU(),
             nn.Linear(hidden, hidden), nn.ReLU(),
         )
+        # Predict Gaussian for s' given (s,a): mean and logvar per state dim
         self.mean_head = nn.Linear(hidden, state_dim)
         self.logvar_head = nn.Linear(hidden, state_dim)
-
-        # --- Define LunarLander state bounds ---
-        state_low = torch.tensor([
-            -2.5, -2.5,   # x, y
-            -10., -10.,   # vx, vy
-            -math.pi,     # angle
-            -10.,         # angular velocity
-            0., 0.        # left/right leg contact
-        ], dtype=torch.float32)
-
-        state_high = torch.tensor([
-             2.5,  2.5,
-             10.,  10.,
-             math.pi,
-             10.,
-             1., 1.
-        ], dtype=torch.float32)
-
-        # Register as buffers so they move with the model to GPU
-        self.register_buffer("state_low", state_low)
-        self.register_buffer("state_high", state_high)
 
     def forward(self, s, a):
         x = torch.cat([s, a], dim=-1)
@@ -364,6 +344,7 @@ class DynamicsNet(nn.Module):
     def nll(self, s, a, s_next):
         mean, logvar = self.forward(s, a)
         inv_var = torch.exp(-logvar)
+        # Gaussian NLL per dimension
         nll = 0.5 * (logvar + (s_next - mean) ** 2 * inv_var + math.log(2 * math.pi))
         return nll.sum(dim=-1).mean()
 
@@ -371,18 +352,12 @@ class DynamicsNet(nn.Module):
         mean, _ = self.forward(s, a)
         return F.mse_loss(mean, s_next)
 
+    @torch.no_grad()
     def sample_next(self, s, a):
         mean, logvar = self.forward(s, a)
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        s_next = mean + std * eps
-
-        # --- Handle angle wrapping for 5th dim (index 4) ---
-        s_next[..., 4] = (s_next[..., 4] + math.pi) % (2 * math.pi) - math.pi
-
-        # --- Clamp remaining dims per state bounds ---
-        s_next = torch.max(torch.min(s_next, self.state_high), self.state_low)
-        return s_next
+        return mean + std * eps
 
         
 
@@ -688,7 +663,7 @@ def train_q_fqe(
     for p in Q_t.parameters():
         p.requires_grad_(False)
 
-    opt = torch.optim.AdamW(Q.parameters(), lr=lr)
+    opt = torch.optim.Adam(Q.parameters(), lr=lr)
     scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and DEVICE.type == "cuda"))
 
     N = s.size(0)
@@ -766,7 +741,7 @@ def train_dynamics_supervised(dataset, epochs=20, batch_size=1024, lr=5e-4, seed
     s_next = torch.tensor(dataset["s_next"], dtype=torch.float32, device=DEVICE)
 
     model = DynamicsNet(state_dim=s.shape[1], act_dim=a.shape[1]).to(DEVICE)
-    opt = torch.optim.AdamW(model.parameters(), lr=lr)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
 
     ds = TensorDataset(s, a, s_next)
     loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False)
@@ -929,7 +904,7 @@ def train_q_aware_model(
 
     # ---- Dynamics model ----
     model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=lr)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
     scaler = torch.amp.GradScaler('cuda', enabled=(use_amp and device.type == "cuda"))
     idx = torch.arange(N, device=device)
 
