@@ -1,7 +1,7 @@
 {
   "ppo_frac_0": "results/pendulum_pipeline/q_models/ppo_frac_0.pt",
-  "ppo_frac_125000": "results/pendulum_pipeline/q_models/ppo_frac_125000.pt",
-  "ppo_frac_250000": "results/pendulum_pipeline/q_models/ppo_frac_250000.pt",
-  "ppo_frac_375000": "results/pendulum_pipeline/q_models/ppo_frac_375000.pt",
-  "ppo_frac_500000": "results/pendulum_pipeline/q_models/ppo_frac_500000.pt"
+  "ppo_frac_500000": "results/pendulum_pipeline/q_models/ppo_frac_500000.pt",
+  "ppo_frac_1000000": "results/pendulum_pipeline/q_models/ppo_frac_1000000.pt",
+  "ppo_frac_1500000": "results/pendulum_pipeline/q_models/ppo_frac_1500000.pt",
+  "ppo_frac_2000000": "results/pendulum_pipeline/q_models/ppo_frac_2000000.pt"
 }

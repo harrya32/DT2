@@ -4,3 +4,14 @@
 {"time":"2025-12-08T20:31:02.905892537Z","level":"INFO","msg":"stream: started","id":"fozrb12j"}
 {"time":"2025-12-08T20:31:02.905957825Z","level":"INFO","msg":"writer: started","stream_id":"fozrb12j"}
 {"time":"2025-12-08T20:31:02.905974852Z","level":"INFO","msg":"sender: started","stream_id":"fozrb12j"}
+{"time":"2025-12-08T20:58:17.713207013Z","level":"WARN","msg":"handler: ignoring partial history record","step":0,"current":2020236}
+{"time":"2025-12-08T20:58:45.788389082Z","level":"WARN","msg":"handler: ignoring partial history record","step":500000,"current":2020236}
+{"time":"2025-12-08T20:59:13.470388725Z","level":"WARN","msg":"handler: ignoring partial history record","step":1000000,"current":2020236}
+{"time":"2025-12-08T20:59:41.32152142Z","level":"WARN","msg":"handler: ignoring partial history record","step":1500000,"current":2020236}
+{"time":"2025-12-08T21:00:09.227346901Z","level":"WARN","msg":"handler: ignoring partial history record","step":2000000,"current":2020236}
+{"time":"2025-12-08T21:00:09.652151807Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-08T21:00:09.821610747Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-12-08T21:00:09.825271878Z","level":"INFO","msg":"stream: closing","id":"fozrb12j"}
+{"time":"2025-12-08T21:00:09.825293147Z","level":"INFO","msg":"handler: closed","stream_id":"fozrb12j"}
+{"time":"2025-12-08T21:00:09.825818943Z","level":"INFO","msg":"sender: closed","stream_id":"fozrb12j"}
+{"time":"2025-12-08T21:00:09.825877182Z","level":"INFO","msg":"stream: closed","id":"fozrb12j"}

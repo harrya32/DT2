@@ -19,3 +19,8 @@ config: {'env_id': 'Pendulum-v1', 'total_steps': 2000000, 'ppo_fractions': [0.25
 2025-12-08 20:31:03,194 INFO    MainThread:56106 [wandb_run.py:_redirect():2438] Wrapping output streams.
 2025-12-08 20:31:03,194 INFO    MainThread:56106 [wandb_run.py:_redirect():2461] Redirects installed.
 2025-12-08 20:31:03,196 INFO    MainThread:56106 [wandb_init.py:init():1081] run started, returning control to user process
+2025-12-08 21:00:09,230 INFO    MainThread:56106 [wandb_run.py:_finish():2287] finishing run harryamad-university-of-cambridge/DT2-pendulum/fozrb12j
+2025-12-08 21:00:09,230 INFO    MainThread:56106 [wandb_run.py:_atexit_cleanup():2486] got exitcode: 0
+2025-12-08 21:00:09,230 INFO    MainThread:56106 [wandb_run.py:_restore():2468] restore
+2025-12-08 21:00:09,231 INFO    MainThread:56106 [wandb_run.py:_restore():2474] restore done
+2025-12-08 21:00:09,824 INFO    MainThread:56106 [wandb_run.py:_footer_sync_info():3862] logging synced files
