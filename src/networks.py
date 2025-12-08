@@ -197,6 +197,7 @@ class DynamicsNet(nn.Module):
         batch_size: int = 1024,
         lr: float = 1e-3,
         device: Optional[torch.device] = None,
+        log_hook: Optional[Callable[[int, float], None]] = None,
     ) -> DynamicsNet:
         
         device = device or DEVICE
@@ -211,7 +212,7 @@ class DynamicsNet(nn.Module):
         )
         losses = []
 
-        for _ in range(epochs):
+        for epoch in range(epochs):
             epoch_loss = 0.0
             for sb, ab, snb in loader:
                 loss = self.balanced_loss(sb, ab, snb)
@@ -221,7 +222,10 @@ class DynamicsNet(nn.Module):
                 optimizer.step()
                 epoch_loss += loss.item()
 
-            losses.append(epoch_loss / max(1, len(loader)))
+            avg_loss = epoch_loss / max(1, len(loader))
+            losses.append(avg_loss)
+            if log_hook is not None:
+                log_hook(epoch, avg_loss)
         
         return losses
     
@@ -240,9 +244,10 @@ class DynamicsNet(nn.Module):
         act_high: float = 1.0,
         samples: int = 4,
         hidden: int = 128,
-        dynamics_loss: str = "nll",
+        dynamics_loss: str = "balanced",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
+        log_hook: Optional[Callable[[int, float], None]] = None,
     ) -> DynamicsNet:
         
         if reward_fn is None:
@@ -270,7 +275,7 @@ class DynamicsNet(nn.Module):
         indices = torch.arange(N, device=device)
 
         losses = []
-        for _ in range(epochs):
+        for epoch in range(epochs):
             epoch_loss = 0.0
             perm = indices[torch.randperm(N, device=device)]
             for start in range(0, N, batch_size):
@@ -310,7 +315,10 @@ class DynamicsNet(nn.Module):
                 optimizer.zero_grad(set_to_none=True)
                 epoch_loss += loss.item()
 
-            losses.append(epoch_loss / self._num_batches(N, batch_size))
+            avg_loss = epoch_loss / self._num_batches(N, batch_size)
+            losses.append(avg_loss)
+            if log_hook is not None:
+                log_hook(epoch, avg_loss)
 
         return losses
 
@@ -332,6 +340,7 @@ class DynamicsNet(nn.Module):
         dynamics_loss: str = "balanced",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
+        log_hook: Optional[Callable[[int, float], None]] = None,
     ) -> DynamicsNet:
         
         if reward_fn is None:
@@ -437,7 +446,10 @@ class DynamicsNet(nn.Module):
                 optimizer.zero_grad(set_to_none=True)
                 epoch_loss += rank_term.item()
 
-            losses.append(epoch_loss / self._num_batches(N, batch_size))
+            avg_loss = epoch_loss / self._num_batches(N, batch_size)
+            losses.append(avg_loss)
+            if log_hook is not None:
+                log_hook(epoch, avg_loss)
         
         return losses
 
@@ -512,6 +524,7 @@ class QNet(nn.Module):
         hidden: int = 128,
         device: Optional[torch.device] = None,
         use_amp: bool = True,
+        log_hook: Optional[Callable[[int, float], None]] = None,
     ) -> RescaledQ:
         
         device = device or DEVICE
@@ -535,6 +548,8 @@ class QNet(nn.Module):
         indices = torch.arange(states.shape[0], device=device)
 
         for epoch in range(epochs):
+            epoch_loss = 0.0
+            num_batches = 0
             perm = indices[torch.randperm(states.shape[0], device=device)]
             for start in range(0, states.shape[0], batch_size):
                 batch_idx = perm[start : start + batch_size]
@@ -574,8 +589,15 @@ class QNet(nn.Module):
                     torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
                     optimizer.step()
 
+                epoch_loss += loss.item()
+                num_batches += 1
+
             if (epoch + 1) % 5 == 0:
                 target_q.load_state_dict(self.state_dict())
+
+            if log_hook is not None:
+                avg_loss = epoch_loss / max(1, num_batches)
+                log_hook(epoch, avg_loss)
 
         return RescaledQ(self, reward_mean, reward_std, gamma)
 

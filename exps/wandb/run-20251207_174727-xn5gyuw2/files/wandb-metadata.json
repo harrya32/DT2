@@ -1,0 +1,40 @@
+{
+  "os": "macOS-26.1-arm64-arm-64bit",
+  "python": "CPython 3.10.19",
+  "startedAt": "2025-12-08T01:47:27.273140Z",
+  "args": [
+    "--force-dynamics-training"
+  ],
+  "program": "/Users/harryamad/My Drive/2025/DT2/DT2/exps/lunarlander_pipeline.py",
+  "codePath": "exps/lunarlander_pipeline.py",
+  "codePathLocal": "lunarlander_pipeline.py",
+  "git": {
+    "remote": "https://github.com/harrya32/DT2.git",
+    "commit": "7bb4257544bc27a721f11977bcc5b9a4ebb2798e"
+  },
+  "email": "harryamad@gmail.com",
+  "root": "/Users/harryamad/My Drive/2025/DT2/DT2/exps",
+  "host": "Harrys-MacBook-Pro-3.local",
+  "executable": "/opt/anaconda3/envs/dt2/bin/python",
+  "cpu_count": 10,
+  "cpu_count_logical": 10,
+  "disk": {
+    "/": {
+      "total": "994662584320",
+      "used": "287003172864"
+    }
+  },
+  "memory": {
+    "total": "17179869184"
+  },
+  "apple": {
+    "name": "Apple M1 Pro",
+    "ecpuCores": 2,
+    "pcpuCores": 8,
+    "gpuCores": 16,
+    "memoryGb": 16,
+    "swapTotalBytes": "2147483648",
+    "ramTotalBytes": "17179869184"
+  },
+  "writerId": "f8kmw9s5u8ehlzdncvs5z6b4wec0ejb3"
+}

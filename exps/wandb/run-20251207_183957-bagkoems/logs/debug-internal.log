@@ -1,0 +1,13 @@
+{"time":"2025-12-07T18:39:58.148831-08:00","level":"INFO","msg":"stream: starting","core version":"0.23.1"}
+{"time":"2025-12-07T18:39:58.373844-08:00","level":"INFO","msg":"stream: created new stream","id":"bagkoems"}
+{"time":"2025-12-07T18:39:58.373905-08:00","level":"INFO","msg":"handler: started","stream_id":"bagkoems"}
+{"time":"2025-12-07T18:39:58.374092-08:00","level":"INFO","msg":"stream: started","id":"bagkoems"}
+{"time":"2025-12-07T18:39:58.374106-08:00","level":"INFO","msg":"writer: started","stream_id":"bagkoems"}
+{"time":"2025-12-07T18:39:58.374121-08:00","level":"INFO","msg":"sender: started","stream_id":"bagkoems"}
+{"time":"2025-12-07T19:38:16.39161-08:00","level":"WARN","msg":"handler: ignoring partial history record","step":0,"current":4004}
+{"time":"2025-12-07T19:38:39.710069-08:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-07T19:38:40.054823-08:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-12-07T19:38:40.062286-08:00","level":"INFO","msg":"stream: closing","id":"bagkoems"}
+{"time":"2025-12-07T19:38:40.062332-08:00","level":"INFO","msg":"handler: closed","stream_id":"bagkoems"}
+{"time":"2025-12-07T19:38:40.062467-08:00","level":"INFO","msg":"sender: closed","stream_id":"bagkoems"}
+{"time":"2025-12-07T19:38:40.062485-08:00","level":"INFO","msg":"stream: closed","id":"bagkoems"}

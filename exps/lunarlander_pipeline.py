@@ -5,8 +5,11 @@ import copy
 import json
 import math
 import os
+import time
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+
+import wandb
 
 import sys
 
@@ -107,6 +110,46 @@ def load_policy_models(policy_snapshots: Sequence[Dict[str, object]]) -> Dict[st
 
 def make_policy_adapters(policy_models: Dict[str, PPO]) -> Dict[str, TorchPolicy]:
     return {name: SB3PolicyAdapter(name, model) for name, model in policy_models.items()}
+
+
+def args_to_config(args: argparse.Namespace) -> Dict[str, Any]:
+    return {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
+
+
+def initialize_wandb(args: argparse.Namespace) -> Optional[Any]:
+    if not args.wandb_project:
+        return None
+    run = wandb.init(
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        name=args.wandb_run_name,
+        mode=args.wandb_mode,
+        config=args_to_config(args),
+    )
+    return run
+
+
+def wandb_log(run: Optional[Any], payload: Dict[str, Any], step: Optional[int] = None) -> None:
+    if run is None:
+        return
+    run.log(payload, step=step)
+
+
+def make_epoch_logger(
+    run: Optional[Any],
+    metric_key: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Optional[Callable[[int, float], None]]:
+    if run is None:
+        return None
+
+    def hook(epoch: int, loss: float) -> None:
+        payload = {metric_key: loss, "epoch": epoch + 1}
+        if extra:
+            payload.update(extra)
+        wandb_log(run, payload)
+
+    return hook
 
 
 def save_snapshots(manifest_path: Path, snapshots: List[Dict[str, object]]) -> None:
@@ -261,6 +304,7 @@ def train_q_networks(
     batch_size: int,
     lr: float,
     samples: int,
+    wandb_run: Optional[Any] = None,
 ) -> Dict[str, QNet]:
     q_models: Dict[str, QNet] = {}
     state_dim = dataset.states.shape[1]
@@ -277,6 +321,7 @@ def train_q_networks(
             samples=samples,
             device=device,
             use_amp=device.type == "cuda",
+            log_hook=make_epoch_logger(wandb_run, f"q_train/{name}"),
         )
         q_models[name] = rescaled_q
     return q_models
@@ -319,12 +364,20 @@ def train_dynamics_models(
     gamma: float,
     lambda_td: float,
     lambda_rank: float,
+    wandb_run: Optional[Any] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet]:
     state_dim = dataset.states.shape[1]
     act_dim = dataset.actions.shape[1]
 
     sup_model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
-    sup_model.train(dataset, epochs=dyn_epochs, batch_size=dyn_batch, lr=dyn_lr, device=device)
+    sup_model.train(
+        dataset,
+        epochs=dyn_epochs,
+        batch_size=dyn_batch,
+        lr=dyn_lr,
+        device=device,
+        log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
+    )
 
     q_aware_models: Dict[str, DynamicsNet] = {}
     for name, policy in policies.items():
@@ -340,6 +393,7 @@ def train_dynamics_models(
             lr=dyn_lr,
             reward_fn=lunarlander_reward_torch,
             device=device,
+            log_hook=make_epoch_logger(wandb_run, f"dynamics/qaware/{name}"),
         )
         q_aware_models[name] = model
 
@@ -355,6 +409,7 @@ def train_dynamics_models(
         lr=dyn_lr,
         reward_fn=lunarlander_reward_torch,
         device=device,
+        log_hook=make_epoch_logger(wandb_run, "dynamics/ranking"),
     )
 
     return sup_model, q_aware_models, ranking_model
@@ -488,13 +543,13 @@ def main() -> None:
     parser.add_argument("--q-batch", type=int, default=1024)
     parser.add_argument("--q-lr", type=float, default=3e-4)
     parser.add_argument("--q-samples", type=int, default=16)
-    parser.add_argument("--dyn-epochs", type=int, default=200)
+    parser.add_argument("--dyn-epochs", type=int, default=500)
     parser.add_argument("--dyn-batch", type=int, default=1024)
     parser.add_argument("--dyn-lr", type=float, default=1e-3)
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
     parser.add_argument("--eval-episodes", type=int, default=20)
-    parser.add_argument("--eval-rollouts", type=int, default=256)
+    parser.add_argument("--eval-rollouts", type=int, default=500)
     parser.add_argument("--eval-horizon", type=int, default=500)
     parser.add_argument("--output-dir", type=Path, default=Path("results/lunarlander_pipeline"))
     parser.add_argument("--device", type=str, default="auto")
@@ -502,6 +557,16 @@ def main() -> None:
     parser.add_argument("--force-q-training", action="store_true", help="ignore saved Q networks and retrain")
     parser.add_argument("--force-dynamics-training", action="store_true", help="ignore saved dynamics models and retrain")
     parser.add_argument("--results-only", action="store_true", help="skip training; load saved dataset and models to recompute evaluations")
+    parser.add_argument("--wandb-project", type=str, default="DT2-lunarlander", help="Weights & Biases project name for logging")
+    parser.add_argument("--wandb-entity", type=str, default=None, help="Weights & Biases entity/user (optional)")
+    parser.add_argument("--wandb-run-name", type=str, default=None, help="Optional custom run name in wandb")
+    parser.add_argument(
+        "--wandb-mode",
+        type=str,
+        default="online",
+        choices=["online", "offline", "disabled"],
+        help="Set wandb init mode (default: online)",
+    )
     args = parser.parse_args()
 
     if args.results_only and (
@@ -511,9 +576,12 @@ def main() -> None:
 
     device = torch.device(args.device) if args.device != "auto" else default_device()
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    wandb_run = initialize_wandb(args)
 
     policy_dir = args.output_dir / "policies"
     snapshots_manifest = policy_dir / "snapshots.json"
+    policy_trained = False
+    policy_train_time: Optional[float] = None
     if snapshots_manifest.exists() and not args.force_policy_training:
         print("[Step 1] Using existing PPO checkpoints...")
         snapshots = load_snapshots(snapshots_manifest)
@@ -523,6 +591,7 @@ def main() -> None:
                 f"No saved PPO checkpoints at {snapshots_manifest}. Run without --results-only to generate them."
             )
         print("[Step 1] Training PPO policies with checkpoints...")
+        start_time = time.perf_counter()
         snapshots = train_ppo_with_checkpoints(
             env_id=args.env_id,
             total_steps=args.total_steps,
@@ -541,7 +610,14 @@ def main() -> None:
             device=device.type if device.type in {"cuda", "cpu"} else "cpu",
         )
         save_snapshots(snapshots_manifest, snapshots)
+        policy_trained = True
+        policy_train_time = time.perf_counter() - start_time
     print(f"Loaded {len(snapshots)} policy checkpoints.")
+
+    policy_log = {"policies/count": len(snapshots), "policies/trained": int(policy_trained)}
+    if policy_train_time is not None:
+        policy_log["timing/ppo_training_sec"] = policy_train_time
+    wandb_log(wandb_run, policy_log)
 
     policy_models = load_policy_models(snapshots)
 
@@ -563,9 +639,20 @@ def main() -> None:
         )
         print(f"Dataset saved to {dataset_path} with {len(dataset.states)} transitions")
 
+    wandb_log(
+        wandb_run,
+        {
+            "dataset/transitions": int(len(dataset.states)),
+            "dataset/initial_states": int(len(dataset.initial_states)),
+            "dataset/source_loaded": int(args.results_only),
+        },
+    )
+
     torch_policies = make_policy_adapters(policy_models)
     q_dir = args.output_dir / "q_models"
     q_manifest = q_dir / "manifest.json"
+    q_trained = False
+    q_train_time: Optional[float] = None
     if q_manifest.exists() and not args.force_q_training:
         print("[Step 3] Using existing Q networks...")
         q_models, q_model_paths = load_q_models(q_dir, device)
@@ -575,6 +662,7 @@ def main() -> None:
                 f"No saved Q networks at {q_manifest}. Run training once without --results-only."
             )
         print("[Step 3] Training Q networks for each policy...")
+        start_time = time.perf_counter()
         q_models = train_q_networks(
             dataset,
             torch_policies,
@@ -584,11 +672,21 @@ def main() -> None:
             batch_size=args.q_batch,
             lr=args.q_lr,
             samples=args.q_samples,
+            wandb_run=wandb_run,
         )
         q_model_paths = save_q_models(q_models, q_dir)
+        q_trained = True
+        q_train_time = time.perf_counter() - start_time
+
+    q_log = {"q_models/count": len(q_models), "q_models/trained": int(q_trained)}
+    if q_train_time is not None:
+        q_log["timing/q_training_sec"] = q_train_time
+    wandb_log(wandb_run, q_log)
 
     dynamics_dir = args.output_dir / "dynamics"
     dynamics_manifest = dynamics_dir / "manifest.json"
+    dynamics_trained = False
+    dynamics_train_time: Optional[float] = None
     if dynamics_manifest.exists() and not args.force_dynamics_training:
         print("[Step 4] Using existing dynamics models...")
         sup_model, q_aware_models, ranking_model, dynamics_paths = load_dynamics_models(dynamics_dir, device)
@@ -598,6 +696,7 @@ def main() -> None:
                 f"No saved dynamics models at {dynamics_manifest}. Run training once without --results-only."
             )
         print("[Step 4] Training dynamics models...")
+        start_time = time.perf_counter()
         sup_model, q_aware_models, ranking_model = train_dynamics_models(
             dataset,
             torch_policies,
@@ -609,8 +708,16 @@ def main() -> None:
             gamma=args.gamma,
             lambda_td=args.lambda_td,
             lambda_rank=args.lambda_rank,
+            wandb_run=wandb_run,
         )
         dynamics_paths = save_dynamics_models(sup_model, q_aware_models, ranking_model, dynamics_dir)
+        dynamics_trained = True
+        dynamics_train_time = time.perf_counter() - start_time
+
+    dyn_log = {"dynamics/trained": int(dynamics_trained)}
+    if dynamics_train_time is not None:
+        dyn_log["timing/dynamics_training_sec"] = dynamics_train_time
+    wandb_log(wandb_run, dyn_log)
 
     print("[Step 5-7] Evaluating policies across true env, Q, and dynamics...")
     results = []
@@ -627,6 +734,19 @@ def main() -> None:
         dyn_q = evaluate_in_dynamics(q_aware_models[name], policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
         dyn_rank = evaluate_in_dynamics(ranking_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
 
+        wandb_log(
+            wandb_run,
+            {
+                "eval/policy_name": name,
+                "eval/true_return": true_return,
+                "eval/q_estimate": q_est,
+                "eval/dynamics_supervised": dyn_sup,
+                "eval/dynamics_qaware": dyn_q,
+                "eval/dynamics_ranking": dyn_rank,
+            },
+            step=int(snap["timesteps"]),
+        )
+
         results.append(
             {
                 "name": name,
@@ -642,7 +762,7 @@ def main() -> None:
             }
         )
 
-    config = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
+    config = args_to_config(args)
     summary = {
         "config": config,
         "num_transitions": int(len(dataset.states)),
@@ -655,6 +775,18 @@ def main() -> None:
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Saved summary to {summary_path}")
+
+    if wandb_run is not None:
+        wandb_run.summary.update(
+            {
+                "num_transitions": int(len(dataset.states)),
+                "q_model_paths": q_model_paths,
+                "dynamics_paths": dynamics_paths,
+                "results": results,
+            }
+        )
+        wandb_run.finish()
+        wandb_run = None
 
 
 if __name__ == "__main__":
