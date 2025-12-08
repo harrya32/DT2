@@ -1,0 +1,26 @@
+2025-12-08 15:09:02,379 INFO    MainThread:9685 [wandb_setup.py:_flush():80] Current SDK version is 0.23.1
+2025-12-08 15:09:02,379 INFO    MainThread:9685 [wandb_setup.py:_flush():80] Configure stats pid to 9685
+2025-12-08 15:09:02,379 INFO    MainThread:9685 [wandb_setup.py:_flush():80] Loading settings from /home/azureuser/.config/wandb/settings
+2025-12-08 15:09:02,380 INFO    MainThread:9685 [wandb_setup.py:_flush():80] Loading settings from /mnt/pdata/hmka3/DT2/exps/wandb/settings
+2025-12-08 15:09:02,380 INFO    MainThread:9685 [wandb_setup.py:_flush():80] Loading settings from environment variables
+2025-12-08 15:09:02,380 INFO    MainThread:9685 [wandb_init.py:setup_run_log_directory():714] Logging user logs to /mnt/pdata/hmka3/DT2/exps/wandb/run-20251208_150902-e8wfj65q/logs/debug.log
+2025-12-08 15:09:02,381 INFO    MainThread:9685 [wandb_init.py:setup_run_log_directory():715] Logging internal logs to /mnt/pdata/hmka3/DT2/exps/wandb/run-20251208_150902-e8wfj65q/logs/debug-internal.log
+2025-12-08 15:09:02,381 INFO    MainThread:9685 [wandb_init.py:init():841] calling init triggers
+2025-12-08 15:09:02,382 INFO    MainThread:9685 [wandb_init.py:init():846] wandb.init called with sweep_config: {}
+config: {'env_id': 'LunarLanderContinuous-v3', 'total_steps': 5000000, 'ppo_fractions': [0.2, 0.4, 0.6, 0.8, 1.0], 'n_envs': 8, 'n_steps': 2048, 'batch_size': 1024, 'learning_rate': 0.0003, 'gamma': 0.97, 'gae_lambda': 0.95, 'clip_range': 0.2, 'ent_coef': 0.01, 'vf_coef': 0.5, 'seed': 42, 'rollout_steps': 10000, 'q_epochs': 200, 'q_batch': 1024, 'q_lr': 0.0003, 'q_samples': 16, 'dyn_epochs': 500, 'dyn_batch': 1024, 'dyn_lr': 0.001, 'lambda_td': 0.1, 'lambda_rank': 0.1, 'eval_episodes': 20, 'eval_rollouts': 500, 'eval_horizon': 500, 'output_dir': 'results/lunarlander_pipeline', 'device': 'auto', 'force_policy_training': False, 'force_q_training': False, 'force_dynamics_training': True, 'results_only': False, 'wandb_project': 'DT2-lunarlander', 'wandb_entity': None, 'wandb_run_name': None, 'wandb_mode': 'online', '_wandb': {}}
+2025-12-08 15:09:02,382 INFO    MainThread:9685 [wandb_init.py:init():889] starting backend
+2025-12-08 15:09:02,601 INFO    MainThread:9685 [wandb_init.py:init():892] sending inform_init request
+2025-12-08 15:09:02,604 INFO    MainThread:9685 [wandb_init.py:init():900] backend started and connected
+2025-12-08 15:09:02,652 INFO    MainThread:9685 [wandb_init.py:init():970] updated telemetry
+2025-12-08 15:09:02,665 INFO    MainThread:9685 [wandb_init.py:init():994] communicating run to backend with 90.0 second timeout
+2025-12-08 15:09:03,138 INFO    MainThread:9685 [wandb_init.py:init():1041] starting run threads in backend
+2025-12-08 15:09:03,240 INFO    MainThread:9685 [wandb_run.py:_console_start():2521] atexit reg
+2025-12-08 15:09:03,241 INFO    MainThread:9685 [wandb_run.py:_redirect():2369] redirect: wrap_raw
+2025-12-08 15:09:03,241 INFO    MainThread:9685 [wandb_run.py:_redirect():2438] Wrapping output streams.
+2025-12-08 15:09:03,241 INFO    MainThread:9685 [wandb_run.py:_redirect():2461] Redirects installed.
+2025-12-08 15:09:03,243 INFO    MainThread:9685 [wandb_init.py:init():1081] run started, returning control to user process
+2025-12-08 15:44:50,715 INFO    MainThread:9685 [wandb_run.py:_finish():2287] finishing run harryamad-university-of-cambridge/DT2-lunarlander/e8wfj65q
+2025-12-08 15:44:50,716 INFO    MainThread:9685 [wandb_run.py:_atexit_cleanup():2486] got exitcode: 0
+2025-12-08 15:44:50,716 INFO    MainThread:9685 [wandb_run.py:_restore():2468] restore
+2025-12-08 15:44:50,716 INFO    MainThread:9685 [wandb_run.py:_restore():2474] restore done
+2025-12-08 15:44:51,326 INFO    MainThread:9685 [wandb_run.py:_footer_sync_info():3862] logging synced files

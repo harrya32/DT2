@@ -298,6 +298,8 @@ class DynamicsNet(nn.Module):
                         q_next = q_fn(s_next_model, a_rep)
 
                     q_curr = q_fn(sb, a_pi)
+                    if not torch.isfinite(q_curr).all() or not torch.isfinite(q_next).all():
+                        continue
                     td_loss = (q_curr - (reward + gamma * q_next)).pow(2).mean()
                     loss = (1.0 - lambda_td) * dyn_loss + lambda_td * td_loss
 
@@ -422,6 +424,8 @@ class DynamicsNet(nn.Module):
 
                     model_tensor = torch.stack(model_vals)
                     target_tensor = torch.tensor(target_vals, dtype=model_tensor.dtype, device=device)
+                    if not torch.isfinite(target_tensor).all() or not torch.isfinite(model_tensor).all():
+                        continue
 
                     terms = []
                     for i in range(len(policy_q_pairs)):

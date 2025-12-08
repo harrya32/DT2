@@ -27,7 +27,7 @@ from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.vec_env import VecMonitor
 
 from src.datasets import OfflineDataset
-from src.env_utils import lunarlander_reward_torch
+from src.env_utils import lunarlander_reward_fn, lunarlander_reward_torch
 from src.fqe import estimate_V_from_Q_on_s0
 from src.networks import DynamicsNet, QNet
 from src.policies import TorchPolicy
@@ -476,8 +476,40 @@ def evaluate_sb3_policy(model: PPO, env_id: str, episodes: int, seed: int) -> fl
         total = 0.0
         while not (done or truncated):
             action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, truncated, _ = env.step(action)
-            total += float(reward)
+            obs_next, reward_env, done, truncated, _ = env.step(action)
+            # Accumulate custom shaping-based reward instead of env reward
+            total += lunarlander_reward_fn(obs, action)
+            obs = obs_next
+        returns.append(total)
+    env.close()
+    return float(np.mean(returns))
+
+
+def evaluate_sb3_policy_fixed_horizon(
+    model: PPO,
+    env_id: str,
+    horizon: int,
+    gamma: float,
+    rollouts: int,
+    seed: int,
+) -> float:
+    """Roll out PPO in the true env for a fixed horizon, ignoring terminations."""
+
+    env = gym.make(env_id)
+    rng = np.random.default_rng(seed)
+    returns: List[float] = []
+    for ep in range(rollouts):
+        obs, _ = env.reset(seed=seed + ep)
+        total = 0.0
+        discount = 1.0
+        for _ in range(horizon):
+            action, _ = model.predict(obs, deterministic=True)
+            total += discount * lunarlander_reward_fn(obs, action)
+            discount = discount * gamma
+            obs, _, terminated, truncated, _ = env.step(action)
+            if terminated or truncated:
+                # Continue rollout by jumping to a fresh start state.
+                obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
         returns.append(total)
     env.close()
     return float(np.mean(returns))
@@ -733,6 +765,14 @@ def main() -> None:
         dyn_sup = evaluate_in_dynamics(sup_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
         dyn_q = evaluate_in_dynamics(q_aware_models[name], policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
         dyn_rank = evaluate_in_dynamics(ranking_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
+        """fixed_env = evaluate_sb3_policy_fixed_horizon(
+            ppo_model,
+            args.env_id,
+            args.eval_horizon,
+            args.gamma,
+            args.eval_rollouts,
+            args.seed,
+        )"""
 
         wandb_log(
             wandb_run,
@@ -743,6 +783,7 @@ def main() -> None:
                 "eval/dynamics_supervised": dyn_sup,
                 "eval/dynamics_qaware": dyn_q,
                 "eval/dynamics_ranking": dyn_rank,
+                #"eval/env_fixed": fixed_env,
             },
             step=int(snap["timesteps"]),
         )
@@ -759,6 +800,7 @@ def main() -> None:
                     "q_aware": dyn_q,
                     "ranking": dyn_rank,
                 },
+                #"env_fixed": fixed_env,
             }
         )
 

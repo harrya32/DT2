@@ -1,0 +1,1 @@
+{"_step":3,"policies/count":6,"_timestamp":1.7652099158427808e+09,"dynamics/trained":0,"dataset/initial_states":151,"dataset/transitions":60000,"policies/trained":0,"dataset/source_loaded":0,"q_models/trained":0,"_runtime":306,"_wandb":{"runtime":306},"q_models/count":6}
