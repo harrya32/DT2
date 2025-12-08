@@ -1,9 +1,24 @@
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Protocol, runtime_checkable
 
 import numpy as np
 import torch
+
+
+@runtime_checkable
+class TorchPolicy(Protocol):
+    name: str
+
+    def sample_torch_actions(
+        self,
+        states: torch.Tensor,
+        repeats: int = 1,
+        deterministic: bool = False,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+    ) -> torch.Tensor:
+        ...
 
 
 class GaussianLinearPolicy:
@@ -34,6 +49,34 @@ class GaussianLinearPolicy:
         var = std_t * std_t
         log_term = (actions - mu) ** 2 / var + torch.log(2.0 * torch.pi * var)
         return -0.5 * torch.sum(log_term, dim=-1)
+
+    def deterministic_torch_actions(
+        self,
+        states: torch.Tensor,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+    ) -> torch.Tensor:
+        W_t, _ = self._get_torch_params(states.device)
+        actions = states @ W_t.t()
+        return actions.clamp_(min=act_low, max=act_high)
+
+    def sample_torch_actions(
+        self,
+        states: torch.Tensor,
+        repeats: int = 1,
+        deterministic: bool = False,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+    ) -> torch.Tensor:
+        base = states
+        if repeats > 1:
+            base = states.repeat_interleave(repeats, dim=0)
+        if deterministic:
+            return self.deterministic_torch_actions(base, act_low, act_high)
+        W_t, std_t = self._get_torch_params(base.device)
+        mu = base @ W_t.t()
+        noise = torch.randn_like(mu) * std_t
+        return (mu + noise).clamp_(min=act_low, max=act_high)
 
     def _get_torch_params(self, device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
         if device not in self._torch_cache:

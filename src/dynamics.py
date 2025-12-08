@@ -42,24 +42,10 @@ def train_dynamics_supervised(
     states, actions, next_states = _dataset_tensors(dataset, device)
 
     model = DynamicsNet(state_dim=states.shape[1], act_dim=actions.shape[1], hidden=hidden).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
-    loader = DataLoader(
-        TensorDataset(states, actions, next_states),
-        batch_size=batch_size,
-        shuffle=True,
-        drop_last=False,
-    )
-
-    for _ in range(epochs):
-        for sb, ab, snb in loader:
-            loss = model.nll(sb, ab, snb)
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
-            optimizer.step()
-
-    return model
+    losses = model.train(dataset, epochs, batch_size, lr, device)
+    
+    return model, losses
 
 
 @torch.no_grad()

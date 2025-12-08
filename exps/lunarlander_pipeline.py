@@ -1,0 +1,661 @@
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+import math
+import os
+from pathlib import Path
+from typing import Dict, List, Sequence, Tuple
+
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+
+import gymnasium as gym
+import numpy as np
+import torch
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.vec_env import VecMonitor
+
+from src.datasets import OfflineDataset
+from src.env_utils import lunarlander_reward_torch
+from src.fqe import estimate_V_from_Q_on_s0
+from src.networks import DynamicsNet, QNet
+from src.policies import TorchPolicy
+
+
+def default_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():  # type: ignore[attr-defined]
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+class FractionCheckpointCallback(BaseCallback):
+    def __init__(self, milestones: Sequence[int], save_dir: Path, prefix: str = "ppo_frac", verbose: int = 0):
+        super().__init__(verbose)
+        self.milestones = list(sorted(set(int(m) for m in milestones if m > 0)))
+        self.save_dir = save_dir
+        self.prefix = prefix
+        self.saved: List[Dict[str, int]] = []
+
+    def _on_step(self) -> bool:
+        while self.milestones and self.num_timesteps >= self.milestones[0]:
+            step = self.milestones.pop(0)
+            path = self.save_dir / f"{self.prefix}_{step}"
+            self.model.save(path.as_posix())
+            self.saved.append({"name": path.name, "path": path.as_posix(), "timesteps": step})
+            if self.verbose:
+                print(f"[Checkpoint] Saved policy at {step} steps -> {path}")
+        return True
+
+
+class SB3PolicyAdapter:
+    def __init__(self, name: str, model: PPO, batch_size: int = 2048, act_low: float = -1.0, act_high: float = 1.0):
+        self.name = name
+        self.model = model
+        self.batch_size = batch_size
+        self.act_low = act_low
+        self.act_high = act_high
+        action_space = model.action_space
+        self.action_dim = int(np.prod(action_space.shape, dtype=int))
+
+    def sample_torch_actions(
+        self,
+        states: torch.Tensor,
+        repeats: int = 1,
+        deterministic: bool = False,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+    ) -> torch.Tensor:
+        with torch.no_grad():
+            base = states
+            if repeats > 1:
+                base = states.repeat_interleave(repeats, dim=0)
+            obs = base.detach().to("cpu").to(torch.float32)
+            obs_np = obs.numpy()
+            np.nan_to_num(obs_np, copy=False)
+            if obs.shape[0] == 0:
+                return torch.zeros((0, self.action_dim), device=states.device)
+            chunks = max(1, math.ceil(obs_np.shape[0] / self.batch_size))
+            actions = []
+            for chunk in np.array_split(obs_np, chunks):
+                if chunk.size == 0:
+                    continue
+                act, _ = self.model.predict(chunk, deterministic=deterministic)
+                actions.append(np.asarray(act, dtype=np.float32))
+            action_np = np.concatenate(actions, axis=0)
+            action_tensor = torch.tensor(action_np, device=states.device, dtype=torch.float32)
+            low = max(act_low, self.act_low)
+            high = min(act_high, self.act_high)
+            return action_tensor.clamp_(min=low, max=high)
+
+
+def load_policy_models(policy_snapshots: Sequence[Dict[str, object]]) -> Dict[str, PPO]:
+    models: Dict[str, PPO] = {}
+    for snap in policy_snapshots:
+        models[snap["name"]] = PPO.load(snap["path"])
+    return models
+
+
+def make_policy_adapters(policy_models: Dict[str, PPO]) -> Dict[str, TorchPolicy]:
+    return {name: SB3PolicyAdapter(name, model) for name, model in policy_models.items()}
+
+
+def save_snapshots(manifest_path: Path, snapshots: List[Dict[str, object]]) -> None:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(snapshots, f, indent=2)
+
+
+def load_snapshots(manifest_path: Path) -> List[Dict[str, object]]:
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def train_ppo_with_checkpoints(
+    env_id: str,
+    total_steps: int,
+    save_dir: Path,
+    fractions: Sequence[float],
+    seed: int,
+    n_envs: int,
+    n_steps: int,
+    batch_size: int,
+    learning_rate: float,
+    gamma: float,
+    gae_lambda: float,
+    clip_range: float,
+    ent_coef: float,
+    vf_coef: float,
+    device: str,
+) -> List[Dict[str, object]]:
+    set_random_seed(seed)
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    vec_env = make_vec_env(env_id, n_envs=n_envs, seed=seed)
+    vec_env = VecMonitor(vec_env)
+
+    probe_env = gym.make(env_id)
+    obs_space = probe_env.observation_space
+    policy = "MlpPolicy"
+    if hasattr(obs_space, "shape") and len(obs_space.shape or []) == 3:
+        policy = "CnnPolicy"
+    probe_env.close()
+
+    model = PPO(
+        policy=policy,
+        env=vec_env,
+        n_steps=n_steps,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        gamma=gamma,
+        gae_lambda=gae_lambda,
+        clip_range=clip_range,
+        ent_coef=ent_coef,
+        vf_coef=vf_coef,
+        device=device,
+        verbose=1,
+    )
+
+    snapshots: List[Dict[str, object]] = []
+    init_path = save_dir / "ppo_frac_0"
+    model.save(init_path.as_posix())
+    snapshots.append({"name": init_path.name, "path": init_path.as_posix(), "timesteps": 0})
+
+    milestone_steps = [int(total_steps * f) for f in fractions if f > 0]
+    callback = FractionCheckpointCallback(milestone_steps, save_dir, prefix="ppo_frac", verbose=1)
+    model.learn(total_timesteps=total_steps, callback=callback, progress_bar=True)
+
+    vec_env.close()
+
+    snapshots.extend(callback.saved)
+    return snapshots
+
+
+def rollout_policy(model: PPO, env_id: str, total_steps: int, seed: int) -> Tuple[List[np.ndarray], List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]]]:
+    env = gym.make(env_id)
+    rng = np.random.default_rng(seed)
+    obs, _ = env.reset(seed=seed)
+    initial_states: List[np.ndarray] = [obs.copy()]
+    transitions: List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]] = []
+    steps = 0
+    while steps < total_steps:
+        action, _ = model.predict(obs, deterministic=False)
+        action = np.asarray(action, dtype=np.float32)
+        next_obs, reward, terminated, truncated, _ = env.step(action)
+        done = float(terminated or truncated)
+        transitions.append((obs.copy(), action.copy(), float(reward), next_obs.copy(), done))
+        obs = next_obs
+        steps += 1
+        if done:
+            obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
+            initial_states.append(obs.copy())
+    env.close()
+    return initial_states, transitions
+
+
+def build_offline_dataset(
+    policy_snapshots: Sequence[Dict[str, object]],
+    policy_models: Dict[str, PPO],
+    env_id: str,
+    steps_per_policy: int,
+    seed: int,
+) -> OfflineDataset:
+    all_states: List[np.ndarray] = []
+    all_actions: List[np.ndarray] = []
+    all_rewards: List[float] = []
+    all_next_states: List[np.ndarray] = []
+    all_dones: List[float] = []
+    initial_states: List[np.ndarray] = []
+
+    for idx, snap in enumerate(policy_snapshots):
+        model = policy_models[snap["name"]]
+        init_states, transitions = rollout_policy(model, env_id, steps_per_policy, seed + idx)
+        initial_states.extend(init_states)
+        for s, a, r, sn, d in transitions:
+            all_states.append(s)
+            all_actions.append(a)
+            all_rewards.append(r)
+            all_next_states.append(sn)
+            all_dones.append(d)
+
+    return OfflineDataset(
+        states=np.asarray(all_states, dtype=np.float32),
+        actions=np.asarray(all_actions, dtype=np.float32),
+        rewards=np.asarray(all_rewards, dtype=np.float32),
+        next_states=np.asarray(all_next_states, dtype=np.float32),
+        dones=np.asarray(all_dones, dtype=np.float32),
+        initial_states=np.asarray(initial_states, dtype=np.float32),
+    )
+
+
+def load_offline_dataset(npz_path: Path) -> OfflineDataset:
+    if not npz_path.exists():
+        raise FileNotFoundError(f"Offline dataset not found at {npz_path}")
+    with np.load(npz_path, allow_pickle=False) as data:
+        return OfflineDataset(
+            states=data["s"].astype(np.float32, copy=False),
+            actions=data["a"].astype(np.float32, copy=False),
+            rewards=data["r"].astype(np.float32, copy=False),
+            next_states=data["s_next"].astype(np.float32, copy=False),
+            dones=data["done"].astype(np.float32, copy=False),
+            initial_states=data["s0"].astype(np.float32, copy=False),
+        )
+
+
+def train_q_networks(
+    dataset: OfflineDataset,
+    policies: Dict[str, TorchPolicy],
+    device: torch.device,
+    gamma: float,
+    epochs: int,
+    batch_size: int,
+    lr: float,
+    samples: int,
+) -> Dict[str, QNet]:
+    q_models: Dict[str, QNet] = {}
+    state_dim = dataset.states.shape[1]
+    act_dim = dataset.actions.shape[1]
+    for name, policy in policies.items():
+        q_net = QNet(state_dim=state_dim, act_dim=act_dim).to(device)
+        rescaled_q = q_net.train(
+            dataset,
+            target_policy=policy,
+            gamma=gamma,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            samples=samples,
+            device=device,
+            use_amp=device.type == "cuda",
+        )
+        q_models[name] = rescaled_q
+    return q_models
+
+
+def save_q_models(q_models: Dict[str, torch.nn.Module], directory: Path) -> Dict[str, str]:
+    directory.mkdir(parents=True, exist_ok=True)
+    saved = {}
+    for name, model in q_models.items():
+        path = directory / f"{name}.pt"
+        torch.save(copy.deepcopy(model).cpu(), path)
+        saved[name] = path.as_posix()
+    manifest = directory / "manifest.json"
+    with open(manifest, "w", encoding="utf-8") as f:
+        json.dump(saved, f, indent=2)
+    return saved
+
+
+def load_q_models(directory: Path, device: torch.device) -> Tuple[Dict[str, torch.nn.Module], Dict[str, str]]:
+    manifest = directory / "manifest.json"
+    with open(manifest, "r", encoding="utf-8") as f:
+        saved = json.load(f)
+    models: Dict[str, torch.nn.Module] = {}
+    for name, path_str in saved.items():
+        model = torch.load(path_str, map_location=device, weights_only=False)
+        model.to(device)
+        #model.eval()
+        models[name] = model
+    return models, saved
+
+
+def train_dynamics_models(
+    dataset: OfflineDataset,
+    policies: Dict[str, TorchPolicy],
+    q_models: Dict[str, QNet],
+    device: torch.device,
+    dyn_epochs: int,
+    dyn_batch: int,
+    dyn_lr: float,
+    gamma: float,
+    lambda_td: float,
+    lambda_rank: float,
+) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet]:
+    state_dim = dataset.states.shape[1]
+    act_dim = dataset.actions.shape[1]
+
+    sup_model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
+    sup_model.train(dataset, epochs=dyn_epochs, batch_size=dyn_batch, lr=dyn_lr, device=device)
+
+    q_aware_models: Dict[str, DynamicsNet] = {}
+    for name, policy in policies.items():
+        model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
+        model.train_q_aware_model(
+            dataset,
+            target_policy=policy,
+            q_fn=q_models[name],
+            gamma=gamma,
+            lambda_td=lambda_td,
+            epochs=dyn_epochs,
+            batch_size=dyn_batch,
+            lr=dyn_lr,
+            reward_fn=lunarlander_reward_torch,
+            device=device,
+        )
+        q_aware_models[name] = model
+
+    policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
+    ranking_model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
+    ranking_model.train_ranking_aware_model(
+        dataset,
+        policy_q_pairs=policy_q_pairs,
+        gamma=gamma,
+        lambda_rank=lambda_rank,
+        epochs=dyn_epochs,
+        batch_size=dyn_batch,
+        lr=dyn_lr,
+        reward_fn=lunarlander_reward_torch,
+        device=device,
+    )
+
+    return sup_model, q_aware_models, ranking_model
+
+
+def save_dynamics_models(
+    sup_model: DynamicsNet,
+    q_aware_models: Dict[str, DynamicsNet],
+    ranking_model: DynamicsNet,
+    directory: Path,
+) -> Dict[str, object]:
+    directory.mkdir(parents=True, exist_ok=True)
+    paths: Dict[str, object] = {
+        "supervised": (directory / "dynamics_supervised.pt").as_posix(),
+        "ranking": (directory / "dynamics_ranking.pt").as_posix(),
+        "q_aware": {},
+    }
+    torch.save(copy.deepcopy(sup_model).cpu(), paths["supervised"])
+    torch.save(copy.deepcopy(ranking_model).cpu(), paths["ranking"])
+    for name, model in q_aware_models.items():
+        path = directory / f"dynamics_q_{name}.pt"
+        torch.save(copy.deepcopy(model).cpu(), path)
+        paths["q_aware"][name] = path.as_posix()
+
+    manifest = directory / "manifest.json"
+    with open(manifest, "w", encoding="utf-8") as f:
+        json.dump(paths, f, indent=2)
+    return paths
+
+
+def load_dynamics_models(
+    directory: Path,
+    device: torch.device,
+) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet, Dict[str, object]]:
+    manifest = directory / "manifest.json"
+    with open(manifest, "r", encoding="utf-8") as f:
+        paths = json.load(f)
+
+    sup_model: DynamicsNet = torch.load(paths["supervised"], map_location=device, weights_only=False)
+    sup_model.to(device)
+    #sup_model.eval()
+
+    ranking_model: DynamicsNet = torch.load(paths["ranking"], map_location=device, weights_only=False)
+    ranking_model.to(device)
+    #ranking_model.eval()
+
+    q_aware_models: Dict[str, DynamicsNet] = {}
+    for name, path in paths.get("q_aware", {}).items():
+        model: DynamicsNet = torch.load(path, map_location=device, weights_only=False)
+        model.to(device)
+        #model.eval()
+        q_aware_models[name] = model
+
+    return sup_model, q_aware_models, ranking_model, paths
+
+
+def evaluate_sb3_policy(model: PPO, env_id: str, episodes: int, seed: int) -> float:
+    env = gym.make(env_id)
+    returns = []
+    for ep in range(episodes):
+        obs, _ = env.reset(seed=seed + ep)
+        done = False
+        truncated = False
+        total = 0.0
+        while not (done or truncated):
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, done, truncated, _ = env.step(action)
+            total += float(reward)
+        returns.append(total)
+    env.close()
+    return float(np.mean(returns))
+
+
+def evaluate_q_estimate(
+    q_model: QNet,
+    policy: TorchPolicy,
+    initial_states: np.ndarray,
+    samples: int,
+) -> float:
+    return float(
+        estimate_V_from_Q_on_s0(
+            q_model,
+            initial_states,
+            policy,
+            K=samples,
+        )
+    )
+
+
+def evaluate_in_dynamics(
+    dynamics: DynamicsNet,
+    policy: TorchPolicy,
+    initial_states: np.ndarray,
+    horizon: int,
+    gamma: float,
+    device: torch.device,
+    rollouts: int,
+) -> float:
+    if initial_states.shape[0] == 0:
+        raise ValueError("No initial states available for dynamics evaluation.")
+    idx = np.random.choice(initial_states.shape[0], size=rollouts, replace=initial_states.shape[0] < rollouts)
+    states = torch.tensor(initial_states[idx], dtype=torch.float32, device=device)
+    total = torch.zeros(states.size(0), device=device)
+    discount = torch.ones_like(total)
+    for _ in range(horizon):
+        actions = policy.sample_torch_actions(states, deterministic=True)
+        rewards = lunarlander_reward_torch(states, actions)
+        total += discount * rewards
+        discount = discount * gamma
+        states = dynamics.sample_next(states, actions)
+    return float(total.mean().item())
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="End-to-end LunarLander offline RL pipeline")
+    parser.add_argument("--env-id", default="LunarLanderContinuous-v3")
+    parser.add_argument("--total-steps", type=int, default=5_000_000)
+    parser.add_argument("--ppo-fractions", type=float, nargs="*", default=[0.2, 0.4, 0.6, 0.8, 1.0])
+    parser.add_argument("--n-envs", type=int, default=8)
+    parser.add_argument("--n-steps", type=int, default=2048)
+    parser.add_argument("--batch-size", type=int, default=1024)
+    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--gamma", type=float, default=0.97)
+    parser.add_argument("--gae-lambda", type=float, default=0.95)
+    parser.add_argument("--clip-range", type=float, default=0.2)
+    parser.add_argument("--ent-coef", type=float, default=0.01)
+    parser.add_argument("--vf-coef", type=float, default=0.5)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--rollout-steps", type=int, default=10_000, help="steps per policy for dataset collection")
+    parser.add_argument("--q-epochs", type=int, default=200)
+    parser.add_argument("--q-batch", type=int, default=1024)
+    parser.add_argument("--q-lr", type=float, default=3e-4)
+    parser.add_argument("--q-samples", type=int, default=16)
+    parser.add_argument("--dyn-epochs", type=int, default=200)
+    parser.add_argument("--dyn-batch", type=int, default=1024)
+    parser.add_argument("--dyn-lr", type=float, default=1e-3)
+    parser.add_argument("--lambda-td", type=float, default=0.1)
+    parser.add_argument("--lambda-rank", type=float, default=0.1)
+    parser.add_argument("--eval-episodes", type=int, default=20)
+    parser.add_argument("--eval-rollouts", type=int, default=256)
+    parser.add_argument("--eval-horizon", type=int, default=500)
+    parser.add_argument("--output-dir", type=Path, default=Path("results/lunarlander_pipeline"))
+    parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--force-policy-training", action="store_true", help="ignore saved PPO checkpoints and retrain")
+    parser.add_argument("--force-q-training", action="store_true", help="ignore saved Q networks and retrain")
+    parser.add_argument("--force-dynamics-training", action="store_true", help="ignore saved dynamics models and retrain")
+    parser.add_argument("--results-only", action="store_true", help="skip training; load saved dataset and models to recompute evaluations")
+    args = parser.parse_args()
+
+    if args.results_only and (
+        args.force_policy_training or args.force_q_training or args.force_dynamics_training
+    ):
+        parser.error("--results-only cannot be combined with force-training flags.")
+
+    device = torch.device(args.device) if args.device != "auto" else default_device()
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    policy_dir = args.output_dir / "policies"
+    snapshots_manifest = policy_dir / "snapshots.json"
+    if snapshots_manifest.exists() and not args.force_policy_training:
+        print("[Step 1] Using existing PPO checkpoints...")
+        snapshots = load_snapshots(snapshots_manifest)
+    else:
+        if args.results_only:
+            raise FileNotFoundError(
+                f"No saved PPO checkpoints at {snapshots_manifest}. Run without --results-only to generate them."
+            )
+        print("[Step 1] Training PPO policies with checkpoints...")
+        snapshots = train_ppo_with_checkpoints(
+            env_id=args.env_id,
+            total_steps=args.total_steps,
+            save_dir=policy_dir,
+            fractions=args.ppo_fractions,
+            seed=args.seed,
+            n_envs=args.n_envs,
+            n_steps=args.n_steps,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            gamma=args.gamma,
+            gae_lambda=args.gae_lambda,
+            clip_range=args.clip_range,
+            ent_coef=args.ent_coef,
+            vf_coef=args.vf_coef,
+            device=device.type if device.type in {"cuda", "cpu"} else "cpu",
+        )
+        save_snapshots(snapshots_manifest, snapshots)
+    print(f"Loaded {len(snapshots)} policy checkpoints.")
+
+    policy_models = load_policy_models(snapshots)
+
+    dataset_path = args.output_dir / "offline_dataset.npz"
+    if args.results_only:
+        print("[Step 2] Loading offline dataset from disk...")
+        dataset = load_offline_dataset(dataset_path)
+    else:
+        print("[Step 2] Collecting offline dataset...")
+        dataset = build_offline_dataset(snapshots, policy_models, args.env_id, args.rollout_steps, args.seed)
+        np.savez_compressed(
+            dataset_path,
+            s=dataset.states,
+            a=dataset.actions,
+            r=dataset.rewards,
+            s_next=dataset.next_states,
+            done=dataset.dones,
+            s0=dataset.initial_states,
+        )
+        print(f"Dataset saved to {dataset_path} with {len(dataset.states)} transitions")
+
+    torch_policies = make_policy_adapters(policy_models)
+    q_dir = args.output_dir / "q_models"
+    q_manifest = q_dir / "manifest.json"
+    if q_manifest.exists() and not args.force_q_training:
+        print("[Step 3] Using existing Q networks...")
+        q_models, q_model_paths = load_q_models(q_dir, device)
+    else:
+        if args.results_only:
+            raise FileNotFoundError(
+                f"No saved Q networks at {q_manifest}. Run training once without --results-only."
+            )
+        print("[Step 3] Training Q networks for each policy...")
+        q_models = train_q_networks(
+            dataset,
+            torch_policies,
+            device=device,
+            gamma=args.gamma,
+            epochs=args.q_epochs,
+            batch_size=args.q_batch,
+            lr=args.q_lr,
+            samples=args.q_samples,
+        )
+        q_model_paths = save_q_models(q_models, q_dir)
+
+    dynamics_dir = args.output_dir / "dynamics"
+    dynamics_manifest = dynamics_dir / "manifest.json"
+    if dynamics_manifest.exists() and not args.force_dynamics_training:
+        print("[Step 4] Using existing dynamics models...")
+        sup_model, q_aware_models, ranking_model, dynamics_paths = load_dynamics_models(dynamics_dir, device)
+    else:
+        if args.results_only:
+            raise FileNotFoundError(
+                f"No saved dynamics models at {dynamics_manifest}. Run training once without --results-only."
+            )
+        print("[Step 4] Training dynamics models...")
+        sup_model, q_aware_models, ranking_model = train_dynamics_models(
+            dataset,
+            torch_policies,
+            q_models,
+            device=device,
+            dyn_epochs=args.dyn_epochs,
+            dyn_batch=args.dyn_batch,
+            dyn_lr=args.dyn_lr,
+            gamma=args.gamma,
+            lambda_td=args.lambda_td,
+            lambda_rank=args.lambda_rank,
+        )
+        dynamics_paths = save_dynamics_models(sup_model, q_aware_models, ranking_model, dynamics_dir)
+
+    print("[Step 5-7] Evaluating policies across true env, Q, and dynamics...")
+    results = []
+    initial_states = dataset.initial_states
+    for snap in snapshots:
+        name = snap["name"]
+        policy = torch_policies[name]
+        ppo_model = policy_models[name]
+        q_net = q_models[name]
+
+        true_return = evaluate_sb3_policy(ppo_model, args.env_id, args.eval_episodes, args.seed)
+        q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
+        dyn_sup = evaluate_in_dynamics(sup_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
+        dyn_q = evaluate_in_dynamics(q_aware_models[name], policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
+        dyn_rank = evaluate_in_dynamics(ranking_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
+
+        results.append(
+            {
+                "name": name,
+                "checkpoint": snap["path"],
+                "timesteps": snap["timesteps"],
+                "true_return": true_return,
+                "q_estimate": q_est,
+                "dynamics": {
+                    "supervised": dyn_sup,
+                    "q_aware": dyn_q,
+                    "ranking": dyn_rank,
+                },
+            }
+        )
+
+    config = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
+    summary = {
+        "config": config,
+        "num_transitions": int(len(dataset.states)),
+        "q_model_paths": q_model_paths,
+        "dynamics_paths": dynamics_paths,
+        "results": results,
+    }
+
+    summary_path = args.output_dir / "summary.json"
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+    print(f"Saved summary to {summary_path}")
+
+
+if __name__ == "__main__":
+    main()
