@@ -1,0 +1,27 @@
+[
+  {
+    "name": "ppo_frac_0",
+    "path": "results/pendulum_pipeline/policies/ppo_frac_0",
+    "timesteps": 0
+  },
+  {
+    "name": "ppo_frac_125000",
+    "path": "results/pendulum_pipeline/policies/ppo_frac_125000",
+    "timesteps": 125000
+  },
+  {
+    "name": "ppo_frac_250000",
+    "path": "results/pendulum_pipeline/policies/ppo_frac_250000",
+    "timesteps": 250000
+  },
+  {
+    "name": "ppo_frac_375000",
+    "path": "results/pendulum_pipeline/policies/ppo_frac_375000",
+    "timesteps": 375000
+  },
+  {
+    "name": "ppo_frac_500000",
+    "path": "results/pendulum_pipeline/policies/ppo_frac_500000",
+    "timesteps": 500000
+  }
+]

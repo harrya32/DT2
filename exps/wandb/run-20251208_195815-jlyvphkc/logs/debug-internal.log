@@ -1,0 +1,13 @@
+{"time":"2025-12-08T19:58:15.253671634Z","level":"INFO","msg":"stream: starting","core version":"0.23.1"}
+{"time":"2025-12-08T19:58:15.445943661Z","level":"INFO","msg":"stream: created new stream","id":"jlyvphkc"}
+{"time":"2025-12-08T19:58:15.446052255Z","level":"INFO","msg":"handler: started","stream_id":"jlyvphkc"}
+{"time":"2025-12-08T19:58:15.44775391Z","level":"INFO","msg":"stream: started","id":"jlyvphkc"}
+{"time":"2025-12-08T19:58:15.447804565Z","level":"INFO","msg":"writer: started","stream_id":"jlyvphkc"}
+{"time":"2025-12-08T19:58:15.447843633Z","level":"INFO","msg":"sender: started","stream_id":"jlyvphkc"}
+{"time":"2025-12-08T20:15:44.492659626Z","level":"WARN","msg":"handler: ignoring partial history record","step":0,"current":3604}
+{"time":"2025-12-08T20:17:37.42107282Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-08T20:17:37.609148397Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-12-08T20:17:37.613025449Z","level":"INFO","msg":"stream: closing","id":"jlyvphkc"}
+{"time":"2025-12-08T20:17:37.613044665Z","level":"INFO","msg":"handler: closed","stream_id":"jlyvphkc"}
+{"time":"2025-12-08T20:17:37.614006797Z","level":"INFO","msg":"sender: closed","stream_id":"jlyvphkc"}
+{"time":"2025-12-08T20:17:37.614018128Z","level":"INFO","msg":"stream: closed","id":"jlyvphkc"}

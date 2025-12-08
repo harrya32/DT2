@@ -1,0 +1,11 @@
+{
+  "supervised": "results/pendulum_pipeline/dynamics/dynamics_supervised.pt",
+  "ranking": "results/pendulum_pipeline/dynamics/dynamics_ranking.pt",
+  "q_aware": {
+    "ppo_frac_0": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_0.pt",
+    "ppo_frac_125000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_125000.pt",
+    "ppo_frac_250000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_250000.pt",
+    "ppo_frac_375000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_375000.pt",
+    "ppo_frac_500000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_500000.pt"
+  }
+}

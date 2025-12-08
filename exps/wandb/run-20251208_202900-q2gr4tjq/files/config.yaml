@@ -1,0 +1,129 @@
+_wandb:
+    value:
+        cli_version: 0.23.1
+        e:
+            36coz2l7q5mztmbf8b83wh2eps3ngh9d:
+                args:
+                    - --force-policy-training
+                    - --force-q-training
+                    - --force-dynamics-training
+                codePath: exps/pendulum_pipeline.py
+                codePathLocal: pendulum_pipeline.py
+                cpu_count: 24
+                cpu_count_logical: 24
+                cudaVersion: "12.6"
+                disk:
+                    /:
+                        total: "126759518208"
+                        used: "94676885504"
+                email: harryamad@gmail.com
+                executable: /home/azureuser/miniconda/envs/dt2/bin/python
+                git:
+                    commit: 477845be95d2e03245ce1a8e10bfede46640e816
+                    remote: https://github.com/harrya32/DT2.git
+                gpu: NVIDIA A100 80GB PCIe
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "85899345920"
+                      name: NVIDIA A100 80GB PCIe
+                      uuid: GPU-9bdb76fd-48c1-1ae4-a4a4-c8e2fc44f00b
+                host: hmka3-1xa100
+                memory:
+                    total: "232209604608"
+                os: Linux-6.8.0-1041-azure-x86_64-with-glibc2.35
+                program: /mnt/pdata/hmka3/DT2/exps/pendulum_pipeline.py
+                python: CPython 3.10.19
+                root: /mnt/pdata/hmka3/DT2/exps
+                startedAt: "2025-12-08T20:29:00.326547Z"
+                writerId: 36coz2l7q5mztmbf8b83wh2eps3ngh9d
+        m: []
+        python_version: 3.10.19
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 16
+            "4": 3.10.19
+            "5": 0.23.1
+            "12": 0.23.1
+            "13": linux-x86_64
+batch_size:
+    value: 1024
+clip_range:
+    value: 0.2
+device:
+    value: auto
+dyn_batch:
+    value: 1024
+dyn_epochs:
+    value: 500
+dyn_lr:
+    value: 0.001
+ent_coef:
+    value: 0
+env_id:
+    value: Pendulum-v1
+eval_episodes:
+    value: 20
+eval_horizon:
+    value: 200
+eval_rollouts:
+    value: 256
+force_dynamics_training:
+    value: true
+force_policy_training:
+    value: true
+force_q_training:
+    value: true
+gae_lambda:
+    value: 0.95
+gamma:
+    value: 0.95
+lambda_rank:
+    value: 0.1
+lambda_td:
+    value: 0.1
+learning_rate:
+    value: 0.0003
+n_envs:
+    value: 8
+n_steps:
+    value: 2048
+output_dir:
+    value: results/pendulum_pipeline
+ppo_fractions:
+    value:
+        - 0.25
+        - 0.5
+        - 0.75
+        - 1
+q_batch:
+    value: 1024
+q_epochs:
+    value: 300
+q_lr:
+    value: 0.0003
+q_samples:
+    value: 32
+results_only:
+    value: false
+rollout_steps:
+    value: 5000
+seed:
+    value: 42
+total_steps:
+    value: 2000000
+vf_coef:
+    value: 0.5
+wandb_entity:
+    value: null
+wandb_mode:
+    value: online
+wandb_project:
+    value: DT2-pendulum
+wandb_run_name:
+    value: null
