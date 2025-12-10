@@ -920,7 +920,7 @@ def main() -> None:
         "results": results,
     }
 
-    summary_path = args.output_dir / "summary.json"
+    summary_path = args.output_dir / f"summary_{args.seed}.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Saved summary to {summary_path}")
