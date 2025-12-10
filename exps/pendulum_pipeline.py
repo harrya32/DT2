@@ -7,7 +7,7 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -35,6 +35,9 @@ PENDULUM_ACT_LOW = -2.0
 PENDULUM_ACT_HIGH = 2.0
 PENDULUM_STATE_LOW = torch.tensor([-1.0, -1.0, -8.0], dtype=torch.float32)
 PENDULUM_STATE_HIGH = torch.tensor([1.0, 1.0, 8.0], dtype=torch.float32)
+
+_DEFINED_WANDB_METRICS: Set[str] = set()
+_DEFINED_WANDB_STEP_KEYS: Set[str] = set()
 
 
 def default_device() -> torch.device:
@@ -177,12 +180,27 @@ def wandb_log(run: Optional[Any], payload: Dict[str, Any], step: Optional[int] =
         run.log(payload, step=step)
 
 
+def _register_wandb_metric(run: Any, metric_key: str) -> str:
+    step_key = f"{metric_key}_step"
+    if step_key not in _DEFINED_WANDB_STEP_KEYS:
+        run.define_metric(step_key, summary="max")
+        _DEFINED_WANDB_STEP_KEYS.add(step_key)
+    if metric_key not in _DEFINED_WANDB_METRICS:
+        run.define_metric(metric_key, step_metric=step_key)
+        _DEFINED_WANDB_METRICS.add(metric_key)
+    return step_key
+
+
 def make_epoch_logger(run: Optional[Any], metric_key: str, extra: Optional[Dict[str, Any]] = None):
     if run is None:
         return None
 
-    def hook(epoch: int, loss: float) -> None:
-        payload = {metric_key: loss, "epoch": epoch + 1}
+    step_key = _register_wandb_metric(run, metric_key)
+
+    def hook(epoch: int, loss: float, val_loss: Optional[float] = None) -> None:
+        payload = {metric_key: loss, step_key: epoch + 1}
+        if val_loss is not None:
+            payload[f"{metric_key}_val"] = val_loss
         if extra:
             payload.update(extra)
         wandb_log(run, payload)
@@ -408,6 +426,9 @@ def train_dynamics_models(
     gamma: float,
     lambda_td: float,
     lambda_rank: float,
+    val_fraction: float,
+    early_stop_patience: int,
+    min_epochs: int,
     wandb_run: Optional[Any] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet]:
     state_dim = dataset.states.shape[1]
@@ -421,6 +442,9 @@ def train_dynamics_models(
         lr=dyn_lr,
         device=device,
         log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
+        val_fraction=val_fraction,
+        early_stop_patience=early_stop_patience,
+        min_epochs=min_epochs,
     )
 
     q_aware_models: Dict[str, DynamicsNet] = {}
@@ -440,6 +464,9 @@ def train_dynamics_models(
             reward_fn=pendulum_reward_torch,
             device=device,
             log_hook=make_epoch_logger(wandb_run, f"dynamics/qaware/{name}"),
+            val_fraction=val_fraction,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
         )
         q_aware_models[name] = model
 
@@ -458,6 +485,9 @@ def train_dynamics_models(
         reward_fn=pendulum_reward_torch,
         device=device,
         log_hook=make_epoch_logger(wandb_run, "dynamics/ranking"),
+        val_fraction=val_fraction,
+        early_stop_patience=early_stop_patience,
+        min_epochs=min_epochs,
     )
 
     return sup_model, q_aware_models, ranking_model
@@ -598,8 +628,8 @@ def evaluate_in_dynamics_mc(
 def main() -> None:
     parser = argparse.ArgumentParser(description="End-to-end Pendulum offline RL pipeline")
     parser.add_argument("--env-id", default="Pendulum-v1")
-    parser.add_argument("--total-steps", type=int, default=2_000_000)
-    parser.add_argument("--ppo-fractions", type=float, nargs="*", default=[0.25, 0.5, 0.75, 1.0])
+    parser.add_argument("--total-steps", type=int, default=5_000_000)
+    parser.add_argument("--ppo-fractions", type=float, nargs="*", default=[0.2, 0.4, 0.6, 0.8, 1.0])
     parser.add_argument("--n-envs", type=int, default=8)
     parser.add_argument("--n-steps", type=int, default=2048)
     parser.add_argument("--batch-size", type=int, default=1024)
@@ -611,13 +641,16 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--rollout-steps", type=int, default=5_000, help="steps per policy for dataset collection")
-    parser.add_argument("--q-epochs", type=int, default=300)
+    parser.add_argument("--q-epochs", type=int, default=1000)
     parser.add_argument("--q-batch", type=int, default=1024)
     parser.add_argument("--q-lr", type=float, default=3e-4)
     parser.add_argument("--q-samples", type=int, default=32)
-    parser.add_argument("--dyn-epochs", type=int, default=500)
+    parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=1024)
     parser.add_argument("--dyn-lr", type=float, default=1e-3)
+    parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
+    parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
+    parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
     parser.add_argument("--eval-episodes", type=int, default=20)
@@ -786,6 +819,9 @@ def main() -> None:
             gamma=args.gamma,
             lambda_td=args.lambda_td,
             lambda_rank=args.lambda_rank,
+            val_fraction=args.dyn_val_fraction,
+            early_stop_patience=args.dyn_early_stop_patience,
+            min_epochs=args.dyn_min_epochs,
             wandb_run=wandb_run,
         )
         dynamics_paths = save_dynamics_models(sup_model, q_aware_models, ranking_model, dynamics_dir)
