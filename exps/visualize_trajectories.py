@@ -111,7 +111,7 @@ def visualize_trajectories(args: argparse.Namespace) -> None:
     snapshots = load_snapshots(policy_manifest)
     policy_models = load_policy_models(snapshots)
     torch_policies = make_policy_adapters(policy_models)
-    sup_model, q_aware_models, ranking_model, _ = load_dynamics_models(dynamics_dir, device)
+    sup_model, q_aware_models, ranking_model, ranking_new_models, _ = load_dynamics_models(dynamics_dir, device)
 
     start_state = get_start_state(args.env_id, args.seed)
     print(f"Using start state from env seed {args.seed}: {start_state}")

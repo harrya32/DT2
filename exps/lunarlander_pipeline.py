@@ -386,7 +386,7 @@ def train_dynamics_models(
     early_stop_patience: int,
     min_epochs: int,
     wandb_run: Optional[Any] = None,
-) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet]:
+) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet, Dict[str, DynamicsNet]]:
     state_dim = dataset.states.shape[1]
     act_dim = dataset.actions.shape[1]
 
@@ -403,7 +403,7 @@ def train_dynamics_models(
         min_epochs=min_epochs,
     )
 
-    q_aware_models: Dict[str, DynamicsNet] = {}
+    """q_aware_models: Dict[str, DynamicsNet] = {}
     for name, policy in policies.items():
         model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
         model.train_q_aware_model(
@@ -422,7 +422,7 @@ def train_dynamics_models(
             early_stop_patience=early_stop_patience,
             min_epochs=min_epochs,
         )
-        q_aware_models[name] = model
+        q_aware_models[name] = model"""
 
     policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
     ranking_model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
@@ -442,13 +442,37 @@ def train_dynamics_models(
         min_epochs=min_epochs,
     )
 
-    return sup_model, q_aware_models, ranking_model
+    # Train additional ranking-aware models using the new loss variants.
+    ranking_new_models: Dict[str, DynamicsNet] = {}
+    for loss_name in ("kendall", "hinge", "listnet"):
+        model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
+        model.train_ranking_aware_model_new(
+            dataset,
+            policy_q_pairs=policy_q_pairs,
+            gamma=gamma,
+            lambda_rank=lambda_rank,
+            epochs=dyn_epochs,
+            batch_size=dyn_batch,
+            lr=dyn_lr,
+            reward_fn=lunarlander_reward_torch,
+            device=device,
+            log_hook=make_epoch_logger(wandb_run, f"dynamics/ranking_new/{loss_name}"),
+            val_fraction=val_fraction,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
+            ranking_loss_type=loss_name,
+        )
+        ranking_new_models[loss_name] = model
+
+    q_aware_models = {}
+    return sup_model, q_aware_models, ranking_model, ranking_new_models
 
 
 def save_dynamics_models(
     sup_model: DynamicsNet,
     q_aware_models: Dict[str, DynamicsNet],
     ranking_model: DynamicsNet,
+    ranking_new_models: Dict[str, DynamicsNet],
     directory: Path,
 ) -> Dict[str, object]:
     directory.mkdir(parents=True, exist_ok=True)
@@ -456,13 +480,19 @@ def save_dynamics_models(
         "supervised": (directory / "dynamics_supervised.pt").as_posix(),
         "ranking": (directory / "dynamics_ranking.pt").as_posix(),
         "q_aware": {},
+        "ranking_new": {},
     }
     torch.save(copy.deepcopy(sup_model).cpu(), paths["supervised"])
     torch.save(copy.deepcopy(ranking_model).cpu(), paths["ranking"])
-    for name, model in q_aware_models.items():
+    """for name, model in q_aware_models.items():
         path = directory / f"dynamics_q_{name}.pt"
         torch.save(copy.deepcopy(model).cpu(), path)
-        paths["q_aware"][name] = path.as_posix()
+        paths["q_aware"][name] = path.as_posix()"""
+
+    for loss_name, model in ranking_new_models.items():
+        path = directory / f"dynamics_ranking_new_{loss_name}.pt"
+        torch.save(copy.deepcopy(model).cpu(), path)
+        paths["ranking_new"][loss_name] = path.as_posix()
 
     manifest = directory / "manifest.json"
     with open(manifest, "w", encoding="utf-8") as f:
@@ -473,7 +503,7 @@ def save_dynamics_models(
 def load_dynamics_models(
     directory: Path,
     device: torch.device,
-) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet, Dict[str, object]]:
+) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet, Dict[str, DynamicsNet], Dict[str, object]]:
     manifest = directory / "manifest.json"
     with open(manifest, "r", encoding="utf-8") as f:
         paths = json.load(f)
@@ -493,7 +523,13 @@ def load_dynamics_models(
         #model.eval()
         q_aware_models[name] = model
 
-    return sup_model, q_aware_models, ranking_model, paths
+    ranking_new_models: Dict[str, DynamicsNet] = {}
+    for loss_name, path in paths.get("ranking_new", {}).items():
+        model: DynamicsNet = torch.load(path, map_location=device, weights_only=False)
+        model.to(device)
+        ranking_new_models[loss_name] = model
+
+    return sup_model, q_aware_models, ranking_model, ranking_new_models, paths
 
 
 def evaluate_sb3_policy(model: PPO, env_id: str, episodes: int, seed: int) -> float:
@@ -507,7 +543,6 @@ def evaluate_sb3_policy(model: PPO, env_id: str, episodes: int, seed: int) -> fl
         while not (done or truncated):
             action, _ = model.predict(obs, deterministic=True)
             obs_next, reward_env, done, truncated, _ = env.step(action)
-            # Accumulate custom shaping-based reward instead of env reward
             total += lunarlander_reward_fn(obs, action)
             obs = obs_next
         returns.append(total)
@@ -588,7 +623,7 @@ def evaluate_in_dynamics(
 def main() -> None:
     parser = argparse.ArgumentParser(description="End-to-end LunarLander offline RL pipeline")
     parser.add_argument("--env-id", default="LunarLanderContinuous-v3")
-    parser.add_argument("--total-steps", type=int, default=5_000_000)
+    parser.add_argument("--total-steps", type=int, default=1_000_000)
     parser.add_argument("--ppo-fractions", type=float, nargs="*", default=[0.2, 0.4, 0.6, 0.8, 1.0])
     parser.add_argument("--n-envs", type=int, default=8)
     parser.add_argument("--n-steps", type=int, default=2048)
@@ -601,15 +636,15 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--rollout-steps", type=int, default=10_000, help="steps per policy for dataset collection")
-    parser.add_argument("--q-epochs", type=int, default=200)
+    parser.add_argument("--q-epochs", type=int, default=1000)
     parser.add_argument("--q-batch", type=int, default=1024)
     parser.add_argument("--q-lr", type=float, default=3e-4)
-    parser.add_argument("--q-samples", type=int, default=16)
-    parser.add_argument("--dyn-epochs", type=int, default=500)
+    parser.add_argument("--q-samples", type=int, default=32)
+    parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=1024)
     parser.add_argument("--dyn-lr", type=float, default=1e-3)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
-    parser.add_argument("--dyn-early-stop-patience", type=int, default=50)
+    parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
@@ -754,7 +789,9 @@ def main() -> None:
     dynamics_train_time: Optional[float] = None
     if dynamics_manifest.exists() and not args.force_dynamics_training:
         print("[Step 4] Using existing dynamics models...")
-        sup_model, q_aware_models, ranking_model, dynamics_paths = load_dynamics_models(dynamics_dir, device)
+        sup_model, q_aware_models, ranking_model, ranking_new_models, dynamics_paths = load_dynamics_models(
+            dynamics_dir, device
+        )
     else:
         if args.results_only:
             raise FileNotFoundError(
@@ -762,7 +799,7 @@ def main() -> None:
             )
         print("[Step 4] Training dynamics models...")
         start_time = time.perf_counter()
-        sup_model, q_aware_models, ranking_model = train_dynamics_models(
+        sup_model, q_aware_models, ranking_model, ranking_new_models = train_dynamics_models(
             dataset,
             torch_policies,
             q_models,
@@ -778,7 +815,13 @@ def main() -> None:
             min_epochs=args.dyn_min_epochs,
             wandb_run=wandb_run,
         )
-        dynamics_paths = save_dynamics_models(sup_model, q_aware_models, ranking_model, dynamics_dir)
+        dynamics_paths = save_dynamics_models(
+            sup_model,
+            q_aware_models,
+            ranking_model,
+            ranking_new_models,
+            dynamics_dir,
+        )
         dynamics_trained = True
         dynamics_train_time = time.perf_counter() - start_time
 
@@ -799,28 +842,43 @@ def main() -> None:
         true_return = evaluate_sb3_policy(ppo_model, args.env_id, args.eval_episodes, args.seed)
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
         dyn_sup = evaluate_in_dynamics(sup_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
-        dyn_q = evaluate_in_dynamics(q_aware_models[name], policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
+        #dyn_q = evaluate_in_dynamics(q_aware_models[name], policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
         dyn_rank = evaluate_in_dynamics(ranking_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts)
-        """fixed_env = evaluate_sb3_policy_fixed_horizon(
+        dyn_rank_new: Dict[str, float] = {}
+        for loss_name, dyn_model in ranking_new_models.items():
+            dyn_rank_new[loss_name] = evaluate_in_dynamics(
+                dyn_model,
+                policy,
+                initial_states,
+                args.eval_horizon,
+                args.gamma,
+                device,
+                args.eval_rollouts,
+            )
+        fixed_env = evaluate_sb3_policy_fixed_horizon(
             ppo_model,
             args.env_id,
             args.eval_horizon,
             args.gamma,
             args.eval_rollouts,
             args.seed,
-        )"""
+        )
+
+        wandb_payload = {
+            "eval/policy_name": name,
+            "eval/true_return": true_return,
+            "eval/q_estimate": q_est,
+            "eval/dynamics_supervised": dyn_sup,
+            #"eval/dynamics_qaware": dyn_q,
+            "eval/dynamics_ranking": dyn_rank,
+            "eval/env_mc": fixed_env,
+        }
+        for loss_name, val in dyn_rank_new.items():
+            wandb_payload[f"eval/dynamics_ranking_new_{loss_name}"] = val
 
         wandb_log(
             wandb_run,
-            {
-                "eval/policy_name": name,
-                "eval/true_return": true_return,
-                "eval/q_estimate": q_est,
-                "eval/dynamics_supervised": dyn_sup,
-                "eval/dynamics_qaware": dyn_q,
-                "eval/dynamics_ranking": dyn_rank,
-                #"eval/env_fixed": fixed_env,
-            },
+            wandb_payload,
             step=int(snap["timesteps"]),
         )
 
@@ -833,10 +891,11 @@ def main() -> None:
                 "q_estimate": q_est,
                 "dynamics": {
                     "supervised": dyn_sup,
-                    "q_aware": dyn_q,
+                    #"q_aware": dyn_q,
                     "ranking": dyn_rank,
+                    "ranking_new": dyn_rank_new,
                 },
-                #"env_fixed": fixed_env,
+                "env_mc": fixed_env,
             }
         )
 
@@ -849,7 +908,7 @@ def main() -> None:
         "results": results,
     }
 
-    summary_path = args.output_dir / "summary.json"
+    summary_path = args.output_dir / f"summary_{args.seed}.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Saved summary to {summary_path}")

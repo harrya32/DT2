@@ -1,0 +1,8 @@
+{
+  "ppo_frac_0": "results/lunarlander_pipeline/q_models/ppo_frac_0.pt",
+  "ppo_frac_200000": "results/lunarlander_pipeline/q_models/ppo_frac_200000.pt",
+  "ppo_frac_400000": "results/lunarlander_pipeline/q_models/ppo_frac_400000.pt",
+  "ppo_frac_600000": "results/lunarlander_pipeline/q_models/ppo_frac_600000.pt",
+  "ppo_frac_800000": "results/lunarlander_pipeline/q_models/ppo_frac_800000.pt",
+  "ppo_frac_1000000": "results/lunarlander_pipeline/q_models/ppo_frac_1000000.pt"
+}

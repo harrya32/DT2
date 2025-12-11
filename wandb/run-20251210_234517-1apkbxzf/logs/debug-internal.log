@@ -1,0 +1,13 @@
+{"time":"2025-12-10T23:45:18.117156317Z","level":"INFO","msg":"stream: starting","core version":"0.23.1"}
+{"time":"2025-12-10T23:45:18.340067507Z","level":"INFO","msg":"stream: created new stream","id":"1apkbxzf"}
+{"time":"2025-12-10T23:45:18.340216691Z","level":"INFO","msg":"handler: started","stream_id":"1apkbxzf"}
+{"time":"2025-12-10T23:45:18.341797112Z","level":"INFO","msg":"stream: started","id":"1apkbxzf"}
+{"time":"2025-12-10T23:45:18.341841059Z","level":"INFO","msg":"writer: started","stream_id":"1apkbxzf"}
+{"time":"2025-12-10T23:45:18.341866692Z","level":"INFO","msg":"sender: started","stream_id":"1apkbxzf"}
+{"time":"2025-12-11T02:07:16.791173814Z","level":"WARN","msg":"handler: ignoring partial history record","step":0,"current":12001}
+{"time":"2025-12-11T02:08:13.675504998Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-11T02:08:13.881294804Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-12-11T02:08:13.885544299Z","level":"INFO","msg":"stream: closing","id":"1apkbxzf"}
+{"time":"2025-12-11T02:08:13.885564547Z","level":"INFO","msg":"handler: closed","stream_id":"1apkbxzf"}
+{"time":"2025-12-11T02:08:13.886314425Z","level":"INFO","msg":"sender: closed","stream_id":"1apkbxzf"}
+{"time":"2025-12-11T02:08:13.886336096Z","level":"INFO","msg":"stream: closed","id":"1apkbxzf"}

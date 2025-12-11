@@ -1,0 +1,1 @@
+{"policies/count":6,"policies/trained":0,"_step":42,"_runtime":61,"dataset/source_loaded":0,"dataset/initial_states":157,"q_models/trained":0,"dynamics/supervised":-3.8583982226983555,"dataset/transitions":60000,"dynamics/supervised_val":-5.964171965916951,"_timestamp":1.7654329391197934e+09,"dynamics/supervised_step":{"max":40},"q_models/count":6,"_wandb":{"runtime":61}}

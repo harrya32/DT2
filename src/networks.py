@@ -89,6 +89,7 @@ class DynamicsNet(nn.Module):
         h = self.net(x)
         mean = self.mean_head(h)
         logvar = self.logvar_head(h)
+        logvar = torch.clamp(logvar, min=-10.0, max=2.0)
         return mean, logvar
 
     def nll(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
@@ -391,10 +392,13 @@ class DynamicsNet(nn.Module):
 
         for epoch in range(epochs):
             epoch_loss = 0.0
+            num_valid_batches = 0
             perm = train_indices[torch.randperm(train_N, device=device)]
             for start in range(0, train_N, batch_size):
                 idx = perm[start : start + batch_size]
                 sb, ab, snb = train_states[idx], train_actions[idx], train_next[idx]
+
+                optimizer.zero_grad(set_to_none=True)
 
                 with torch.amp.autocast("cuda", enabled=use_amp):
                     loss = self._q_aware_objective(
@@ -426,10 +430,10 @@ class DynamicsNet(nn.Module):
                     torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
                     optimizer.step()
 
-                optimizer.zero_grad(set_to_none=True)
                 epoch_loss += loss.item()
+                num_valid_batches += 1
 
-            avg_loss = epoch_loss / self._num_batches(train_N, batch_size)
+            avg_loss = epoch_loss / max(1, num_valid_batches)
             val_loss: Optional[float] = None
             if val_tensors is not None:
                 vs, va, vn = val_tensors
@@ -669,7 +673,267 @@ class DynamicsNet(nn.Module):
 
         return losses
 
+    def train_ranking_aware_model_new(
+        self,
+        dataset: OfflineDataset | Mapping[str, np.ndarray],
+        policy_q_pairs: Sequence[Tuple[TorchPolicy | GaussianLinearPolicy, nn.Module]],
+        gamma: float = 0.97,
+        lambda_rank: float = 0.1,
+        rollout_horizon: int = 50,
+        rollout_episodes: int = 32,
+        epochs: int = 20,
+        batch_size: int = 1024,
+        lr: float = 5e-4,
+        use_amp: bool = True,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+        hidden: int = 128,
+        dynamics_loss: str = "balanced",
+        reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+        device: Optional[torch.device] = None,
+        log_hook: Optional[Callable[..., None]] = None,
+        val_fraction: float = 0.1,
+        early_stop_patience: int = 50,
+        min_epochs: int = 50,
+        min_delta: float = 0.0,
+        ranking_loss_type: str = "kendall",  # "kendall", "hinge", or "listnet"
+        rank_temperature: float = 1.0,
+    ) -> List[float]:
+        """Train dynamics with ranking-aware regularization.
+        
+        Args:
+            ranking_loss_type: Type of ranking loss to use:
+                - "kendall": Soft Kendall tau correlation (smooth, uses magnitude)
+                - "hinge": Pairwise hinge loss (original implementation)
+                - "listnet": Cross-entropy over softmax ranking distributions
+            rank_temperature: Temperature for soft ranking losses (lower = sharper)
+        """
+        if reward_fn is None:
+            raise ValueError("reward_fn must be provided for ranking-aware training.")
 
+        from .fqe import estimate_V_from_Q_on_s0
+
+        _ = hidden  # maintained for API compatibility
+
+        device = device or DEVICE
+        self.to(device)
+        data = self._as_dict(dataset)
+        states = torch.tensor(data["s"], dtype=torch.float32, device=device)
+        actions = torch.tensor(data["a"], dtype=torch.float32, device=device)
+        next_states = torch.tensor(data["s_next"], dtype=torch.float32, device=device)
+        N = states.shape[0]
+
+        dyn_loss_fn = self._select_dynamics_loss(dynamics_loss)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
+        use_amp = use_amp and device.type == "cuda"
+        scaler = torch.amp.GradScaler("cuda", enabled=use_amp) if use_amp else None
+        train_idx, val_idx = self._split_train_val_indices(N, val_fraction, device)
+        train_states = states[train_idx]
+        train_actions = actions[train_idx]
+        train_next = next_states[train_idx]
+        train_indices = torch.arange(train_states.shape[0], device=device)
+        val_tensors = None
+        if val_idx is not None:
+            val_tensors = (
+                states[val_idx],
+                actions[val_idx],
+                next_states[val_idx],
+            )
+
+        for policy, q in policy_q_pairs:
+            q = q.to(device)
+            for param in q.parameters():
+                param.requires_grad_(False)
+
+        s0 = torch.tensor(data["s0"], dtype=torch.float32, device=device)
+
+        # Precompute target values (they don't change during training)
+        with torch.no_grad():
+            target_vals = []
+            for pi, q in policy_q_pairs:
+                target_val = estimate_V_from_Q_on_s0(q, data["s0"], pi, K=64)
+                target_vals.append(target_val)
+            target_tensor = torch.tensor(target_vals, dtype=torch.float32, device=device)
+
+        def rollout_return(pi: TorchPolicy | GaussianLinearPolicy, deterministic: bool = True) -> torch.Tensor:
+            """Compute model-based return estimate with reduced variance."""
+            idx = torch.randint(0, s0.size(0), (rollout_episodes,), device=device)
+            s = s0[idx]
+            total = torch.zeros(rollout_episodes, device=device)
+            discount = 1.0
+            for _ in range(rollout_horizon):
+                a = self._sample_policy_actions(pi, s, 1, act_low, act_high, deterministic=deterministic)
+                r = reward_fn(s, a)
+                total = total + discount * r
+                discount = discount * gamma
+                s = self.sample_next(s, a)
+            return total.mean()
+
+        def compute_ranking_loss(model_vals: torch.Tensor, target_vals: torch.Tensor) -> torch.Tensor:
+            """Compute ranking loss based on selected type."""
+            n = model_vals.size(0)
+            if n < 2:
+                return torch.zeros((), device=device)
+
+            if ranking_loss_type == "listnet":
+                # ListNet: cross-entropy over softmax distributions
+                target_probs = F.softmax(target_vals / rank_temperature, dim=0)
+                model_log_probs = F.log_softmax(model_vals / rank_temperature, dim=0)
+                return -(target_probs * model_log_probs).sum()
+
+            # Pairwise losses
+            i_idx, j_idx = torch.triu_indices(n, n, offset=1, device=device)
+            target_diff = target_vals[i_idx] - target_vals[j_idx]
+            model_diff = model_vals[i_idx] - model_vals[j_idx]
+
+            if ranking_loss_type == "kendall":
+                # Soft Kendall tau: maximize correlation of pairwise comparisons
+                # Normalize by scale for numerical stability
+                target_scale = target_diff.abs().mean().clamp(min=1e-6)
+                model_scale = model_diff.abs().mean().clamp(min=1e-6)
+                target_sign = torch.tanh(target_diff / (target_scale * rank_temperature))
+                model_sign = torch.tanh(model_diff / (model_scale * rank_temperature))
+                # Loss: 1 - correlation (0 = perfect agreement)
+                return 1.0 - (target_sign * model_sign).mean()
+
+            else:  # "hinge" (original)
+                # Margin-scaled hinge loss
+                target_scale = target_vals.abs().mean().clamp(min=1e-6)
+                margin = 0.1 * target_scale  # 10% of average value as margin
+                sign = torch.sign(target_diff)
+                # Loss when model ordering disagrees or margin not met
+                violation = margin - model_diff * sign
+                return F.relu(violation).mean()
+
+        losses: List[float] = []
+        best_state = copy.deepcopy(self.state_dict()) if val_tensors is not None else None
+        best_val = math.inf
+        epochs_without_improve = 0
+
+        for epoch in range(epochs):
+            epoch_loss = 0.0
+            num_batches = 0
+            perm = train_indices[torch.randperm(train_indices.size(0), device=device)]
+            
+            # --- Dynamics loss: per-batch updates ---
+            for start in range(0, perm.size(0), batch_size):
+                idx = perm[start : start + batch_size]
+                sb, ab, snb = train_states[idx], train_actions[idx], train_next[idx]
+
+                optimizer.zero_grad(set_to_none=True)
+
+                with torch.amp.autocast("cuda", enabled=use_amp):
+                    dyn_loss = (1.0 - lambda_rank) * dyn_loss_fn(sb, ab, snb)
+
+                if not torch.isfinite(dyn_loss):
+                    continue
+
+                if use_amp:
+                    scaler.scale(dyn_loss).backward()
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    dyn_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                    optimizer.step()
+
+                epoch_loss += dyn_loss.item()
+                num_batches += 1
+
+            # --- Ranking loss: once per epoch (expensive rollouts) ---
+            latest_rank_loss: Optional[float] = None
+            if lambda_rank > 0.0:
+                optimizer.zero_grad(set_to_none=True)
+
+                with torch.amp.autocast("cuda", enabled=use_amp):
+                    model_vals = []
+                    for pi, _ in policy_q_pairs:
+                        model_vals.append(rollout_return(pi, deterministic=True))
+                    model_tensor = torch.stack(model_vals)
+
+                    if torch.isfinite(model_tensor).all():
+                        rank_loss = lambda_rank * compute_ranking_loss(model_tensor, target_tensor)
+                        latest_rank_loss = float(rank_loss.item())
+
+                        if use_amp:
+                            scaler.scale(rank_loss).backward()
+                            scaler.unscale_(optimizer)
+                            valid_grads = all(
+                                p.grad is None or torch.isfinite(p.grad).all()
+                                for p in self.parameters()
+                            )
+                            if valid_grads:
+                                torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                                scaler.step(optimizer)
+                            scaler.update()
+                        else:
+                            rank_loss.backward()
+                            valid_grads = all(
+                                p.grad is None or torch.isfinite(p.grad).all()
+                                for p in self.parameters()
+                            )
+                            if valid_grads:
+                                torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                                optimizer.step()
+
+                        epoch_loss += latest_rank_loss
+
+            avg_loss = epoch_loss / max(1, num_batches)
+
+            # --- Validation ---
+            val_loss: Optional[float] = None
+            if val_tensors is not None:
+                vs, va, vn = val_tensors
+                with torch.no_grad():
+                    total_dyn = 0.0
+                    batches = 0
+                    for vstart in range(0, vs.size(0), batch_size):
+                        vsb = vs[vstart : vstart + batch_size]
+                        vab = va[vstart : vstart + batch_size]
+                        vnb = vn[vstart : vstart + batch_size]
+                        dyn_val = dyn_loss_fn(vsb, vab, vnb)
+                        total_dyn += float(dyn_val.item())
+                        batches += 1
+                    val_dyn_loss = total_dyn / max(1, batches)
+
+                    # Compute validation ranking loss (once)
+                    val_rank_loss = 0.0
+                    if lambda_rank > 0.0:
+                        model_vals = []
+                        for pi, _ in policy_q_pairs:
+                            model_vals.append(rollout_return(pi, deterministic=True))
+                        model_tensor = torch.stack(model_vals)
+                        if torch.isfinite(model_tensor).all():
+                            val_rank_loss = float(compute_ranking_loss(model_tensor, target_tensor).item())
+
+                    val_loss = (1.0 - lambda_rank) * val_dyn_loss + lambda_rank * val_rank_loss
+
+                if val_loss + min_delta < best_val:
+                    best_val = val_loss
+                    epochs_without_improve = 0
+                    best_state = copy.deepcopy(self.state_dict())
+                else:
+                    epochs_without_improve += 1
+
+            losses.append(avg_loss)
+            if log_hook is not None:
+                log_hook(epoch, avg_loss, val_loss)
+
+            if (
+                val_tensors is not None
+                and early_stop_patience > 0
+                and epoch + 1 >= min_epochs
+                and epochs_without_improve >= early_stop_patience
+            ):
+                break
+
+        if best_state is not None:
+            self.load_state_dict(best_state)
+
+        return losses
+    
     def sample_next(self, s: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         mean, logvar = self.forward(s, a)
         std = torch.exp(0.5 * logvar)
