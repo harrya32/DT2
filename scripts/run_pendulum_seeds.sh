@@ -37,7 +37,7 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[pendulum_pipeline] Running seed ${seed}..."
-    python exps/pendulum_pipeline.py --force-policy-training --force-q-training --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py --force-q-training --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
     echo "[pendulum_pipeline] Completed seed ${seed}"
     echo
 done

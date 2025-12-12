@@ -19,3 +19,8 @@ config: {'env_id': 'LunarLanderContinuous-v3', 'total_steps': 1000000, 'ppo_frac
 2025-12-11 10:47:26,557 INFO    MainThread:288415 [wandb_run.py:_redirect():2438] Wrapping output streams.
 2025-12-11 10:47:26,558 INFO    MainThread:288415 [wandb_run.py:_redirect():2461] Redirects installed.
 2025-12-11 10:47:26,560 INFO    MainThread:288415 [wandb_init.py:init():1081] run started, returning control to user process
+2025-12-11 12:49:47,539 INFO    MainThread:288415 [wandb_run.py:_finish():2287] finishing run harryamad-university-of-cambridge/DT2-lunarlander/5n7pszte
+2025-12-11 12:49:47,539 INFO    MainThread:288415 [wandb_run.py:_atexit_cleanup():2486] got exitcode: 0
+2025-12-11 12:49:47,539 INFO    MainThread:288415 [wandb_run.py:_restore():2468] restore
+2025-12-11 12:49:47,539 INFO    MainThread:288415 [wandb_run.py:_restore():2474] restore done
+2025-12-11 12:49:48,164 INFO    MainThread:288415 [wandb_run.py:_footer_sync_info():3862] logging synced files
