@@ -1,0 +1,46 @@
+{
+  "os":  "Linux-6.8.0-1041-azure-x86_64-with-glibc2.35",
+  "python":  "CPython 3.10.19",
+  "startedAt":  "2025-12-12T03:58:16.957097Z",
+  "args":  [
+    "--force-q-training",
+    "--force-dynamics-training",
+    "--seed",
+    "1"
+  ],
+  "program":  "/mnt/pdata/hmka3/DT2/exps/pendulum_pipeline.py",
+  "codePath":  "exps/pendulum_pipeline.py",
+  "codePathLocal":  "exps/pendulum_pipeline.py",
+  "git":  {
+    "remote":  "https://github.com/harrya32/DT2.git",
+    "commit":  "02c62f8c622879ed9620c7259d872ae8d319b4cd"
+  },
+  "email":  "harryamad@gmail.com",
+  "root":  "/mnt/pdata/hmka3/DT2",
+  "host":  "hmka3-1xa100",
+  "executable":  "/home/azureuser/miniconda/envs/dt2/bin/python",
+  "cpu_count":  24,
+  "cpu_count_logical":  24,
+  "gpu":  "NVIDIA A100 80GB PCIe",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "126759518208",
+      "used":  "94895034368"
+    }
+  },
+  "memory":  {
+    "total":  "232209608704"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA A100 80GB PCIe",
+      "memoryTotal":  "85899345920",
+      "cudaCores":  6912,
+      "architecture":  "Ampere",
+      "uuid":  "GPU-3306e4db-9eb9-2198-af65-e6133d759682"
+    }
+  ],
+  "cudaVersion":  "12.6",
+  "writerId":  "lc4jbwxsiw8lh5wx0q4b69f2w8d79sic"
+}

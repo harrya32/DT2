@@ -37,7 +37,7 @@
     "eval_horizon": 200,
     "output_dir": "results/pendulum_pipeline",
     "device": "auto",
-    "force_policy_training": true,
+    "force_policy_training": false,
     "force_q_training": true,
     "force_dynamics_training": true,
     "results_only": false,
@@ -58,13 +58,11 @@
   "dynamics_paths": {
     "supervised": "results/pendulum_pipeline/dynamics/dynamics_supervised.pt",
     "ranking": "results/pendulum_pipeline/dynamics/dynamics_ranking.pt",
-    "q_aware": {
-      "ppo_frac_0": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_0.pt",
-      "ppo_frac_1000000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_1000000.pt",
-      "ppo_frac_2000000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_2000000.pt",
-      "ppo_frac_3000000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_3000000.pt",
-      "ppo_frac_4000000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_4000000.pt",
-      "ppo_frac_5000000": "results/pendulum_pipeline/dynamics/dynamics_q_ppo_frac_5000000.pt"
+    "q_aware": {},
+    "ranking_new": {
+      "kendall": "results/pendulum_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/pendulum_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/pendulum_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
     }
   },
   "results": [
@@ -72,78 +70,102 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "true_return": -1210.06103515625,
-      "env_mc": -120.08804321289062,
-      "q_estimate": -110.8862533569336,
+      "true_return": -1207.301513671875,
+      "env_mc": -120.06181335449219,
+      "q_estimate": -112.11438751220703,
       "dynamics": {
-        "supervised": -115.1884765625,
-        "q_aware": -119.03460693359375,
-        "ranking": -135.644775390625
+        "supervised": -112.3565444946289,
+        "ranking": -144.652099609375,
+        "ranking_new": {
+          "kendall": -129.5235595703125,
+          "hinge": -126.14307403564453,
+          "listnet": -123.03543853759766
+        }
       }
     },
     {
       "name": "ppo_frac_1000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "true_return": -161.77024841308594,
-      "env_mc": -78.38558959960938,
-      "q_estimate": -74.94573974609375,
+      "true_return": -171.38552856445312,
+      "env_mc": -78.46900939941406,
+      "q_estimate": -75.71896362304688,
       "dynamics": {
-        "supervised": -73.38514709472656,
-        "q_aware": -71.19538116455078,
-        "ranking": -131.53355407714844
+        "supervised": -69.38890075683594,
+        "ranking": -141.8026580810547,
+        "ranking_new": {
+          "kendall": -53.547447204589844,
+          "hinge": -95.7332992553711,
+          "listnet": -118.57403564453125
+        }
       }
     },
     {
       "name": "ppo_frac_2000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_2000000",
       "timesteps": 2000000,
-      "true_return": -149.94618225097656,
-      "env_mc": -75.92723846435547,
-      "q_estimate": -71.77070617675781,
+      "true_return": -147.9751739501953,
+      "env_mc": -75.94432067871094,
+      "q_estimate": -72.47696685791016,
       "dynamics": {
-        "supervised": -75.69359588623047,
-        "q_aware": -84.48284912109375,
-        "ranking": -127.63285827636719
+        "supervised": -76.18201446533203,
+        "ranking": -140.7144775390625,
+        "ranking_new": {
+          "kendall": -50.10713195800781,
+          "hinge": -62.701866149902344,
+          "listnet": -113.53956604003906
+        }
       }
     },
     {
       "name": "ppo_frac_3000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_3000000",
       "timesteps": 3000000,
-      "true_return": -149.82260131835938,
-      "env_mc": -75.74514770507812,
-      "q_estimate": -71.9259033203125,
+      "true_return": -148.49398803710938,
+      "env_mc": -75.53142547607422,
+      "q_estimate": -72.32220458984375,
       "dynamics": {
-        "supervised": -75.61930847167969,
-        "q_aware": -80.79313659667969,
-        "ranking": -127.1180191040039
+        "supervised": -68.42250061035156,
+        "ranking": -140.84228515625,
+        "ranking_new": {
+          "kendall": -53.671043395996094,
+          "hinge": -59.07121276855469,
+          "listnet": -113.57723236083984
+        }
       }
     },
     {
       "name": "ppo_frac_4000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_4000000",
       "timesteps": 4000000,
-      "true_return": -143.33868408203125,
-      "env_mc": -75.5689926147461,
-      "q_estimate": -73.0180892944336,
+      "true_return": -140.45201110839844,
+      "env_mc": -75.36467742919922,
+      "q_estimate": -72.35894775390625,
       "dynamics": {
-        "supervised": -71.34121704101562,
-        "q_aware": -87.12653350830078,
-        "ranking": -127.591552734375
+        "supervised": -72.98047637939453,
+        "ranking": -140.18516540527344,
+        "ranking_new": {
+          "kendall": -52.484580993652344,
+          "hinge": -62.32658386230469,
+          "listnet": -113.71781921386719
+        }
       }
     },
     {
       "name": "ppo_frac_5000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_5000000",
       "timesteps": 5000000,
-      "true_return": -142.9568328857422,
-      "env_mc": -75.49417114257812,
-      "q_estimate": -70.5393295288086,
+      "true_return": -141.24745178222656,
+      "env_mc": -75.2945556640625,
+      "q_estimate": -72.5934829711914,
       "dynamics": {
-        "supervised": -72.43319702148438,
-        "q_aware": -103.53075408935547,
-        "ranking": -127.29774475097656
+        "supervised": -69.80509948730469,
+        "ranking": -140.78990173339844,
+        "ranking_new": {
+          "kendall": -52.716251373291016,
+          "hinge": -63.860843658447266,
+          "listnet": -114.13917541503906
+        }
       }
     }
   ]
