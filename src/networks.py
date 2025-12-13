@@ -84,12 +84,33 @@ class DynamicsNet(nn.Module):
             raise ValueError(f"wrapped_dims indices out of range: {invalid}")
         self.wrapped_dims = tuple(int(d) for d in sorted(set(dims)))
 
+        # Input/output normalization buffers (initialized to identity transform)
+        self.register_buffer("state_mean", torch.zeros(state_dim))
+        self.register_buffer("state_std", torch.ones(state_dim))
+        self.register_buffer("action_mean", torch.zeros(act_dim))
+        self.register_buffer("action_std", torch.ones(act_dim))
+        self.register_buffer("delta_mean", torch.zeros(state_dim))
+        self.register_buffer("delta_std", torch.ones(state_dim))
+        self._normalizer_fitted = False
+
     def forward(self, s: torch.Tensor, a: torch.Tensor):
-        x = torch.cat([s, a], dim=-1)
+        # Normalize inputs
+        s_norm = (s - self.state_mean) / (self.state_std + 1e-8)
+        a_norm = (a - self.action_mean) / (self.action_std + 1e-8)
+        
+        x = torch.cat([s_norm, a_norm], dim=-1)
         h = self.net(x)
-        mean = self.mean_head(h)
-        logvar = self.logvar_head(h)
-        logvar = torch.clamp(logvar, min=-10.0, max=2.0)
+        mean_norm = self.mean_head(h)  # Predicts normalized delta
+        logvar_norm = self.logvar_head(h)  # Log-variance in normalized space
+        logvar_norm = torch.clamp(logvar_norm, min=-10.0, max=2.0)
+        
+        # Denormalize mean prediction: convert from normalized delta to actual s_next
+        mean = mean_norm * (self.delta_std + 1e-8) + self.delta_mean + s
+        
+        # Denormalize variance: var_actual = var_norm * delta_std^2
+        # So logvar_actual = logvar_norm + 2 * log(delta_std)
+        logvar = logvar_norm + 2.0 * torch.log(self.delta_std + 1e-8)
+        
         return mean, logvar
 
     def nll(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
@@ -177,6 +198,35 @@ class DynamicsNet(nn.Module):
             )
         return diff
 
+    def fit_normalizer(
+        self,
+        states: torch.Tensor,
+        actions: torch.Tensor,
+        next_states: torch.Tensor,
+    ) -> None:
+        """Compute and store normalization statistics from training data.
+        
+        Should be called once before training with the full training dataset.
+        """
+        with torch.no_grad():
+            self.state_mean = states.mean(dim=0)
+            self.state_std = states.std(dim=0).clamp(min=1e-6)
+            self.action_mean = actions.mean(dim=0)
+            self.action_std = actions.std(dim=0).clamp(min=1e-6)
+            
+            # Compute delta statistics
+            deltas = next_states - states
+            # Handle wrapped dims with circular mean
+            for dim in self.wrapped_dims:
+                deltas[..., dim] = torch.atan2(
+                    torch.sin(next_states[..., dim] - states[..., dim]),
+                    torch.cos(next_states[..., dim] - states[..., dim]),
+                )
+            self.delta_mean = deltas.mean(dim=0)
+            self.delta_std = deltas.std(dim=0).clamp(min=1e-6)
+            
+        self._normalizer_fitted = True
+
     def _select_dynamics_loss(self, name: str) -> Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]:
         name = name.lower()
         losses = {
@@ -257,6 +307,7 @@ class DynamicsNet(nn.Module):
         early_stop_patience: int = 50,
         min_epochs: int = 50,
         min_delta: float = 0.0,
+        dynamics_loss: str = "mse",
     ) -> DynamicsNet:
         
         device = device or DEVICE
@@ -271,6 +322,11 @@ class DynamicsNet(nn.Module):
             val_dataset = TensorDataset(states[val_idx], actions[val_idx], next_states[val_idx])
             val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
 
+        # Fit normalizer on training data
+        if not self._normalizer_fitted:
+            self.fit_normalizer(states[train_idx], actions[train_idx], next_states[train_idx])
+
+        loss_fn = self._select_dynamics_loss(dynamics_loss)
         optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
         losses: List[float] = []
         best_state = copy.deepcopy(self.state_dict()) if val_loader is not None else None
@@ -280,7 +336,7 @@ class DynamicsNet(nn.Module):
         for epoch in range(epochs):
             epoch_loss = 0.0
             for sb, ab, snb in train_loader:
-                loss = self.balanced_loss(sb, ab, snb)
+                loss = loss_fn(sb, ab, snb)
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
@@ -294,7 +350,7 @@ class DynamicsNet(nn.Module):
                     total = 0.0
                     batches = 0
                     for vs, va, vns in val_loader:
-                        val = self.balanced_loss(vs, va, vns)
+                        val = loss_fn(vs, va, vns)
                         total += float(val.item())
                         batches += 1
                     val_loss = total / max(1, batches)
@@ -338,7 +394,7 @@ class DynamicsNet(nn.Module):
         act_high: float = 1.0,
         samples: int = 4,
         hidden: int = 128,
-        dynamics_loss: str = "balanced",
+        dynamics_loss: str = "mse",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
         log_hook: Optional[Callable[..., None]] = None,
@@ -384,6 +440,10 @@ class DynamicsNet(nn.Module):
                 actions[val_idx],
                 next_states[val_idx],
             )
+
+        # Fit normalizer on training data
+        if not self._normalizer_fitted:
+            self.fit_normalizer(train_states, train_actions, train_next)
 
         losses: List[float] = []
         best_state = copy.deepcopy(self.state_dict()) if val_tensors is not None else None
@@ -501,7 +561,7 @@ class DynamicsNet(nn.Module):
         act_low: float = -1.0,
         act_high: float = 1.0,
         hidden: int = 128,
-        dynamics_loss: str = "balanced",
+        dynamics_loss: str = "mse",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
         log_hook: Optional[Callable[..., None]] = None,
@@ -542,6 +602,10 @@ class DynamicsNet(nn.Module):
                 actions[val_idx],
                 next_states[val_idx],
             )
+
+        # Fit normalizer on training data
+        if not self._normalizer_fitted:
+            self.fit_normalizer(train_states, train_actions, train_next)
 
         for policy, q in policy_q_pairs:
             q = q.to(device)
@@ -688,7 +752,7 @@ class DynamicsNet(nn.Module):
         act_low: float = -1.0,
         act_high: float = 1.0,
         hidden: int = 128,
-        dynamics_loss: str = "balanced",
+        dynamics_loss: str = "mse",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
         log_hook: Optional[Callable[..., None]] = None,
@@ -739,6 +803,10 @@ class DynamicsNet(nn.Module):
                 actions[val_idx],
                 next_states[val_idx],
             )
+
+        # Fit normalizer on training data
+        if not self._normalizer_fitted:
+            self.fit_normalizer(train_states, train_actions, train_next)
 
         for policy, q in policy_q_pairs:
             q = q.to(device)
@@ -934,11 +1002,28 @@ class DynamicsNet(nn.Module):
 
         return losses
     
-    def sample_next(self, s: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+    def sample_next(self, s: torch.Tensor, a: torch.Tensor, deterministic: bool = False) -> torch.Tensor:
+        """Sample next state from the dynamics model.
+        
+        Args:
+            s: Current states [batch, state_dim]
+            a: Actions [batch, act_dim]
+            deterministic: If True, return the mean prediction without noise.
+                          Recommended when trained with MSE loss since variance
+                          is not supervised. If False, sample from the predicted
+                          Gaussian distribution.
+        
+        Returns:
+            Predicted next states [batch, state_dim]
+        """
         mean, logvar = self.forward(s, a)
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        s_next = mean + std * eps
+        
+        if deterministic:
+            s_next = mean
+        else:
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            s_next = mean + std * eps
 
         # --- Handle angle wrapping for configured dims ---
         s_next = self._wrap_state_inplace(s_next)

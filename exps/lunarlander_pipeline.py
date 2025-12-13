@@ -616,7 +616,7 @@ def evaluate_in_dynamics(
         rewards = lunarlander_reward_torch(states, actions)
         total += discount * rewards
         discount = discount * gamma
-        states = dynamics.sample_next(states, actions)
+        states = dynamics.sample_next(states, actions, deterministic=True)
     return float(total.mean().item())
 
 
@@ -651,7 +651,7 @@ def main() -> None:
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=500)
     parser.add_argument("--eval-horizon", type=int, default=500)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/lunarlander_pipeline"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/mse/lunarlander_pipeline"))
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--force-policy-training", action="store_true", help="ignore saved PPO checkpoints and retrain")
     parser.add_argument("--force-q-training", action="store_true", help="ignore saved Q networks and retrain")

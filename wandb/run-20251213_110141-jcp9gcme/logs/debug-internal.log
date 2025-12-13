@@ -1,0 +1,13 @@
+{"time":"2025-12-13T11:01:41.897707552Z","level":"INFO","msg":"stream: starting","core version":"0.23.1"}
+{"time":"2025-12-13T11:01:42.120609026Z","level":"INFO","msg":"stream: created new stream","id":"jcp9gcme"}
+{"time":"2025-12-13T11:01:42.120835448Z","level":"INFO","msg":"handler: started","stream_id":"jcp9gcme"}
+{"time":"2025-12-13T11:01:42.122522154Z","level":"INFO","msg":"stream: started","id":"jcp9gcme"}
+{"time":"2025-12-13T11:01:42.122574397Z","level":"INFO","msg":"writer: started","stream_id":"jcp9gcme"}
+{"time":"2025-12-13T11:01:42.123072672Z","level":"INFO","msg":"sender: started","stream_id":"jcp9gcme"}
+{"time":"2025-12-13T11:02:10.571478194Z","level":"WARN","msg":"handler: ignoring partial history record","step":0,"current":5}
+{"time":"2025-12-13T11:04:16.522022996Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-13T11:04:16.719582377Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-12-13T11:04:16.723272328Z","level":"INFO","msg":"stream: closing","id":"jcp9gcme"}
+{"time":"2025-12-13T11:04:16.723295451Z","level":"INFO","msg":"handler: closed","stream_id":"jcp9gcme"}
+{"time":"2025-12-13T11:04:16.72437429Z","level":"INFO","msg":"sender: closed","stream_id":"jcp9gcme"}
+{"time":"2025-12-13T11:04:16.724392825Z","level":"INFO","msg":"stream: closed","id":"jcp9gcme"}

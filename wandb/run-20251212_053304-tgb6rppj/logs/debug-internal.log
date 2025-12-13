@@ -4,3 +4,10 @@
 {"time":"2025-12-12T05:33:05.015106523Z","level":"INFO","msg":"stream: started","id":"tgb6rppj"}
 {"time":"2025-12-12T05:33:05.0151663Z","level":"INFO","msg":"writer: started","stream_id":"tgb6rppj"}
 {"time":"2025-12-12T05:33:05.015201561Z","level":"INFO","msg":"sender: started","stream_id":"tgb6rppj"}
+{"time":"2025-12-12T07:09:00.427032249Z","level":"WARN","msg":"handler: ignoring partial history record","step":0,"current":10679}
+{"time":"2025-12-12T07:11:34.434643536Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-12T07:11:34.640552311Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-12-12T07:11:34.644492836Z","level":"INFO","msg":"stream: closing","id":"tgb6rppj"}
+{"time":"2025-12-12T07:11:34.644513004Z","level":"INFO","msg":"handler: closed","stream_id":"tgb6rppj"}
+{"time":"2025-12-12T07:11:34.645474315Z","level":"INFO","msg":"sender: closed","stream_id":"tgb6rppj"}
+{"time":"2025-12-12T07:11:34.645494253Z","level":"INFO","msg":"stream: closed","id":"tgb6rppj"}

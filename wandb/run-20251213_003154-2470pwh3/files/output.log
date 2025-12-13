@@ -1,0 +1,17 @@
+[Step 1] Using existing PPO checkpoints...
+Loaded 6 policy checkpoints.
+/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py:150: UserWarning: You are trying to run PPO on the GPU, but it is primarily intended to run on the CPU when not using a CNN policy (you are using ActorCriticPolicy which should be a MlpPolicy). See https://github.com/DLR-RM/stable-baselines3/issues/1245 for more info. You can pass `device='cpu'` or `export CUDA_VISIBLE_DEVICES=` to force using the CPU.Note: The model will train, but the GPU utilization will be poor and the training might take longer than on CPU.
+  warnings.warn(
+[Step 2] Collecting offline dataset...
+Dataset saved to results/anisotropic_pipeline/offline_dataset.npz with 30000 transitions
+[Step 3] Training Q networks for each policy...
+[Step 4] Training dynamics models...
+[Step 5-7] Evaluating policies across true env, Q, and dynamics...
+  ppo_frac_0: true=2.66, Q=60.45, sup=17.58, kendall=7.23, env_mc=14.74
+[34m[1mwandb[0m: [33mWARNING[0m Tried to log to step 0 that is less than the current step 9437. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+  ppo_frac_400000: true=382.83, Q=175.21, sup=158.16, kendall=157.50, env_mc=158.13
+  ppo_frac_800000: true=387.31, Q=177.20, sup=160.46, kendall=160.89, env_mc=161.22
+  ppo_frac_1200000: true=387.59, Q=177.95, sup=160.32, kendall=160.13, env_mc=161.33
+  ppo_frac_1600000: true=387.64, Q=176.85, sup=160.49, kendall=160.29, env_mc=161.36
+  ppo_frac_2000000: true=387.75, Q=176.06, sup=160.36, kendall=160.84, env_mc=161.37
+Saved summary to results/anisotropic_pipeline/summary_2.json

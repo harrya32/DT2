@@ -1,0 +1,44 @@
+[Step 1] Training PPO policies with checkpoints...
+/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/vec_env/vec_monitor.py:44: UserWarning: The environment is already wrapped with a `Monitor` wrapperbut you are wrapping it with a `VecMonitor` wrapper, the `Monitor` statistics will beoverwritten by the `VecMonitor` ones.
+  warnings.warn(
+/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py:150: UserWarning: You are trying to run PPO on the GPU, but it is primarily intended to run on the CPU when not using a CNN policy (you are using ActorCriticPolicy which should be a MlpPolicy). See https://github.com/DLR-RM/stable-baselines3/issues/1245 for more info. You can pass `device='cpu'` or `export CUDA_VISIBLE_DEVICES=` to force using the CPU.Note: The model will train, but the GPU utilization will be poor and the training might take longer than on CPU.
+  warnings.warn(
+[2K[Checkpoint] Saved policy at 200000 steps -> results/anisotropic_pipeline/policies/ppo_frac_200000━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m199,824/1,000,000 [0m [ [33m0:00:45[0m < [36m0:03:03[0m , [31m4,382 it/s[0m ]s[0m ]
+[2K[Checkpoint] Saved policy at 400000 steps -> results/anisotropic_pipeline/policies/ppo_frac_400000237m╺[0m[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m399,640/1,000,000 [0m [ [33m0:01:33[0m < [36m0:02:25[0m , [31m4,165 it/s[0m ]s[0m ]
+[2K[Checkpoint] Saved policy at 600000 steps -> results/anisotropic_pipeline/policies/ppo_frac_600000━━━━━━━━━━━━━━━━[0m[38;5;237m╺[0m[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m598,880/1,000,000 [0m [ [33m0:02:19[0m < [36m0:01:34[0m , [31m4,299 it/s[0m ]s[0m ]
+[2K[Checkpoint] Saved policy at 800000 steps -> results/anisotropic_pipeline/policies/ppo_frac_800000━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[38;2;249;38;114m╸[0m[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m799,816/1,000,000 [0m [ [33m0:03:04[0m < [36m0:00:46[0m , [31m4,386 it/s[0m ]
+[2K[Checkpoint] Saved policy at 1000000 steps -> results/anisotropic_pipeline/policies/ppo_frac_1000000━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[38;2;249;38;114m╸[0m [32m999,584/1,000,000 [0m [ [33m0:03:52[0m < [36m0:00:01[0m , [31m4,188 it/s[0m ],187 it/s[0m ]
+[2K[35m 100%[0m [38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m1,015,808/1,000,000 [0m [ [33m0:03:52[0m < [36m0:00:00[0m , [31m4,198 it/s[0m ]1m4,188 it/s[0m ]
+[?25hLoaded 6 policy checkpoints.
+[Step 2] Collecting offline dataset...
+Dataset saved to results/anisotropic_pipeline/offline_dataset.npz with 30000 transitions
+[Step 3] Training Q networks for each policy...
+[Step 4] Training dynamics models...
+Traceback (most recent call last):
+  File "/mnt/pdata/hmka3/DT2/exps/anisotropic_pipeline.py", line 1071, in <module>
+    main()
+  File "/mnt/pdata/hmka3/DT2/exps/anisotropic_pipeline.py", line 964, in main
+    sup_model, ranking_new_models = train_dynamics_models(
+  File "/mnt/pdata/hmka3/DT2/exps/anisotropic_pipeline.py", line 622, in train_dynamics_models
+    model.train_ranking_aware_model_new(
+  File "/mnt/pdata/hmka3/DT2/src/networks.py", line 921, in train_ranking_aware_model_new
+    model_vals.append(rollout_return(pi, deterministic=True))
+  File "/mnt/pdata/hmka3/DT2/src/networks.py", line 833, in rollout_return
+    a = self._sample_policy_actions(pi, s, 1, act_low, act_high, deterministic=deterministic)
+  File "/mnt/pdata/hmka3/DT2/src/networks.py", line 172, in _sample_policy_actions
+    return policy.sample_torch_actions(
+  File "/mnt/pdata/hmka3/DT2/exps/anisotropic_pipeline.py", line 271, in sample_torch_actions
+    act, _ = self.model.predict(chunk, deterministic=deterministic)
+  File "/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/base_class.py", line 557, in predict
+    return self.policy.predict(observation, state, episode_start, deterministic)
+  File "/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/policies.py", line 368, in predict
+    actions = self._predict(obs_tensor, deterministic=deterministic)
+  File "/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/policies.py", line 717, in _predict
+    return self.get_distribution(observation).get_actions(deterministic=deterministic)
+  File "/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/policies.py", line 752, in get_distribution
+    return self._get_action_dist_from_latent(latent_pi)
+  File "/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/policies.py", line 694, in _get_action_dist_from_latent
+    return self.action_dist.proba_distribution(mean_actions, self.log_std)
+  File "/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/distributions.py", line 163, in proba_distribution
+    action_std = th.ones_like(mean_actions) * log_std.exp()
+KeyboardInterrupt

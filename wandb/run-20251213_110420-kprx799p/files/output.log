@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/mnt/pdata/hmka3/DT2/exps/anisotropic_pipeline.py", line 1071, in <module>
+    main()
+  File "/mnt/pdata/hmka3/DT2/exps/anisotropic_pipeline.py", line 854, in main
+    raise FileNotFoundError(f"No saved PPO checkpoints at {snapshots_manifest}.")
+FileNotFoundError: No saved PPO checkpoints at results/mse/anisotropic_pipeline/policies/snapshots.json.

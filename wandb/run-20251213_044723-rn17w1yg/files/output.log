@@ -1,0 +1,25 @@
+[Step 1] Training PPO policies with checkpoints...
+/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/vec_env/vec_monitor.py:44: UserWarning: The environment is already wrapped with a `Monitor` wrapperbut you are wrapping it with a `VecMonitor` wrapper, the `Monitor` statistics will beoverwritten by the `VecMonitor` ones.
+  warnings.warn(
+/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py:150: UserWarning: You are trying to run PPO on the GPU, but it is primarily intended to run on the CPU when not using a CNN policy (you are using ActorCriticPolicy which should be a MlpPolicy). See https://github.com/DLR-RM/stable-baselines3/issues/1245 for more info. You can pass `device='cpu'` or `export CUDA_VISIBLE_DEVICES=` to force using the CPU.Note: The model will train, but the GPU utilization will be poor and the training might take longer than on CPU.
+  warnings.warn(
+[2K[Checkpoint] Saved policy at 200000 steps -> results/anisotropic_pipeline/policies/ppo_frac_200000━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m199,256/1,000,000 [0m [ [33m0:00:46[0m < [36m0:03:03[0m , [31m4,391 it/s[0m ]s[0m ]
+[2K[Checkpoint] Saved policy at 400000 steps -> results/anisotropic_pipeline/policies/ppo_frac_400000237m╺[0m[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m399,448/1,000,000 [0m [ [33m0:01:31[0m < [36m0:02:18[0m , [31m4,381 it/s[0m ]s[0m ]
+[2K[Checkpoint] Saved policy at 600000 steps -> results/anisotropic_pipeline/policies/ppo_frac_600000━━━━━━━━━━━━━━━━[0m[38;2;249;38;114m╸[0m[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m599,808/1,000,000 [0m [ [33m0:02:18[0m < [36m0:01:36[0m , [31m4,202 it/s[0m ]
+[2K[Checkpoint] Saved policy at 800000 steps -> results/anisotropic_pipeline/policies/ppo_frac_800000━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[38;2;249;38;114m╸[0m[38;5;237m━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m799,728/1,000,000 [0m [ [33m0:03:03[0m < [36m0:00:46[0m , [31m4,386 it/s[0m ]
+[2K[Checkpoint] Saved policy at 1000000 steps -> results/anisotropic_pipeline/policies/ppo_frac_1000000━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m[38;2;249;38;114m╸[0m [32m998,968/1,000,000 [0m [ [33m0:03:50[0m < [36m0:00:01[0m , [31m4,388 it/s[0m ],385 it/s[0m ]
+[2K[35m 100%[0m [38;2;114;156;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m [32m1,015,808/1,000,000 [0m [ [33m0:03:50[0m < [36m0:00:00[0m , [31m4,365 it/s[0m ] [31m4,373 it/s[0m ]
+[?25hLoaded 6 policy checkpoints.
+[Step 2] Collecting offline dataset...
+Dataset saved to results/anisotropic_pipeline/offline_dataset.npz with 30000 transitions
+[Step 3] Training Q networks for each policy...
+[Step 4] Training dynamics models...
+[Step 5-7] Evaluating policies across true env, Q, and dynamics...
+  ppo_frac_0: true=8.00, Q=60.88, sup=29.86, kendall=17.98, env_mc=16.60
+[34m[1mwandb[0m: [33mWARNING[0m Tried to log to step 0 that is less than the current step 10780. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+  ppo_frac_200000: true=382.59, Q=169.62, sup=158.59, kendall=157.75, env_mc=157.15
+  ppo_frac_400000: true=383.83, Q=173.00, sup=159.27, kendall=158.86, env_mc=158.55
+  ppo_frac_600000: true=387.18, Q=174.07, sup=161.96, kendall=161.21, env_mc=160.87
+  ppo_frac_800000: true=387.73, Q=173.80, sup=161.46, kendall=161.92, env_mc=161.24
+  ppo_frac_1000000: true=388.03, Q=174.47, sup=162.36, kendall=161.05, env_mc=161.36
+Saved summary to results/anisotropic_pipeline/summary_1.json

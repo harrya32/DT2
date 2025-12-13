@@ -1,0 +1,1 @@
+{"env/state_dim":13,"policies/trained":0,"dataset/initial_states":156,"dataset/transitions":30000,"q_train/ppo_frac_0_step":{"max":813},"env/relevant_dims":3,"_wandb":{"runtime":390},"q_train/ppo_frac_0":10.625202348676778,"env/num_distractors":10,"policies/count":6,"_step":815,"_runtime":390,"_timestamp":1.7655922521253722e+09}

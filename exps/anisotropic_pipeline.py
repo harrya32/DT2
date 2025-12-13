@@ -403,7 +403,7 @@ def train_ppo_with_checkpoints(
         ent_coef=ent_coef,
         vf_coef=vf_coef,
         device=device,
-        verbose=1,
+        verbose=0,
     )
 
     snapshots: List[Dict[str, object]] = []
@@ -604,7 +604,7 @@ def train_dynamics_models(
         log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
         val_fraction=val_fraction,
         early_stop_patience=early_stop_patience,
-        min_epochs=min_epochs,
+        min_epochs=min_epochs
     )
 
     # Ranking-aware dynamics with different loss types
@@ -773,7 +773,7 @@ def evaluate_in_dynamics(
         rewards = anisotropic_reward_torch(states, actions)
         total += discount * rewards
         discount *= gamma
-        states = dynamics.sample_next(states, actions)
+        states = dynamics.sample_next(states, actions, deterministic=True)
     return float(total.mean().item())
 
 
@@ -785,7 +785,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Anisotropic state-importance environment pipeline")
     parser.add_argument("--num-distractors", type=int, default=10, help="Number of irrelevant distractor dimensions")
     parser.add_argument("--max-steps", type=int, default=200, help="Max steps per episode")
-    parser.add_argument("--total-steps", type=int, default=500_000)
+    parser.add_argument("--total-steps", type=int, default=1_000_000)
     parser.add_argument("--ppo-fractions", type=float, nargs="*", default=[0.2, 0.4, 0.6, 0.8, 1.0])
     parser.add_argument("--n-envs", type=int, default=8)
     parser.add_argument("--n-steps", type=int, default=2048)
@@ -798,21 +798,21 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--rollout-steps", type=int, default=5_000, help="Steps per policy for dataset collection")
-    parser.add_argument("--q-epochs", type=int, default=500)
+    parser.add_argument("--q-epochs", type=int, default=1000)
     parser.add_argument("--q-batch", type=int, default=512)
     parser.add_argument("--q-lr", type=float, default=3e-4)
     parser.add_argument("--q-samples", type=int, default=32)
-    parser.add_argument("--dyn-epochs", type=int, default=1000)
+    parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=512)
     parser.add_argument("--dyn-lr", type=float, default=1e-3)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
-    parser.add_argument("--dyn-early-stop-patience", type=int, default=100)
+    parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=200)
     parser.add_argument("--eval-horizon", type=int, default=200)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/anisotropic_pipeline"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/mse/anisotropic_pipeline"))
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--force-policy-training", action="store_true")
     parser.add_argument("--force-q-training", action="store_true")

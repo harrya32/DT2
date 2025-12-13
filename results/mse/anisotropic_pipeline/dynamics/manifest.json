@@ -1,0 +1,8 @@
+{
+  "supervised": "results/anisotropic_pipeline/dynamics/dynamics_supervised.pt",
+  "ranking_new": {
+    "kendall": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+    "hinge": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+    "listnet": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+  }
+}
