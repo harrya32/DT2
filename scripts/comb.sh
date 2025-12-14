@@ -37,9 +37,9 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[lunarlander_pipeline] Running seed ${seed}..."
-    python exps/lunarlander_pipeline.py --force-q-training --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_pipeline.py --force-q-training --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/anisotropic_pipeline.py --force-q-training --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_pipeline.py --force-dynamics-training --dyn-early-stop-patience 1 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py --force-dynamics-training --dyn-early-stop-patience 1 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/anisotropic_pipeline.py --force-dynamics-training --dyn-early-stop-patience 1 --seed "$seed" "${EXTRA_ARGS[@]}"
 
     echo "[lunarlander_pipeline] Completed seed ${seed}"
     echo

@@ -1,10 +1,10 @@
 {
-  "supervised": "results/lunarlander_pipeline/dynamics/dynamics_supervised.pt",
-  "ranking": "results/lunarlander_pipeline/dynamics/dynamics_ranking.pt",
+  "supervised": "results/mse/lunarlander_pipeline/dynamics/dynamics_supervised.pt",
+  "ranking": "results/mse/lunarlander_pipeline/dynamics/dynamics_ranking.pt",
   "q_aware": {},
   "ranking_new": {
-    "kendall": "results/lunarlander_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
-    "hinge": "results/lunarlander_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
-    "listnet": "results/lunarlander_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+    "kendall": "results/mse/lunarlander_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+    "hinge": "results/mse/lunarlander_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+    "listnet": "results/mse/lunarlander_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
   }
 }

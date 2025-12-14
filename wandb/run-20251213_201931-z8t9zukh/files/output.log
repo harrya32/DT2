@@ -1,0 +1,21 @@
+[Step 1] Using existing PPO checkpoints...
+Loaded 6 policy checkpoints.
+/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/stable_baselines3/common/on_policy_algorithm.py:150: UserWarning: You are trying to run PPO on the GPU, but it is primarily intended to run on the CPU when not using a CNN policy (you are using ActorCriticPolicy which should be a MlpPolicy). See https://github.com/DLR-RM/stable-baselines3/issues/1245 for more info. You can pass `device='cpu'` or `export CUDA_VISIBLE_DEVICES=` to force using the CPU.Note: The model will train, but the GPU utilization will be poor and the training might take longer than on CPU.
+  warnings.warn(
+[Step 2] Collecting offline dataset...
+/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/pygame/pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import resource_stream, resource_exists
+Dataset saved to results/mse/lunarlander_pipeline/offline_dataset.npz with 60000 transitions
+[Step 3] Training Q networks for each policy...
+Traceback (most recent call last):
+  File "/mnt/pdata/hmka3/DT2/exps/lunarlander_pipeline.py", line 930, in <module>
+    main()
+  File "/mnt/pdata/hmka3/DT2/exps/lunarlander_pipeline.py", line 766, in main
+    q_models = train_q_networks(
+  File "/mnt/pdata/hmka3/DT2/exps/lunarlander_pipeline.py", line 332, in train_q_networks
+    rescaled_q = q_net.train(
+  File "/mnt/pdata/hmka3/DT2/src/networks.py", line 1146, in train
+    scaler.unscale_(optimizer)
+  File "/home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/torch/amp/grad_scaler.py", line 337, in unscale_
+    self._scale.double().reciprocal().float()
+KeyboardInterrupt

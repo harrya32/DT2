@@ -1,0 +1,1 @@
+{"_timestamp":1.7656579199966772e+09,"_step":953,"_wandb":{"runtime":747},"policies/count":6,"dataset/source_loaded":0,"dataset/transitions":60000,"q_train/ppo_frac_0_step":{"max":952},"policies/trained":0,"_runtime":747,"dataset/initial_states":154,"q_train/ppo_frac_0":0.15637489521907547}

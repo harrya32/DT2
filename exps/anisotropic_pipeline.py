@@ -570,6 +570,7 @@ def train_dynamics_models(
     early_stop_patience: int,
     min_epochs: int,
     num_distractors: int,
+    dynamics_loss: str = "nll",
     wandb_run: Optional[Any] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet]]:
     state_dim = dataset.states.shape[1]
@@ -604,7 +605,8 @@ def train_dynamics_models(
         log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
         val_fraction=val_fraction,
         early_stop_patience=early_stop_patience,
-        min_epochs=min_epochs
+        min_epochs=min_epochs,
+        dynamics_loss=dynamics_loss,
     )
 
     # Ranking-aware dynamics with different loss types
@@ -634,6 +636,7 @@ def train_dynamics_models(
             early_stop_patience=early_stop_patience,
             min_epochs=min_epochs,
             ranking_loss_type=loss_name,
+            dynamics_loss=dynamics_loss,
         )
         ranking_new_models[loss_name] = model
 
@@ -808,13 +811,15 @@ def main() -> None:
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
     parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
+    parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"], help="Loss function for dynamics training")
     parser.add_argument("--lambda-rank", type=float, default=0.1)
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=200)
     parser.add_argument("--eval-horizon", type=int, default=200)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/mse/anisotropic_pipeline"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/nll/anisotropic_pipeline"))
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--force-policy-training", action="store_true")
+    parser.add_argument("--force-dataset-collection", action="store_true", help="ignore saved offline dataset and recollect")
     parser.add_argument("--force-q-training", action="store_true")
     parser.add_argument("--force-dynamics-training", action="store_true")
     parser.add_argument("--results-only", action="store_true")
@@ -825,7 +830,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.results_only and (
-        args.force_policy_training or args.force_q_training or args.force_dynamics_training
+        args.force_policy_training or args.force_dataset_collection or args.force_q_training or args.force_dynamics_training
     ):
         parser.error("--results-only cannot be combined with force-training flags.")
 
@@ -886,10 +891,16 @@ def main() -> None:
 
     # Step 2: Build offline dataset
     dataset_path = args.output_dir / "offline_dataset.npz"
-    if args.results_only:
-        print("[Step 2] Loading offline dataset from disk...")
+    dataset_loaded = False
+    if dataset_path.exists() and not args.force_policy_training and not args.force_dataset_collection:
+        print("[Step 2] Loading existing offline dataset from disk...")
         dataset = load_offline_dataset(dataset_path)
+        dataset_loaded = True
     else:
+        if args.results_only:
+            raise FileNotFoundError(
+                f"No saved offline dataset at {dataset_path}. Run without --results-only to generate it."
+            )
         print("[Step 2] Collecting offline dataset...")
         dataset = build_offline_dataset(
             snapshots, policy_models, args.num_distractors, args.max_steps,
@@ -909,6 +920,7 @@ def main() -> None:
     wandb_log(wandb_run, {
         "dataset/transitions": int(len(dataset.states)),
         "dataset/initial_states": int(len(dataset.initial_states)),
+        "dataset/loaded_from_disk": int(dataset_loaded),
     })
 
     torch_policies = make_policy_adapters(policy_models)
@@ -975,6 +987,7 @@ def main() -> None:
             early_stop_patience=args.dyn_early_stop_patience,
             min_epochs=args.dyn_min_epochs,
             num_distractors=args.num_distractors,
+            dynamics_loss=args.dynamics_loss,
             wandb_run=wandb_run,
         )
         dynamics_paths = save_dynamics_models(sup_model, ranking_new_models, dynamics_dir)
@@ -997,9 +1010,9 @@ def main() -> None:
         ppo_model = policy_models[name]
         q_net = q_models[name]
 
-        true_return = evaluate_sb3_policy(
-            ppo_model, args.num_distractors, args.max_steps, args.eval_episodes, args.seed
-        )
+        #true_return = evaluate_sb3_policy(
+        #    ppo_model, args.num_distractors, args.max_steps, args.eval_episodes, args.seed
+        #)
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
         dyn_sup = evaluate_in_dynamics(
             sup_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts
@@ -1018,7 +1031,7 @@ def main() -> None:
 
         wandb_payload = {
             "eval/policy_name": name,
-            "eval/true_return": true_return,
+            #"eval/true_return": true_return,
             "eval/q_estimate": q_est,
             "eval/dynamics_supervised": dyn_sup,
             "eval/env_mc": fixed_env,
@@ -1032,7 +1045,7 @@ def main() -> None:
             "name": name,
             "checkpoint": snap["path"],
             "timesteps": snap["timesteps"],
-            "true_return": true_return,
+            #"true_return": true_return,
             "q_estimate": q_est,
             "dynamics": {
                 "supervised": dyn_sup,
@@ -1040,9 +1053,6 @@ def main() -> None:
             },
             "env_mc": fixed_env,
         })
-
-        print(f"  {name}: true={true_return:.2f}, Q={q_est:.2f}, sup={dyn_sup:.2f}, "
-              f"kendall={dyn_rank_new.get('kendall', 0):.2f}, env_mc={fixed_env:.2f}")
 
     # Save summary
     config = args_to_config(args)

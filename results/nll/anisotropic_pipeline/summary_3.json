@@ -1,0 +1,164 @@
+{
+  "config": {
+    "num_distractors": 10,
+    "max_steps": 200,
+    "total_steps": 2000000,
+    "ppo_fractions": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "n_envs": 8,
+    "n_steps": 2048,
+    "batch_size": 512,
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "seed": 3,
+    "rollout_steps": 5000,
+    "q_epochs": 500,
+    "q_batch": 512,
+    "q_lr": 0.0003,
+    "q_samples": 32,
+    "dyn_epochs": 1000,
+    "dyn_batch": 512,
+    "dyn_lr": 0.001,
+    "dyn_val_fraction": 0.1,
+    "dyn_early_stop_patience": 100,
+    "dyn_min_epochs": 50,
+    "lambda_rank": 0.1,
+    "eval_episodes": 20,
+    "eval_rollouts": 200,
+    "eval_horizon": 200,
+    "output_dir": "results/anisotropic_pipeline",
+    "device": "auto",
+    "force_policy_training": true,
+    "force_q_training": true,
+    "force_dynamics_training": true,
+    "results_only": false,
+    "wandb_project": "DT2-anisotropic",
+    "wandb_entity": null,
+    "wandb_run_name": null,
+    "wandb_mode": "online"
+  },
+  "num_transitions": 30000,
+  "q_model_paths": {
+    "ppo_frac_0": "results/anisotropic_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_400000": "results/anisotropic_pipeline/q_models/ppo_frac_400000.pt",
+    "ppo_frac_800000": "results/anisotropic_pipeline/q_models/ppo_frac_800000.pt",
+    "ppo_frac_1200000": "results/anisotropic_pipeline/q_models/ppo_frac_1200000.pt",
+    "ppo_frac_1600000": "results/anisotropic_pipeline/q_models/ppo_frac_1600000.pt",
+    "ppo_frac_2000000": "results/anisotropic_pipeline/q_models/ppo_frac_2000000.pt"
+  },
+  "dynamics_paths": {
+    "supervised": "results/anisotropic_pipeline/dynamics/dynamics_supervised.pt",
+    "ranking_new": {
+      "kendall": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_0",
+      "timesteps": 0,
+      "true_return": 6.719595432281494,
+      "q_estimate": 104.71284484863281,
+      "dynamics": {
+        "supervised": 27.799448013305664,
+        "ranking_new": {
+          "kendall": 31.51243782043457,
+          "hinge": 12.25394344329834,
+          "listnet": 19.77412986755371
+        }
+      },
+      "env_mc": 16.630290985107422
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_400000",
+      "timesteps": 400000,
+      "true_return": 382.534423828125,
+      "q_estimate": 167.701171875,
+      "dynamics": {
+        "supervised": 158.57595825195312,
+        "ranking_new": {
+          "kendall": 158.85435485839844,
+          "hinge": 92.82095336914062,
+          "listnet": 157.66014099121094
+        }
+      },
+      "env_mc": 158.37869262695312
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_800000",
+      "timesteps": 800000,
+      "true_return": 387.3389587402344,
+      "q_estimate": 171.3917236328125,
+      "dynamics": {
+        "supervised": 161.21383666992188,
+        "ranking_new": {
+          "kendall": 160.8597412109375,
+          "hinge": 156.71575927734375,
+          "listnet": 160.28228759765625
+        }
+      },
+      "env_mc": 161.20712280273438
+    },
+    {
+      "name": "ppo_frac_1200000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_1200000",
+      "timesteps": 1200000,
+      "true_return": 387.71429443359375,
+      "q_estimate": 169.67027282714844,
+      "dynamics": {
+        "supervised": 161.0993194580078,
+        "ranking_new": {
+          "kendall": 160.4680938720703,
+          "hinge": 153.4207763671875,
+          "listnet": 161.16127014160156
+        }
+      },
+      "env_mc": 161.31248474121094
+    },
+    {
+      "name": "ppo_frac_1600000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_1600000",
+      "timesteps": 1600000,
+      "true_return": 387.85546875,
+      "q_estimate": 171.4943389892578,
+      "dynamics": {
+        "supervised": 161.92881774902344,
+        "ranking_new": {
+          "kendall": 161.2987060546875,
+          "hinge": 156.54721069335938,
+          "listnet": 161.3809051513672
+        }
+      },
+      "env_mc": 161.35189819335938
+    },
+    {
+      "name": "ppo_frac_2000000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_2000000",
+      "timesteps": 2000000,
+      "true_return": 387.8268127441406,
+      "q_estimate": 171.3174285888672,
+      "dynamics": {
+        "supervised": 160.2206268310547,
+        "ranking_new": {
+          "kendall": 160.90054321289062,
+          "hinge": 155.95985412597656,
+          "listnet": 160.8341064453125
+        }
+      },
+      "env_mc": 161.32907104492188
+    }
+  ]
+}

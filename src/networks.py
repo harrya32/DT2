@@ -115,13 +115,15 @@ class DynamicsNet(nn.Module):
 
     def nll(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
         mean, logvar = self.forward(s, a)
+        diff = self._circular_diff(s_next, mean, s_next - mean)
         inv_var = torch.exp(-logvar)
-        nll = 0.5 * (logvar + (s_next - mean) ** 2 * inv_var + math.log(2 * math.pi))
+        nll = 0.5 * (logvar + diff ** 2 * inv_var + math.log(2 * math.pi))
         return nll.sum(dim=-1).mean()
 
     def mse(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
         mean, _ = self.forward(s, a)
-        return F.mse_loss(mean, s_next)
+        diff = self._circular_diff(s_next, mean, s_next - mean)
+        return (diff ** 2).mean()
 
     def balanced_loss(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
         mean, logvar = self.forward(s, a)
@@ -307,7 +309,7 @@ class DynamicsNet(nn.Module):
         early_stop_patience: int = 50,
         min_epochs: int = 50,
         min_delta: float = 0.0,
-        dynamics_loss: str = "mse",
+        dynamics_loss: str = "nll",
     ) -> DynamicsNet:
         
         device = device or DEVICE
@@ -394,7 +396,7 @@ class DynamicsNet(nn.Module):
         act_high: float = 1.0,
         samples: int = 4,
         hidden: int = 128,
-        dynamics_loss: str = "mse",
+        dynamics_loss: str = "nll",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
         log_hook: Optional[Callable[..., None]] = None,
@@ -561,7 +563,7 @@ class DynamicsNet(nn.Module):
         act_low: float = -1.0,
         act_high: float = 1.0,
         hidden: int = 128,
-        dynamics_loss: str = "mse",
+        dynamics_loss: str = "nll",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
         log_hook: Optional[Callable[..., None]] = None,
@@ -752,7 +754,7 @@ class DynamicsNet(nn.Module):
         act_low: float = -1.0,
         act_high: float = 1.0,
         hidden: int = 128,
-        dynamics_loss: str = "mse",
+        dynamics_loss: str = "nll",
         reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
         device: Optional[torch.device] = None,
         log_hook: Optional[Callable[..., None]] = None,
@@ -834,7 +836,7 @@ class DynamicsNet(nn.Module):
                 r = reward_fn(s, a)
                 total = total + discount * r
                 discount = discount * gamma
-                s = self.sample_next(s, a)
+                s = self.sample_next(s, a, deterministic=deterministic)
             return total.mean()
 
         def compute_ranking_loss(model_vals: torch.Tensor, target_vals: torch.Tensor) -> torch.Tensor:

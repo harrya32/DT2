@@ -4,3 +4,10 @@
 {"time":"2025-12-13T11:11:06.557093504Z","level":"INFO","msg":"stream: started","id":"a1nqxo2s"}
 {"time":"2025-12-13T11:11:06.557153151Z","level":"INFO","msg":"writer: started","stream_id":"a1nqxo2s"}
 {"time":"2025-12-13T11:11:06.557215544Z","level":"INFO","msg":"sender: started","stream_id":"a1nqxo2s"}
+{"time":"2025-12-13T13:09:15.98200108Z","level":"WARN","msg":"handler: ignoring partial history record","step":0,"current":7988}
+{"time":"2025-12-13T13:23:02.045699579Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-12-13T13:23:02.199045767Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-12-13T13:23:02.203115032Z","level":"INFO","msg":"stream: closing","id":"a1nqxo2s"}
+{"time":"2025-12-13T13:23:02.203136172Z","level":"INFO","msg":"handler: closed","stream_id":"a1nqxo2s"}
+{"time":"2025-12-13T13:23:02.203797393Z","level":"INFO","msg":"sender: closed","stream_id":"a1nqxo2s"}
+{"time":"2025-12-13T13:23:02.20383094Z","level":"INFO","msg":"stream: closed","id":"a1nqxo2s"}
