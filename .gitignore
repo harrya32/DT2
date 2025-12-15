@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 src/__pycache__/
+*.wandb
+*.log
+wandb/

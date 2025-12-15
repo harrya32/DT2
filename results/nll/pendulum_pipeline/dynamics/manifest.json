@@ -1,10 +1,10 @@
 {
-  "supervised": "results/mse/pendulum_pipeline/dynamics/dynamics_supervised.pt",
-  "ranking": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking.pt",
+  "supervised": "results/nll/pendulum_pipeline/dynamics/dynamics_supervised.pt",
+  "ranking": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking.pt",
   "q_aware": {},
   "ranking_new": {
-    "kendall": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
-    "hinge": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
-    "listnet": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+    "kendall": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+    "hinge": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+    "listnet": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
   }
 }

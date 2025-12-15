@@ -9,3 +9,4 @@ Loaded 6 policy checkpoints.
 /home/azureuser/miniconda/envs/dt2/lib/python3.10/site-packages/pygame/pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
   from pkg_resources import resource_stream, resource_exists
 [34m[1mwandb[0m: [33mWARNING[0m Tried to log to step 0 that is less than the current step 204. Steps must be monotonically increasing, so this data will be ignored. See https://wandb.me/define-metric to log data out of order.
+Saved summary to results/nll/lunarlander_pipeline/summary_0.json

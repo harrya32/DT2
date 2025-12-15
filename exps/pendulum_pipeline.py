@@ -431,23 +431,27 @@ def train_dynamics_models(
     min_epochs: int,
     dynamics_loss: str = "nll",
     wandb_run: Optional[Any] = None,
-) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet, Dict[str, DynamicsNet]]:
+    skip_sup_model: bool = False,
+) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet]]:
     state_dim = dataset.states.shape[1]
     act_dim = dataset.actions.shape[1]
 
-    sup_model = make_dynamics_net(state_dim, act_dim).to(device)
-    sup_model.train(
-        dataset,
-        epochs=dyn_epochs,
-        batch_size=dyn_batch,
-        lr=dyn_lr,
-        device=device,
-        log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
-        val_fraction=val_fraction,
-        early_stop_patience=early_stop_patience,
-        min_epochs=min_epochs,
-        dynamics_loss=dynamics_loss,
-    )
+    if skip_sup_model:
+        sup_model = None
+    else:
+        sup_model = make_dynamics_net(state_dim, act_dim).to(device)
+        sup_model.train(
+            dataset,
+            epochs=dyn_epochs,
+            batch_size=dyn_batch,
+            lr=dyn_lr,
+            device=device,
+            log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
+            val_fraction=val_fraction,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
+            dynamics_loss=dynamics_loss,
+        )
 
     policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
 
@@ -480,18 +484,20 @@ def train_dynamics_models(
 
 
 def save_dynamics_models(
-    sup_model: DynamicsNet,
+    sup_model: Optional[DynamicsNet],
     ranking_new_models: Dict[str, DynamicsNet],
     directory: Path,
 ) -> Dict[str, object]:
     directory.mkdir(parents=True, exist_ok=True)
     paths: Dict[str, object] = {
-        "supervised": (directory / "dynamics_supervised.pt").as_posix(),
+        "supervised": None,
         "ranking": (directory / "dynamics_ranking.pt").as_posix(),
         "q_aware": {},
         "ranking_new": {},
     }
-    torch.save(copy.deepcopy(sup_model).cpu(), paths["supervised"])
+    if sup_model is not None:
+        paths["supervised"] = (directory / "dynamics_supervised.pt").as_posix()
+        torch.save(copy.deepcopy(sup_model).cpu(), paths["supervised"])
 
     for loss_name, model in ranking_new_models.items():
         path = directory / f"dynamics_ranking_new_{loss_name}.pt"
@@ -506,13 +512,15 @@ def save_dynamics_models(
 def load_dynamics_models(
     directory: Path,
     device: torch.device,
-) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet, Dict[str, DynamicsNet], Dict[str, object]]:
+) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet], Dict[str, object]]:
     manifest = directory / "manifest.json"
     with open(manifest, "r", encoding="utf-8") as f:
         paths = json.load(f)
 
-    sup_model: DynamicsNet = torch.load(paths["supervised"], map_location=device, weights_only=False)
-    sup_model.to(device)
+    sup_model: Optional[DynamicsNet] = None
+    if paths.get("supervised") is not None:
+        sup_model = torch.load(paths["supervised"], map_location=device, weights_only=False)
+        sup_model.to(device)
 
     ranking_new_models: Dict[str, DynamicsNet] = {}
     for loss_name, path in paths.get("ranking_new", {}).items():
@@ -634,7 +642,7 @@ def main() -> None:
     parser.add_argument("--q-samples", type=int, default=32)
     parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=1024)
-    parser.add_argument("--dyn-lr", type=float, default=1e-3)
+    parser.add_argument("--dyn-lr", type=float, default=3e-4)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
     parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
@@ -644,12 +652,13 @@ def main() -> None:
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=256)
     parser.add_argument("--eval-horizon", type=int, default=200)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/nll/pendulum_pipeline"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/test/pendulum_pipeline"))
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--force-policy-training", action="store_true")
     parser.add_argument("--force-dataset-collection", action="store_true", help="ignore saved offline dataset and recollect")
     parser.add_argument("--force-q-training", action="store_true")
     parser.add_argument("--force-dynamics-training", action="store_true")
+    parser.add_argument("--skip-sup-model", action="store_true", help="Skip training the supervised dynamics model, only train ranking models")
     parser.add_argument("--results-only", action="store_true")
     parser.add_argument("--wandb-project", type=str, default="DT2-pendulum")
     parser.add_argument("--wandb-entity", type=str, default=None)
@@ -821,6 +830,7 @@ def main() -> None:
             min_epochs=args.dyn_min_epochs,
             dynamics_loss=args.dynamics_loss,
             wandb_run=wandb_run,
+            skip_sup_model=args.skip_sup_model,
         )
         dynamics_paths = save_dynamics_models(
             sup_model,
@@ -855,15 +865,17 @@ def main() -> None:
             args.seed,
         )
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
-        dyn_sup = evaluate_in_dynamics_mc(
-            sup_model,
-            policy,
-            initial_states,
-            args.eval_horizon,
-            args.gamma,
-            device,
-            args.eval_rollouts,
-        )
+        dyn_sup = None
+        if sup_model is not None:
+            dyn_sup = evaluate_in_dynamics_mc(
+                sup_model,
+                policy,
+                initial_states,
+                args.eval_horizon,
+                args.gamma,
+                device,
+                args.eval_rollouts,
+            )
         
         dyn_rank_new: Dict[str, float] = {}
         for loss_name, dyn_model in ranking_new_models.items():
@@ -881,8 +893,9 @@ def main() -> None:
             "eval/policy_name": name,
             "eval/env_mc": env_mc,
             "eval/q_estimate": q_est,
-            "eval/dynamics_supervised": dyn_sup,
         }
+        if dyn_sup is not None:
+            wandb_payload["eval/dynamics_supervised"] = dyn_sup
         for loss_name, val in dyn_rank_new.items():
             wandb_payload[f"eval/dynamics_ranking_new_{loss_name}"] = val
 

@@ -807,7 +807,7 @@ def main() -> None:
     parser.add_argument("--q-samples", type=int, default=32)
     parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=512)
-    parser.add_argument("--dyn-lr", type=float, default=1e-3)
+    parser.add_argument("--dyn-lr", type=float, default=3e-4)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
     parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)

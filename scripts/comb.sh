@@ -36,11 +36,11 @@ if [[ ${#SEEDS[@]} -eq 0 ]]; then
 fi
 
 for seed in "${SEEDS[@]}"; do
-    echo "[lunarlander_pipeline] Running seed ${seed}..."
-    python exps/lunarlander_pipeline.py --force-dynamics-training --dyn-early-stop-patience 1 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_pipeline.py --force-dynamics-training --dyn-early-stop-patience 1 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/anisotropic_pipeline.py --force-dynamics-training --dyn-early-stop-patience 1 --seed "$seed" "${EXTRA_ARGS[@]}"
+    echo "Running seed ${seed}..."
+    #python exps/lunarlander_pipeline.py --force-dynamics-training --dyn-early-stop-patience 50 --lambda-rank 0.5 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py --force-dynamics-training --skip-sup-model --dyn-early-stop-patience 50 --lambda-rank 0.1 --seed "$seed" "${EXTRA_ARGS[@]}"
+    #python exps/anisotropic_pipeline.py --force-dynamics-training --dyn-early-stop-patience 50 --lambda-rank 0.5 --seed "$seed" "${EXTRA_ARGS[@]}"
 
-    echo "[lunarlander_pipeline] Completed seed ${seed}"
+    echo "Completed seed ${seed}"
     echo
 done

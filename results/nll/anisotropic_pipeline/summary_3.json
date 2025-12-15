@@ -2,7 +2,7 @@
   "config": {
     "num_distractors": 10,
     "max_steps": 200,
-    "total_steps": 2000000,
+    "total_steps": 1000000,
     "ppo_fractions": [
       0.2,
       0.4,
@@ -21,24 +21,26 @@
     "vf_coef": 0.5,
     "seed": 3,
     "rollout_steps": 5000,
-    "q_epochs": 500,
+    "q_epochs": 1000,
     "q_batch": 512,
     "q_lr": 0.0003,
     "q_samples": 32,
-    "dyn_epochs": 1000,
+    "dyn_epochs": 2000,
     "dyn_batch": 512,
-    "dyn_lr": 0.001,
+    "dyn_lr": 0.0003,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 100,
+    "dyn_early_stop_patience": 50,
     "dyn_min_epochs": 50,
-    "lambda_rank": 0.1,
+    "dynamics_loss": "nll",
+    "lambda_rank": 0.5,
     "eval_episodes": 20,
     "eval_rollouts": 200,
     "eval_horizon": 200,
-    "output_dir": "results/anisotropic_pipeline",
+    "output_dir": "results/nll/anisotropic_pipeline",
     "device": "auto",
-    "force_policy_training": true,
-    "force_q_training": true,
+    "force_policy_training": false,
+    "force_dataset_collection": false,
+    "force_q_training": false,
     "force_dynamics_training": true,
     "results_only": false,
     "wandb_project": "DT2-anisotropic",
@@ -48,19 +50,19 @@
   },
   "num_transitions": 30000,
   "q_model_paths": {
-    "ppo_frac_0": "results/anisotropic_pipeline/q_models/ppo_frac_0.pt",
-    "ppo_frac_400000": "results/anisotropic_pipeline/q_models/ppo_frac_400000.pt",
-    "ppo_frac_800000": "results/anisotropic_pipeline/q_models/ppo_frac_800000.pt",
-    "ppo_frac_1200000": "results/anisotropic_pipeline/q_models/ppo_frac_1200000.pt",
-    "ppo_frac_1600000": "results/anisotropic_pipeline/q_models/ppo_frac_1600000.pt",
-    "ppo_frac_2000000": "results/anisotropic_pipeline/q_models/ppo_frac_2000000.pt"
+    "ppo_frac_0": "results/mse/anisotropic_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_200000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_200000.pt",
+    "ppo_frac_400000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_400000.pt",
+    "ppo_frac_600000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_600000.pt",
+    "ppo_frac_800000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_800000.pt",
+    "ppo_frac_1000000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_1000000.pt"
   },
   "dynamics_paths": {
-    "supervised": "results/anisotropic_pipeline/dynamics/dynamics_supervised.pt",
+    "supervised": "results/nll/anisotropic_pipeline/dynamics/dynamics_supervised.pt",
     "ranking_new": {
-      "kendall": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
-      "hinge": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
-      "listnet": "results/anisotropic_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+      "kendall": "results/nll/anisotropic_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/nll/anisotropic_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/nll/anisotropic_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
     }
   },
   "results": [
@@ -68,97 +70,91 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "true_return": 6.719595432281494,
-      "q_estimate": 104.71284484863281,
+      "q_estimate": 62.88550567626953,
       "dynamics": {
-        "supervised": 27.799448013305664,
+        "supervised": 22.064159393310547,
         "ranking_new": {
-          "kendall": 31.51243782043457,
-          "hinge": 12.25394344329834,
-          "listnet": 19.77412986755371
+          "kendall": 26.356229782104492,
+          "hinge": -15.643011093139648,
+          "listnet": 56.593231201171875
         }
       },
-      "env_mc": 16.630290985107422
+      "env_mc": 16.411388397216797
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_200000",
+      "timesteps": 200000,
+      "q_estimate": 170.7537384033203,
+      "dynamics": {
+        "supervised": 157.7843017578125,
+        "ranking_new": {
+          "kendall": 156.856201171875,
+          "hinge": 0.8565778732299805,
+          "listnet": 155.77011108398438
+        }
+      },
+      "env_mc": 156.79873657226562
     },
     {
       "name": "ppo_frac_400000",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "true_return": 382.534423828125,
-      "q_estimate": 167.701171875,
+      "q_estimate": 172.4714813232422,
       "dynamics": {
-        "supervised": 158.57595825195312,
+        "supervised": 159.44931030273438,
         "ranking_new": {
-          "kendall": 158.85435485839844,
-          "hinge": 92.82095336914062,
-          "listnet": 157.66014099121094
+          "kendall": 158.74761962890625,
+          "hinge": 29.788055419921875,
+          "listnet": 155.96017456054688
         }
       },
-      "env_mc": 158.37869262695312
+      "env_mc": 158.27676391601562
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_600000",
+      "timesteps": 600000,
+      "q_estimate": 173.192626953125,
+      "dynamics": {
+        "supervised": 161.11460876464844,
+        "ranking_new": {
+          "kendall": 160.99472045898438,
+          "hinge": 66.3748779296875,
+          "listnet": 158.34263610839844
+        }
+      },
+      "env_mc": 160.8223876953125
     },
     {
       "name": "ppo_frac_800000",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "true_return": 387.3389587402344,
-      "q_estimate": 171.3917236328125,
+      "q_estimate": 175.16867065429688,
       "dynamics": {
-        "supervised": 161.21383666992188,
+        "supervised": 162.11195373535156,
         "ranking_new": {
-          "kendall": 160.8597412109375,
-          "hinge": 156.71575927734375,
-          "listnet": 160.28228759765625
+          "kendall": 161.8953399658203,
+          "hinge": 68.46115112304688,
+          "listnet": 159.0302276611328
         }
       },
-      "env_mc": 161.20712280273438
+      "env_mc": 161.1654815673828
     },
     {
-      "name": "ppo_frac_1200000",
-      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_1200000",
-      "timesteps": 1200000,
-      "true_return": 387.71429443359375,
-      "q_estimate": 169.67027282714844,
+      "name": "ppo_frac_1000000",
+      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_1000000",
+      "timesteps": 1000000,
+      "q_estimate": 173.65289306640625,
       "dynamics": {
-        "supervised": 161.0993194580078,
+        "supervised": 162.81265258789062,
         "ranking_new": {
-          "kendall": 160.4680938720703,
-          "hinge": 153.4207763671875,
-          "listnet": 161.16127014160156
+          "kendall": 162.56190490722656,
+          "hinge": 66.72024536132812,
+          "listnet": 158.52096557617188
         }
       },
-      "env_mc": 161.31248474121094
-    },
-    {
-      "name": "ppo_frac_1600000",
-      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_1600000",
-      "timesteps": 1600000,
-      "true_return": 387.85546875,
-      "q_estimate": 171.4943389892578,
-      "dynamics": {
-        "supervised": 161.92881774902344,
-        "ranking_new": {
-          "kendall": 161.2987060546875,
-          "hinge": 156.54721069335938,
-          "listnet": 161.3809051513672
-        }
-      },
-      "env_mc": 161.35189819335938
-    },
-    {
-      "name": "ppo_frac_2000000",
-      "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_2000000",
-      "timesteps": 2000000,
-      "true_return": 387.8268127441406,
-      "q_estimate": 171.3174285888672,
-      "dynamics": {
-        "supervised": 160.2206268310547,
-        "ranking_new": {
-          "kendall": 160.90054321289062,
-          "hinge": 155.95985412597656,
-          "listnet": 160.8341064453125
-        }
-      },
-      "env_mc": 161.32907104492188
+      "env_mc": 161.2818145751953
     }
   ]
 }

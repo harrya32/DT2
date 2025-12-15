@@ -20,7 +20,7 @@ class DynamicsNet(nn.Module):
         self,
         state_dim: int = 8,
         act_dim: int = 1,
-        hidden: int = 128,
+        hidden: int = 256,
         state_low: Optional[torch.Tensor] = None,
         state_upper: Optional[torch.Tensor] = None,
         wrapped_dims: Optional[Sequence[int]] = None,
@@ -29,9 +29,9 @@ class DynamicsNet(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(state_dim + act_dim, hidden),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Linear(hidden, hidden),
-            nn.ReLU(),
+            nn.SiLU(),
         )
         self.mean_head = nn.Linear(hidden, state_dim)
         self.logvar_head = nn.Linear(hidden, state_dim)
@@ -745,8 +745,8 @@ class DynamicsNet(nn.Module):
         policy_q_pairs: Sequence[Tuple[TorchPolicy | GaussianLinearPolicy, nn.Module]],
         gamma: float = 0.97,
         lambda_rank: float = 0.1,
-        rollout_horizon: int = 50,
-        rollout_episodes: int = 32,
+        rollout_horizon: int = 30,
+        rollout_episodes: int = 128,
         epochs: int = 20,
         batch_size: int = 1024,
         lr: float = 5e-4,

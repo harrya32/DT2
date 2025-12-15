@@ -26,19 +26,21 @@
     "q_samples": 32,
     "dyn_epochs": 2000,
     "dyn_batch": 1024,
-    "dyn_lr": 0.001,
+    "dyn_lr": 0.0003,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 200,
+    "dyn_early_stop_patience": 50,
     "dyn_min_epochs": 50,
+    "dynamics_loss": "nll",
     "lambda_td": 0.1,
-    "lambda_rank": 0.1,
+    "lambda_rank": 0.5,
     "eval_episodes": 20,
     "eval_rollouts": 500,
     "eval_horizon": 500,
-    "output_dir": "results/lunarlander_pipeline",
+    "output_dir": "results/nll/lunarlander_pipeline",
     "device": "auto",
     "force_policy_training": false,
-    "force_q_training": true,
+    "force_dataset_collection": false,
+    "force_q_training": false,
     "force_dynamics_training": true,
     "results_only": false,
     "wandb_project": "DT2-lunarlander",
@@ -48,21 +50,21 @@
   },
   "num_transitions": 60000,
   "q_model_paths": {
-    "ppo_frac_0": "results/lunarlander_pipeline/q_models/ppo_frac_0.pt",
-    "ppo_frac_200000": "results/lunarlander_pipeline/q_models/ppo_frac_200000.pt",
-    "ppo_frac_400000": "results/lunarlander_pipeline/q_models/ppo_frac_400000.pt",
-    "ppo_frac_600000": "results/lunarlander_pipeline/q_models/ppo_frac_600000.pt",
-    "ppo_frac_800000": "results/lunarlander_pipeline/q_models/ppo_frac_800000.pt",
-    "ppo_frac_1000000": "results/lunarlander_pipeline/q_models/ppo_frac_1000000.pt"
+    "ppo_frac_0": "results/nll/lunarlander_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_200000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_200000.pt",
+    "ppo_frac_400000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_400000.pt",
+    "ppo_frac_600000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_600000.pt",
+    "ppo_frac_800000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_800000.pt",
+    "ppo_frac_1000000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_1000000.pt"
   },
   "dynamics_paths": {
-    "supervised": "results/lunarlander_pipeline/dynamics/dynamics_supervised.pt",
-    "ranking": "results/lunarlander_pipeline/dynamics/dynamics_ranking.pt",
+    "supervised": "results/nll/lunarlander_pipeline/dynamics/dynamics_supervised.pt",
+    "ranking": "results/nll/lunarlander_pipeline/dynamics/dynamics_ranking.pt",
     "q_aware": {},
     "ranking_new": {
-      "kendall": "results/lunarlander_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
-      "hinge": "results/lunarlander_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
-      "listnet": "results/lunarlander_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+      "kendall": "results/nll/lunarlander_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/nll/lunarlander_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/nll/lunarlander_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
     }
   },
   "results": [
@@ -70,15 +72,13 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/lunarlander_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "true_return": -20708.62492694855,
-      "q_estimate": -37.075172424316406,
+      "q_estimate": -32.84574890136719,
       "dynamics": {
-        "supervised": -5920.61328125,
-        "ranking": -18192.244140625,
+        "supervised": -7042.08740234375,
         "ranking_new": {
-          "kendall": -17786.16796875,
-          "hinge": -11428.73828125,
-          "listnet": -7571.861328125
+          "kendall": -7426.3076171875,
+          "hinge": -7345.0732421875,
+          "listnet": -7246.38623046875
         }
       },
       "env_mc": -6872.595047188794
@@ -87,15 +87,13 @@
       "name": "ppo_frac_200000",
       "checkpoint": "results/lunarlander_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "true_return": -74863.5819864273,
-      "q_estimate": 2.926034927368164,
+      "q_estimate": 6.807488918304443,
       "dynamics": {
-        "supervised": -5495.9765625,
-        "ranking": -16733.919921875,
+        "supervised": -6159.66796875,
         "ranking_new": {
-          "kendall": -17053.09375,
-          "hinge": -10639.79296875,
-          "listnet": -7348.58935546875
+          "kendall": -6087.00341796875,
+          "hinge": -5963.24169921875,
+          "listnet": -5622.0341796875
         }
       },
       "env_mc": -6232.408643323505
@@ -104,15 +102,13 @@
       "name": "ppo_frac_400000",
       "checkpoint": "results/lunarlander_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "true_return": -159264.89989624024,
-      "q_estimate": 10.524621963500977,
+      "q_estimate": 12.568634033203125,
       "dynamics": {
-        "supervised": -5451.8447265625,
-        "ranking": -16540.95703125,
+        "supervised": -6055.47412109375,
         "ranking_new": {
-          "kendall": -16476.958984375,
-          "hinge": -10014.1787109375,
-          "listnet": -7103.3251953125
+          "kendall": -5908.1220703125,
+          "hinge": -5707.96630859375,
+          "listnet": -5565.41455078125
         }
       },
       "env_mc": -6001.6345752200905
@@ -121,15 +117,13 @@
       "name": "ppo_frac_600000",
       "checkpoint": "results/lunarlander_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "true_return": -147111.53105010986,
-      "q_estimate": 15.020980834960938,
+      "q_estimate": 13.426826477050781,
       "dynamics": {
-        "supervised": -5478.1181640625,
-        "ranking": -16509.341796875,
+        "supervised": -6008.37255859375,
         "ranking_new": {
-          "kendall": -16284.2783203125,
-          "hinge": -9922.302734375,
-          "listnet": -7066.8603515625
+          "kendall": -5944.75634765625,
+          "hinge": -5687.71728515625,
+          "listnet": -5597.04345703125
         }
       },
       "env_mc": -5985.207134671908
@@ -138,15 +132,13 @@
       "name": "ppo_frac_800000",
       "checkpoint": "results/lunarlander_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "true_return": -143356.91385574342,
-      "q_estimate": 11.592217445373535,
+      "q_estimate": 14.67094898223877,
       "dynamics": {
-        "supervised": -5482.21728515625,
-        "ranking": -16538.814453125,
+        "supervised": -5971.06201171875,
         "ranking_new": {
-          "kendall": -16428.15625,
-          "hinge": -9954.302734375,
-          "listnet": -7058.67333984375
+          "kendall": -5970.75341796875,
+          "hinge": -5711.12841796875,
+          "listnet": -5591.4921875
         }
       },
       "env_mc": -5987.756545789322
@@ -155,15 +147,13 @@
       "name": "ppo_frac_1000000",
       "checkpoint": "results/lunarlander_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "true_return": -136412.82783355712,
-      "q_estimate": 14.191861152648926,
+      "q_estimate": 12.786382675170898,
       "dynamics": {
-        "supervised": -5468.13671875,
-        "ranking": -16540.0625,
+        "supervised": -6018.31640625,
         "ranking_new": {
-          "kendall": -16438.93359375,
-          "hinge": -9917.712890625,
-          "listnet": -7075.40234375
+          "kendall": -5897.2197265625,
+          "hinge": -5646.92333984375,
+          "listnet": -5593.29296875
         }
       },
       "env_mc": -5981.859917318724

@@ -26,19 +26,21 @@
     "q_samples": 32,
     "dyn_epochs": 2000,
     "dyn_batch": 1024,
-    "dyn_lr": 0.001,
+    "dyn_lr": 0.0003,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 200,
+    "dyn_early_stop_patience": 50,
     "dyn_min_epochs": 50,
+    "dynamics_loss": "nll",
     "lambda_td": 0.1,
-    "lambda_rank": 0.1,
+    "lambda_rank": 0.5,
     "eval_episodes": 20,
     "eval_rollouts": 256,
     "eval_horizon": 200,
-    "output_dir": "results/mse/pendulum_pipeline",
+    "output_dir": "results/nll/pendulum_pipeline",
     "device": "auto",
     "force_policy_training": false,
-    "force_q_training": true,
+    "force_dataset_collection": false,
+    "force_q_training": false,
     "force_dynamics_training": true,
     "results_only": false,
     "wandb_project": "DT2-pendulum",
@@ -56,13 +58,13 @@
     "ppo_frac_5000000": "results/mse/pendulum_pipeline/q_models/ppo_frac_5000000.pt"
   },
   "dynamics_paths": {
-    "supervised": "results/mse/pendulum_pipeline/dynamics/dynamics_supervised.pt",
-    "ranking": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking.pt",
+    "supervised": "results/nll/pendulum_pipeline/dynamics/dynamics_supervised.pt",
+    "ranking": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking.pt",
     "q_aware": {},
     "ranking_new": {
-      "kendall": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
-      "hinge": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
-      "listnet": "results/mse/pendulum_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+      "kendall": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/nll/pendulum_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
     }
   },
   "results": [
@@ -70,16 +72,14 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "true_return": -1207.301513671875,
       "env_mc": -120.06181335449219,
-      "q_estimate": -110.97696685791016,
+      "q_estimate": -112.4167709350586,
       "dynamics": {
-        "supervised": -119.43460083007812,
-        "ranking": -75.1415786743164,
+        "supervised": -121.3795166015625,
         "ranking_new": {
-          "kendall": -120.02173614501953,
-          "hinge": -103.21182250976562,
-          "listnet": -113.21119689941406
+          "kendall": -118.77119445800781,
+          "hinge": -122.32426452636719,
+          "listnet": -125.29378509521484
         }
       }
     },
@@ -87,16 +87,14 @@
       "name": "ppo_frac_1000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "true_return": -171.38552856445312,
       "env_mc": -78.46900939941406,
-      "q_estimate": -75.7807846069336,
+      "q_estimate": -77.55058288574219,
       "dynamics": {
-        "supervised": -77.89884948730469,
-        "ranking": -66.37738037109375,
+        "supervised": -73.4927978515625,
         "ranking_new": {
-          "kendall": -63.80846405029297,
-          "hinge": -64.23055267333984,
-          "listnet": -100.01344299316406
+          "kendall": -79.02031707763672,
+          "hinge": -88.48133087158203,
+          "listnet": -91.61747741699219
         }
       }
     },
@@ -104,16 +102,14 @@
       "name": "ppo_frac_2000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_2000000",
       "timesteps": 2000000,
-      "true_return": -147.9751739501953,
       "env_mc": -75.94432067871094,
-      "q_estimate": -72.68738555908203,
+      "q_estimate": -74.19184875488281,
       "dynamics": {
-        "supervised": -72.19587707519531,
-        "ranking": -59.041099548339844,
+        "supervised": -73.36527252197266,
         "ranking_new": {
-          "kendall": -62.97140884399414,
-          "hinge": -50.134986877441406,
-          "listnet": -98.96412658691406
+          "kendall": -76.02139282226562,
+          "hinge": -75.04962158203125,
+          "listnet": -73.62982177734375
         }
       }
     },
@@ -121,16 +117,14 @@
       "name": "ppo_frac_3000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_3000000",
       "timesteps": 3000000,
-      "true_return": -148.49398803710938,
       "env_mc": -75.53142547607422,
-      "q_estimate": -72.37512969970703,
+      "q_estimate": -73.86689758300781,
       "dynamics": {
-        "supervised": -72.31582641601562,
-        "ranking": -59.436561584472656,
+        "supervised": -75.24928283691406,
         "ranking_new": {
-          "kendall": -60.17920684814453,
-          "hinge": -50.452598571777344,
-          "listnet": -98.72201538085938
+          "kendall": -76.0411376953125,
+          "hinge": -77.92243957519531,
+          "listnet": -78.14178466796875
         }
       }
     },
@@ -138,16 +132,14 @@
       "name": "ppo_frac_4000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_4000000",
       "timesteps": 4000000,
-      "true_return": -140.45201110839844,
       "env_mc": -75.36467742919922,
-      "q_estimate": -71.86197662353516,
+      "q_estimate": -73.38902282714844,
       "dynamics": {
-        "supervised": -70.55868530273438,
-        "ranking": -56.11342239379883,
+        "supervised": -69.99544525146484,
         "ranking_new": {
-          "kendall": -60.85515594482422,
-          "hinge": -48.333106994628906,
-          "listnet": -97.10731506347656
+          "kendall": -75.840576171875,
+          "hinge": -78.14060974121094,
+          "listnet": -77.074951171875
         }
       }
     },
@@ -155,16 +147,14 @@
       "name": "ppo_frac_5000000",
       "checkpoint": "results/pendulum_pipeline/policies/ppo_frac_5000000",
       "timesteps": 5000000,
-      "true_return": -141.24745178222656,
       "env_mc": -75.2945556640625,
-      "q_estimate": -73.24798583984375,
+      "q_estimate": -74.71290588378906,
       "dynamics": {
-        "supervised": -70.22563934326172,
-        "ranking": -59.16243362426758,
+        "supervised": -74.05180358886719,
         "ranking_new": {
-          "kendall": -58.98905563354492,
-          "hinge": -49.78873825073242,
-          "listnet": -97.66263580322266
+          "kendall": -75.07566833496094,
+          "hinge": -72.1005859375,
+          "listnet": -78.288818359375
         }
       }
     }
