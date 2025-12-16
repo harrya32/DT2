@@ -29,10 +29,10 @@
     "dyn_batch": 512,
     "dyn_lr": 0.0003,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 50,
+    "dyn_early_stop_patience": 100,
     "dyn_min_epochs": 50,
     "dynamics_loss": "nll",
-    "lambda_rank": 0.5,
+    "lambda_rank": 0.1,
     "eval_episodes": 20,
     "eval_rollouts": 200,
     "eval_horizon": 200,
@@ -40,7 +40,7 @@
     "device": "auto",
     "force_policy_training": false,
     "force_dataset_collection": false,
-    "force_q_training": false,
+    "force_q_training": true,
     "force_dynamics_training": true,
     "results_only": false,
     "wandb_project": "DT2-anisotropic",
@@ -50,12 +50,12 @@
   },
   "num_transitions": 30000,
   "q_model_paths": {
-    "ppo_frac_0": "results/mse/anisotropic_pipeline/q_models/ppo_frac_0.pt",
-    "ppo_frac_200000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_200000.pt",
-    "ppo_frac_400000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_400000.pt",
-    "ppo_frac_600000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_600000.pt",
-    "ppo_frac_800000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_800000.pt",
-    "ppo_frac_1000000": "results/mse/anisotropic_pipeline/q_models/ppo_frac_1000000.pt"
+    "ppo_frac_0": "results/nll/anisotropic_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_200000": "results/nll/anisotropic_pipeline/q_models/ppo_frac_200000.pt",
+    "ppo_frac_400000": "results/nll/anisotropic_pipeline/q_models/ppo_frac_400000.pt",
+    "ppo_frac_600000": "results/nll/anisotropic_pipeline/q_models/ppo_frac_600000.pt",
+    "ppo_frac_800000": "results/nll/anisotropic_pipeline/q_models/ppo_frac_800000.pt",
+    "ppo_frac_1000000": "results/nll/anisotropic_pipeline/q_models/ppo_frac_1000000.pt"
   },
   "dynamics_paths": {
     "supervised": "results/nll/anisotropic_pipeline/dynamics/dynamics_supervised.pt",
@@ -70,13 +70,13 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": 62.88587951660156,
+      "q_estimate": 62.67154312133789,
       "dynamics": {
-        "supervised": 23.07857894897461,
+        "supervised": 17.9042911529541,
         "ranking_new": {
-          "kendall": 16.163991928100586,
-          "hinge": -9.869943618774414,
-          "listnet": 47.06388473510742
+          "kendall": 25.593584060668945,
+          "hinge": -3.2268621921539307,
+          "listnet": 21.64518928527832
         }
       },
       "env_mc": 16.13092803955078
@@ -85,13 +85,13 @@
       "name": "ppo_frac_200000",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "q_estimate": 170.75723266601562,
+      "q_estimate": 170.58424377441406,
       "dynamics": {
-        "supervised": 158.52194213867188,
+        "supervised": 156.2933807373047,
         "ranking_new": {
-          "kendall": 158.85299682617188,
-          "hinge": 10.346474647521973,
-          "listnet": 139.03366088867188
+          "kendall": 157.88119506835938,
+          "hinge": 32.26956558227539,
+          "listnet": 129.16998291015625
         }
       },
       "env_mc": 156.90390014648438
@@ -100,13 +100,13 @@
       "name": "ppo_frac_400000",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": 172.47402954101562,
+      "q_estimate": 173.4703369140625,
       "dynamics": {
-        "supervised": 159.1183624267578,
+        "supervised": 157.264892578125,
         "ranking_new": {
-          "kendall": 160.2183380126953,
-          "hinge": 30.29208755493164,
-          "listnet": 139.1397705078125
+          "kendall": 157.5311279296875,
+          "hinge": 45.03890609741211,
+          "listnet": 125.351318359375
         }
       },
       "env_mc": 158.37051391601562
@@ -115,13 +115,13 @@
       "name": "ppo_frac_600000",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "q_estimate": 173.19300842285156,
+      "q_estimate": 175.53244018554688,
       "dynamics": {
-        "supervised": 160.92970275878906,
+        "supervised": 155.57345581054688,
         "ranking_new": {
-          "kendall": 161.94677734375,
-          "hinge": 69.86058807373047,
-          "listnet": 145.18055725097656
+          "kendall": 157.36558532714844,
+          "hinge": 73.32438659667969,
+          "listnet": 128.87924194335938
         }
       },
       "env_mc": 160.8992919921875
@@ -130,13 +130,13 @@
       "name": "ppo_frac_800000",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 175.16770935058594,
+      "q_estimate": 176.53375244140625,
       "dynamics": {
-        "supervised": 162.14846801757812,
+        "supervised": 156.47047424316406,
         "ranking_new": {
-          "kendall": 161.75572204589844,
-          "hinge": 78.96986389160156,
-          "listnet": 148.29991149902344
+          "kendall": 156.7230987548828,
+          "hinge": 83.26496124267578,
+          "listnet": 140.6136932373047
         }
       },
       "env_mc": 161.2451629638672
@@ -145,13 +145,13 @@
       "name": "ppo_frac_1000000",
       "checkpoint": "results/anisotropic_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "q_estimate": 173.65309143066406,
+      "q_estimate": 178.07675170898438,
       "dynamics": {
-        "supervised": 161.38653564453125,
+        "supervised": 157.02565002441406,
         "ranking_new": {
-          "kendall": 162.3889617919922,
-          "hinge": 82.42132568359375,
-          "listnet": 149.6017608642578
+          "kendall": 155.99029541015625,
+          "hinge": 82.99752044677734,
+          "listnet": 139.92710876464844
         }
       },
       "env_mc": 161.36329650878906

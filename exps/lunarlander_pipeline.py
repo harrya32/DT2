@@ -63,6 +63,31 @@ class FractionCheckpointCallback(BaseCallback):
         return True
 
 
+class WandbMetricsCallback(BaseCallback):
+    """Callback to log PPO training metrics to wandb."""
+    def __init__(self, run: Optional[Any], prefix: str = "ppo"):
+        super().__init__(verbose=0)
+        self.run = run
+        self.prefix = prefix
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> bool:
+        if self.run is None:
+            return True
+        log_dict = getattr(self.logger, "name_to_value", None)
+        if not log_dict:
+            return True
+        payload = {}
+        for key, value in log_dict.items():
+            if isinstance(value, (int, float)):
+                payload[f"{self.prefix}/{key}"] = value
+        if payload:
+            wandb_log(self.run, payload, step=self.num_timesteps)
+        return True
+
+
 class SB3PolicyAdapter:
     def __init__(self, name: str, model: PPO, batch_size: int = 2048, act_low: float = -1.0, act_high: float = 1.0):
         self.name = name
@@ -197,6 +222,7 @@ def train_ppo_with_checkpoints(
     ent_coef: float,
     vf_coef: float,
     device: str,
+    wandb_run: Optional[Any] = None,
 ) -> List[Dict[str, object]]:
     set_random_seed(seed)
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -233,12 +259,13 @@ def train_ppo_with_checkpoints(
     snapshots.append({"name": init_path.name, "path": init_path.as_posix(), "timesteps": 0})
 
     milestone_steps = [int(total_steps * f) for f in fractions if f > 0]
-    callback = FractionCheckpointCallback(milestone_steps, save_dir, prefix="ppo_frac", verbose=1)
-    model.learn(total_timesteps=total_steps, callback=callback, progress_bar=True)
+    checkpoint_cb = FractionCheckpointCallback(milestone_steps, save_dir, prefix="ppo_frac", verbose=1)
+    callbacks: List[BaseCallback] = [checkpoint_cb, WandbMetricsCallback(wandb_run)]
+    model.learn(total_timesteps=total_steps, callback=callbacks, progress_bar=True)
 
     vec_env.close()
 
-    snapshots.extend(callback.saved)
+    snapshots.extend(checkpoint_cb.saved)
     return snapshots
 
 
@@ -668,6 +695,7 @@ def main() -> None:
             ent_coef=args.ent_coef,
             vf_coef=args.vf_coef,
             device=device.type if device.type in {"cuda", "cpu"} else "cpu",
+            wandb_run=wandb_run,
         )
         save_snapshots(snapshots_manifest, snapshots)
         policy_trained = True

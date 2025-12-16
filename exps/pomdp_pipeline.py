@@ -1,11 +1,25 @@
 """
-Pipeline for anisotropic state-importance environment.
+Pipeline for Partially Observable MDP (POMDP) environment.
 
-This environment has:
-- A few "relevant" state dimensions that determine reward (e.g., position, velocity toward goal)
-- Many "irrelevant" distractor dimensions that evolve stochastically but don't affect reward
-- The idea: supervised dynamics will spread capacity across all dims equally,
-  while ranking-aware dynamics should focus on the reward-relevant dims.
+This environment tests the hypothesis that ranking-aware dynamics losses
+outperform pure NLL when the true dynamics function is outside the hypothesis class.
+
+Key idea:
+- The TRUE dynamics depend on hidden state variables that the agent cannot observe
+- The agent only sees a partial observation of the full state
+- Because the dynamics model only receives observations (not full state),
+  it cannot perfectly predict transitions - there's irreducible error
+- NLL will try to fit P(s'|obs, a) = ∫ P(s'|obs, hidden, a) P(hidden|obs) d_hidden
+  which may be multi-modal or high-variance
+- Ranking-aware loss focuses on preserving policy ordering, which may be more
+  robust to this model misspecification
+
+Environment:
+- Full state: [x, v, hidden_force, hidden_friction]
+- Observation: [x, v] (agent cannot see hidden_force or hidden_friction)
+- hidden_force: a constant bias force that affects acceleration
+- hidden_friction: affects velocity damping
+- These hidden variables make transitions unpredictable from observations alone
 """
 
 from __future__ import annotations
@@ -48,114 +62,133 @@ _DEFINED_WANDB_STEP_KEYS: Set[str] = set()
 
 
 # =============================================================================
-# Custom Anisotropic Environment
+# Custom POMDP Environment
 # =============================================================================
 
-class AnisotropicEnv(gym.Env):
+class POMDPEnv(gym.Env):
     """
-    Environment with anisotropic state importance.
+    Partially Observable MDP for testing dynamics model misspecification.
     
-    State: [x, v, goal_dist, distractor_0, distractor_1, ..., distractor_{n-1}]
-    - x: position in [-1.5, 1.5]
-    - v: velocity in [-1, 1]  
-    - goal_dist: distance to goal (derived from x, but included as state)
-    - distractor_i: random walk dimensions that don't affect reward
+    Full State: [x, v, hidden_force, hidden_friction]
+    - x: position in [-2, 2]
+    - v: velocity in [-2, 2]
+    - hidden_force: constant bias affecting acceleration, in [-0.5, 0.5]
+    - hidden_friction: friction coefficient affecting velocity, in [0.0, 0.3]
+    
+    Observation: [x, v] - the agent CANNOT see hidden_force or hidden_friction
     
     Action: continuous in [-1, 1], controls acceleration
     
-    Reward: based on proximity to goal (x=0) and velocity penalty
-    - Only x, v, goal_dist matter for reward
-    - Distractors evolve but are irrelevant
+    Dynamics:
+    - v_new = v * (1 - hidden_friction) + (action + hidden_force) * dt
+    - x_new = x + v_new * dt
     
-    This creates a situation where:
-    - Supervised dynamics must model all dims equally (MSE doesn't know which matter)
-    - Ranking-aware can focus on x, v, goal_dist since those determine policy returns
+    The hidden variables are sampled once per episode and remain constant.
+    This creates systematic unpredictability from the agent's perspective:
+    - Same (x, v, action) can lead to different (x', v') depending on hidden state
+    - A dynamics model seeing only (x, v) cannot perfectly predict transitions
+    
+    Reward: based on reaching goal position (x=0) with low velocity
     """
     
     metadata = {"render_modes": []}
     
     def __init__(
         self,
-        num_distractors: int = 10,
         max_steps: int = 200,
-        distractor_noise: float = 0.1,
+        hidden_force_range: Tuple[float, float] = (-0.5, 0.5),
+        hidden_friction_range: Tuple[float, float] = (0.0, 0.3),
         goal_position: float = 0.0,
+        dt: float = 0.1,
     ):
         super().__init__()
-        self.num_distractors = num_distractors
         self.max_steps = max_steps
-        self.distractor_noise = distractor_noise
+        self.hidden_force_range = hidden_force_range
+        self.hidden_friction_range = hidden_friction_range
         self.goal_position = goal_position
+        self.dt = dt
         
-        # State: [x, v, goal_dist] + distractors
-        self.relevant_dims = 3
-        self.state_dim = self.relevant_dims + num_distractors
+        # Full state dim vs observation dim
+        self.full_state_dim = 4  # [x, v, hidden_force, hidden_friction]
+        self.obs_dim = 2  # [x, v]
         
-        # Observation and action spaces
+        # Observation space (what the agent sees)
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32
+            low=np.array([-2.0, -2.0], dtype=np.float32),
+            high=np.array([2.0, 2.0], dtype=np.float32),
+            dtype=np.float32
         )
+        
+        # Action space
         self.action_space = spaces.Box(
             low=-1.0, high=1.0, shape=(1,), dtype=np.float32
         )
         
-        self._state = None
+        self._full_state = None
         self._step_count = 0
         self._rng = np.random.default_rng()
+    
+    def _get_obs(self) -> np.ndarray:
+        """Return the observable part of the state."""
+        return self._full_state[:2].copy()
     
     def reset(self, seed=None, options=None):
         if seed is not None:
             self._rng = np.random.default_rng(seed)
         
-        # Initialize position and velocity randomly
-        x = self._rng.uniform(-0.8, 0.8)
-        v = self._rng.uniform(-0.3, 0.3)
-        goal_dist = abs(x - self.goal_position)
+        # Initialize observable state
+        x = self._rng.uniform(-1.0, 1.0)
+        v = self._rng.uniform(-0.5, 0.5)
         
-        # Initialize distractors randomly
-        distractors = self._rng.uniform(-1, 1, size=self.num_distractors)
+        # Sample hidden variables for this episode (constant throughout)
+        hidden_force = self._rng.uniform(*self.hidden_force_range)
+        hidden_friction = self._rng.uniform(*self.hidden_friction_range)
         
-        self._state = np.concatenate([[x, v, goal_dist], distractors]).astype(np.float32)
+        self._full_state = np.array(
+            [x, v, hidden_force, hidden_friction], dtype=np.float32
+        )
         self._step_count = 0
         
-        return self._state.copy(), {}
+        return self._get_obs(), {}
     
     def step(self, action):
         action = np.clip(action, -1.0, 1.0).flatten()[0]
         
-        x, v, _ = self._state[:3]
-        distractors = self._state[3:].copy()
+        x, v, hidden_force, hidden_friction = self._full_state
         
-        # Physics update for relevant dims
-        dt = 0.1
-        v_new = np.clip(v + action * dt, -1.0, 1.0)
-        x_new = np.clip(x + v_new * dt, -1.5, 1.5)
-        goal_dist_new = abs(x_new - self.goal_position)
+        # Dynamics with hidden variables
+        # Acceleration is affected by hidden_force
+        acceleration = action + hidden_force
+        # Velocity is damped by hidden_friction
+        v_new = v * (1 - hidden_friction) + acceleration * self.dt
+        v_new = np.clip(v_new, -2.0, 2.0)
         
-        # Distractor update: random walk (completely independent of action)
-        distractor_noise = self._rng.normal(0, self.distractor_noise, size=self.num_distractors)
-        distractors_new = np.clip(distractors + distractor_noise, -2.0, 2.0)
+        x_new = x + v_new * self.dt
+        x_new = np.clip(x_new, -2.0, 2.0)
         
-        self._state = np.concatenate(
-            [[x_new, v_new, goal_dist_new], distractors_new]
-        ).astype(np.float32)
+        # Hidden variables stay constant
+        self._full_state = np.array(
+            [x_new, v_new, hidden_force, hidden_friction], dtype=np.float32
+        )
         self._step_count += 1
         
-        # Reward: only depends on relevant dims
-        reward = self._compute_reward(x_new, v_new, goal_dist_new, action)
+        # Reward only depends on observable state
+        reward = self._compute_reward(x_new, v_new, action)
         
         # Termination
         terminated = False
         truncated = self._step_count >= self.max_steps
         
-        return self._state.copy(), reward, terminated, truncated, {}
+        return self._get_obs(), reward, terminated, truncated, {}
     
-    def _compute_reward(self, x, v, goal_dist, action):
-        """Reward only depends on position, velocity, and action - not distractors."""
-        # Reward for being close to goal
-        proximity_reward = 1.0 - goal_dist  # Max 1.0 at goal
+    def _compute_reward(self, x, v, action):
+        """Reward for reaching goal with low velocity."""
+        goal_dist = abs(x - self.goal_position)
         
-        # Velocity penalty (prefer slow approach)
+        # Reward for being close to goal
+        proximity_reward = 1.0 - goal_dist / 2.0  # Max 1.0 at goal
+        
+        # Velocity penalty
         velocity_penalty = -0.1 * abs(v)
         
         # Action cost
@@ -165,16 +198,20 @@ class AnisotropicEnv(gym.Env):
         goal_bonus = 1.0 if goal_dist < 0.1 else 0.0
         
         return proximity_reward + velocity_penalty + action_cost + goal_bonus
+    
+    def get_full_state(self) -> np.ndarray:
+        """For analysis: return the full state including hidden variables."""
+        return self._full_state.copy()
 
 
-def anisotropic_reward_fn(obs: np.ndarray, action: np.ndarray) -> float:
-    """Numpy reward function for evaluation."""
+def pomdp_reward_fn(obs: np.ndarray, action: np.ndarray) -> float:
+    """Numpy reward function for evaluation (uses observation only)."""
     x = obs[0]
     v = obs[1]
-    goal_dist = obs[2]
     act = action.flatten()[0] if hasattr(action, 'flatten') else action
     
-    proximity_reward = 1.0 - goal_dist
+    goal_dist = abs(x)
+    proximity_reward = 1.0 - goal_dist / 2.0
     velocity_penalty = -0.1 * abs(v)
     action_cost = -0.05 * abs(act)
     goal_bonus = 1.0 if goal_dist < 0.1 else 0.0
@@ -182,14 +219,14 @@ def anisotropic_reward_fn(obs: np.ndarray, action: np.ndarray) -> float:
     return proximity_reward + velocity_penalty + action_cost + goal_bonus
 
 
-def anisotropic_reward_torch(states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
+def pomdp_reward_torch(states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
     """Torch reward function for dynamics training."""
     x = states[:, 0]
     v = states[:, 1]
-    goal_dist = states[:, 2]
     act = actions[:, 0] if actions.dim() > 1 else actions
     
-    proximity_reward = 1.0 - goal_dist
+    goal_dist = torch.abs(x)
+    proximity_reward = 1.0 - goal_dist / 2.0
     velocity_penalty = -0.1 * torch.abs(v)
     action_cost = -0.05 * torch.abs(act)
     goal_bonus = (goal_dist < 0.1).float()
@@ -199,14 +236,14 @@ def anisotropic_reward_torch(states: torch.Tensor, actions: torch.Tensor) -> tor
 
 # Register the environment
 gym.register(
-    id="AnisotropicEnv-v0",
-    entry_point="anisotropic_pipeline:AnisotropicEnv",
+    id="POMDPEnv-v0",
+    entry_point="pomdp_pipeline:POMDPEnv",
     max_episode_steps=200,
 )
 
 
 # =============================================================================
-# Utility functions (adapted from lunarlander_pipeline)
+# Utility functions (adapted from anisotropic_pipeline)
 # =============================================================================
 
 def default_device() -> torch.device:
@@ -383,14 +420,23 @@ def load_snapshots(manifest_path: Path) -> List[Dict[str, object]]:
 # Training functions
 # =============================================================================
 
-def make_anisotropic_env(num_distractors: int = 10, max_steps: int = 200):
-    """Factory for creating the anisotropic environment."""
-    return AnisotropicEnv(num_distractors=num_distractors, max_steps=max_steps)
+def make_pomdp_env(
+    max_steps: int = 200,
+    hidden_force_range: Tuple[float, float] = (-0.5, 0.5),
+    hidden_friction_range: Tuple[float, float] = (0.0, 0.3),
+):
+    """Factory for creating the POMDP environment."""
+    return POMDPEnv(
+        max_steps=max_steps,
+        hidden_force_range=hidden_force_range,
+        hidden_friction_range=hidden_friction_range,
+    )
 
 
 def train_ppo_with_checkpoints(
-    num_distractors: int,
     max_steps: int,
+    hidden_force_range: Tuple[float, float],
+    hidden_friction_range: Tuple[float, float],
     total_steps: int,
     save_dir: Path,
     fractions: Sequence[float],
@@ -412,7 +458,11 @@ def train_ppo_with_checkpoints(
     save_dir.mkdir(parents=True, exist_ok=True)
 
     def env_fn():
-        return AnisotropicEnv(num_distractors=num_distractors, max_steps=max_steps)
+        return POMDPEnv(
+            max_steps=max_steps,
+            hidden_force_range=hidden_force_range,
+            hidden_friction_range=hidden_friction_range,
+        )
 
     vec_env = make_vec_env(env_fn, n_envs=n_envs, seed=seed)
     vec_env = VecMonitor(vec_env)
@@ -449,12 +499,18 @@ def train_ppo_with_checkpoints(
 
 def rollout_policy(
     model: PPO,
-    num_distractors: int,
     max_steps: int,
+    hidden_force_range: Tuple[float, float],
+    hidden_friction_range: Tuple[float, float],
     total_steps: int,
     seed: int,
 ) -> Tuple[List[np.ndarray], List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]]]:
-    env = AnisotropicEnv(num_distractors=num_distractors, max_steps=max_steps)
+    """Rollout policy and collect (observation, action, reward, next_observation, done) tuples."""
+    env = POMDPEnv(
+        max_steps=max_steps,
+        hidden_force_range=hidden_force_range,
+        hidden_friction_range=hidden_friction_range,
+    )
     rng = np.random.default_rng(seed)
     obs, _ = env.reset(seed=seed)
     initial_states: List[np.ndarray] = [obs.copy()]
@@ -477,8 +533,9 @@ def rollout_policy(
 def build_offline_dataset(
     policy_snapshots: Sequence[Dict[str, object]],
     policy_models: Dict[str, PPO],
-    num_distractors: int,
     max_steps: int,
+    hidden_force_range: Tuple[float, float],
+    hidden_friction_range: Tuple[float, float],
     steps_per_policy: int,
     seed: int,
 ) -> OfflineDataset:
@@ -492,7 +549,8 @@ def build_offline_dataset(
     for idx, snap in enumerate(policy_snapshots):
         model = policy_models[snap["name"]]
         init_states, transitions = rollout_policy(
-            model, num_distractors, max_steps, steps_per_policy, seed + idx
+            model, max_steps, hidden_force_range, hidden_friction_range,
+            steps_per_policy, seed + idx
         )
         initial_states.extend(init_states)
         for s, a, r, sn, d in transitions:
@@ -596,24 +654,16 @@ def train_dynamics_models(
     val_fraction: float,
     early_stop_patience: int,
     min_epochs: int,
-    num_distractors: int,
     dynamics_loss: str = "nll",
     wandb_run: Optional[Any] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet]]:
-    state_dim = dataset.states.shape[1]
+    state_dim = dataset.states.shape[1]  # 2 (only observables)
     act_dim = dataset.actions.shape[1]
 
-    # State bounds for the anisotropic env
-    # Relevant dims: x in [-1.5, 1.5], v in [-1, 1], goal_dist in [0, 1.5]
-    # Distractors in [-2, 2]
-    state_low = torch.tensor(
-        [-1.5, -1.0, 0.0] + [-2.0] * num_distractors,
-        dtype=torch.float32,
-    )
-    state_high = torch.tensor(
-        [1.5, 1.0, 1.5] + [2.0] * num_distractors,
-        dtype=torch.float32,
-    )
+    # State bounds for the POMDP observation space
+    # Observation: x in [-2, 2], v in [-2, 2]
+    state_low = torch.tensor([-2.0, -2.0], dtype=torch.float32)
+    state_high = torch.tensor([2.0, 2.0], dtype=torch.float32)
 
     # Supervised dynamics
     sup_model = DynamicsNet(
@@ -656,7 +706,7 @@ def train_dynamics_models(
             epochs=dyn_epochs,
             batch_size=dyn_batch,
             lr=dyn_lr,
-            reward_fn=anisotropic_reward_torch,
+            reward_fn=pomdp_reward_torch,
             device=device,
             log_hook=make_epoch_logger(wandb_run, f"dynamics/ranking_new/{loss_name}"),
             val_fraction=val_fraction,
@@ -719,12 +769,17 @@ def load_dynamics_models(
 
 def evaluate_sb3_policy(
     model: PPO,
-    num_distractors: int,
     max_steps: int,
+    hidden_force_range: Tuple[float, float],
+    hidden_friction_range: Tuple[float, float],
     episodes: int,
     seed: int,
 ) -> float:
-    env = AnisotropicEnv(num_distractors=num_distractors, max_steps=max_steps)
+    env = POMDPEnv(
+        max_steps=max_steps,
+        hidden_force_range=hidden_force_range,
+        hidden_friction_range=hidden_friction_range,
+    )
     returns = []
     for ep in range(episodes):
         obs, _ = env.reset(seed=seed + ep)
@@ -733,7 +788,7 @@ def evaluate_sb3_policy(
         total = 0.0
         while not (done or truncated):
             action, _ = model.predict(obs, deterministic=True)
-            total += anisotropic_reward_fn(obs, action)
+            total += pomdp_reward_fn(obs, action)
             obs, _, done, truncated, _ = env.step(action)
         returns.append(total)
     return float(np.mean(returns))
@@ -741,15 +796,20 @@ def evaluate_sb3_policy(
 
 def evaluate_sb3_policy_fixed_horizon(
     model: PPO,
-    num_distractors: int,
     max_steps: int,
+    hidden_force_range: Tuple[float, float],
+    hidden_friction_range: Tuple[float, float],
     horizon: int,
     gamma: float,
     rollouts: int,
     seed: int,
 ) -> float:
     """Roll out PPO in the true env for a fixed horizon."""
-    env = AnisotropicEnv(num_distractors=num_distractors, max_steps=max_steps)
+    env = POMDPEnv(
+        max_steps=max_steps,
+        hidden_force_range=hidden_force_range,
+        hidden_friction_range=hidden_friction_range,
+    )
     rng = np.random.default_rng(seed)
     returns: List[float] = []
     for ep in range(rollouts):
@@ -758,7 +818,7 @@ def evaluate_sb3_policy_fixed_horizon(
         discount = 1.0
         for _ in range(horizon):
             action, _ = model.predict(obs, deterministic=True)
-            total += discount * anisotropic_reward_fn(obs, action)
+            total += discount * pomdp_reward_fn(obs, action)
             discount *= gamma
             obs, _, terminated, truncated, _ = env.step(action)
             if terminated or truncated:
@@ -800,7 +860,7 @@ def evaluate_in_dynamics(
     discount = torch.ones_like(total)
     for _ in range(horizon):
         actions = policy.sample_torch_actions(states, deterministic=True)
-        rewards = anisotropic_reward_torch(states, actions)
+        rewards = pomdp_reward_torch(states, actions)
         total += discount * rewards
         discount *= gamma
         states = dynamics.sample_next(states, actions, deterministic=True)
@@ -808,14 +868,71 @@ def evaluate_in_dynamics(
 
 
 # =============================================================================
+# Analysis functions for understanding partial observability effects
+# =============================================================================
+
+def analyze_transition_variance(
+    max_steps: int,
+    hidden_force_range: Tuple[float, float],
+    hidden_friction_range: Tuple[float, float],
+    num_samples: int = 1000,
+    seed: int = 42,
+) -> Dict[str, float]:
+    """
+    Analyze how much variance in transitions is due to hidden variables.
+    
+    For the same (obs, action), measure variance in next_obs across different
+    hidden variable settings. This quantifies the "irreducible" prediction error.
+    """
+    rng = np.random.default_rng(seed)
+    
+    # Sample some fixed (obs, action) pairs
+    test_obs = rng.uniform([-1.0, -0.5], [1.0, 0.5], size=(100, 2)).astype(np.float32)
+    test_actions = rng.uniform(-1.0, 1.0, size=(100, 1)).astype(np.float32)
+    
+    # For each (obs, action), sample many hidden variable settings and compute next_obs
+    all_variances = []
+    
+    for obs, action in zip(test_obs, test_actions):
+        next_obs_samples = []
+        
+        for _ in range(num_samples):
+            # Sample hidden variables
+            hidden_force = rng.uniform(*hidden_force_range)
+            hidden_friction = rng.uniform(*hidden_friction_range)
+            
+            # Compute dynamics
+            x, v = obs
+            acceleration = action[0] + hidden_force
+            v_new = v * (1 - hidden_friction) + acceleration * 0.1
+            v_new = np.clip(v_new, -2.0, 2.0)
+            x_new = np.clip(x + v_new * 0.1, -2.0, 2.0)
+            
+            next_obs_samples.append([x_new, v_new])
+        
+        next_obs_samples = np.array(next_obs_samples)
+        variance = np.var(next_obs_samples, axis=0).sum()
+        all_variances.append(variance)
+    
+    return {
+        "mean_transition_variance": float(np.mean(all_variances)),
+        "std_transition_variance": float(np.std(all_variances)),
+        "max_transition_variance": float(np.max(all_variances)),
+    }
+
+
+# =============================================================================
 # Main
 # =============================================================================
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Anisotropic state-importance environment pipeline")
-    parser.add_argument("--num-distractors", type=int, default=10, help="Number of irrelevant distractor dimensions")
+    parser = argparse.ArgumentParser(description="POMDP environment pipeline for testing dynamics misspecification")
     parser.add_argument("--max-steps", type=int, default=200, help="Max steps per episode")
-    parser.add_argument("--total-steps", type=int, default=1_000_000)
+    parser.add_argument("--hidden-force-min", type=float, default=-1.5, help="Min hidden force bias")
+    parser.add_argument("--hidden-force-max", type=float, default=1.5, help="Max hidden force bias")
+    parser.add_argument("--hidden-friction-min", type=float, default=0.0, help="Min hidden friction")
+    parser.add_argument("--hidden-friction-max", type=float, default=0.6, help="Max hidden friction")
+    parser.add_argument("--total-steps", type=int, default=3_000_000)
     parser.add_argument("--ppo-fractions", type=float, nargs="*", default=[0.2, 0.4, 0.6, 0.8, 1.0])
     parser.add_argument("--n-envs", type=int, default=8)
     parser.add_argument("--n-steps", type=int, default=2048)
@@ -828,7 +945,7 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--rollout-steps", type=int, default=5_000, help="Steps per policy for dataset collection")
-    parser.add_argument("--q-epochs", type=int, default=1000)
+    parser.add_argument("--q-epochs", type=int, default=500)
     parser.add_argument("--q-batch", type=int, default=512)
     parser.add_argument("--q-lr", type=float, default=3e-4)
     parser.add_argument("--q-samples", type=int, default=32)
@@ -836,21 +953,22 @@ def main() -> None:
     parser.add_argument("--dyn-batch", type=int, default=512)
     parser.add_argument("--dyn-lr", type=float, default=3e-4)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
-    parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
+    parser.add_argument("--dyn-early-stop-patience", type=int, default=20)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"], help="Loss function for dynamics training")
     parser.add_argument("--lambda-rank", type=float, default=0.1)
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=200)
     parser.add_argument("--eval-horizon", type=int, default=200)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/nll/anisotropic_pipeline"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/pomdp_pipeline"))
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--force-policy-training", action="store_true")
     parser.add_argument("--force-dataset-collection", action="store_true", help="ignore saved offline dataset and recollect")
     parser.add_argument("--force-q-training", action="store_true")
     parser.add_argument("--force-dynamics-training", action="store_true")
     parser.add_argument("--results-only", action="store_true")
-    parser.add_argument("--wandb-project", type=str, default="DT2-anisotropic")
+    parser.add_argument("--analyze-variance", action="store_true", help="Analyze transition variance due to hidden variables")
+    parser.add_argument("--wandb-project", type=str, default="DT2-pomdp")
     parser.add_argument("--wandb-entity", type=str, default=None)
     parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument("--wandb-mode", type=str, default="online", choices=["online", "offline", "disabled"])
@@ -861,16 +979,32 @@ def main() -> None:
     ):
         parser.error("--results-only cannot be combined with force-training flags.")
 
+    hidden_force_range = (args.hidden_force_min, args.hidden_force_max)
+    hidden_friction_range = (args.hidden_friction_min, args.hidden_friction_max)
+
     device = torch.device(args.device) if args.device != "auto" else default_device()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     wandb_run = initialize_wandb(args)
 
     # Log environment info
     wandb_log(wandb_run, {
-        "env/num_distractors": args.num_distractors,
-        "env/state_dim": 3 + args.num_distractors,
-        "env/relevant_dims": 3,
+        "env/obs_dim": 2,
+        "env/hidden_dim": 2,
+        "env/hidden_force_range": list(hidden_force_range),
+        "env/hidden_friction_range": list(hidden_friction_range),
     })
+
+    # Optional: Analyze transition variance
+    if args.analyze_variance:
+        print("[Analysis] Computing transition variance due to hidden variables...")
+        variance_stats = analyze_transition_variance(
+            args.max_steps, hidden_force_range, hidden_friction_range,
+            num_samples=1000, seed=args.seed
+        )
+        print(f"  Mean transition variance: {variance_stats['mean_transition_variance']:.6f}")
+        print(f"  Std transition variance: {variance_stats['std_transition_variance']:.6f}")
+        print(f"  Max transition variance: {variance_stats['max_transition_variance']:.6f}")
+        wandb_log(wandb_run, {f"analysis/{k}": v for k, v in variance_stats.items()})
 
     # Step 1: Train PPO policies
     policy_dir = args.output_dir / "policies"
@@ -887,8 +1021,9 @@ def main() -> None:
         print("[Step 1] Training PPO policies with checkpoints...")
         start_time = time.perf_counter()
         snapshots = train_ppo_with_checkpoints(
-            num_distractors=args.num_distractors,
             max_steps=args.max_steps,
+            hidden_force_range=hidden_force_range,
+            hidden_friction_range=hidden_friction_range,
             total_steps=args.total_steps,
             save_dir=policy_dir,
             fractions=args.ppo_fractions,
@@ -931,7 +1066,8 @@ def main() -> None:
             )
         print("[Step 2] Collecting offline dataset...")
         dataset = build_offline_dataset(
-            snapshots, policy_models, args.num_distractors, args.max_steps,
+            snapshots, policy_models, args.max_steps,
+            hidden_force_range, hidden_friction_range,
             args.rollout_steps, args.seed
         )
         np.savez_compressed(
@@ -1014,7 +1150,6 @@ def main() -> None:
             val_fraction=args.dyn_val_fraction,
             early_stop_patience=args.dyn_early_stop_patience,
             min_epochs=args.dyn_min_epochs,
-            num_distractors=args.num_distractors,
             dynamics_loss=args.dynamics_loss,
             wandb_run=wandb_run,
         )
@@ -1038,9 +1173,6 @@ def main() -> None:
         ppo_model = policy_models[name]
         q_net = q_models[name]
 
-        #true_return = evaluate_sb3_policy(
-        #    ppo_model, args.num_distractors, args.max_steps, args.eval_episodes, args.seed
-        #)
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
         dyn_sup = evaluate_in_dynamics(
             sup_model, policy, initial_states, args.eval_horizon, args.gamma, device, args.eval_rollouts
@@ -1053,13 +1185,12 @@ def main() -> None:
             )
         
         fixed_env = evaluate_sb3_policy_fixed_horizon(
-            ppo_model, args.num_distractors, args.max_steps,
+            ppo_model, args.max_steps, hidden_force_range, hidden_friction_range,
             args.eval_horizon, args.gamma, args.eval_rollouts, args.seed
         )
 
         wandb_payload = {
             "eval/policy_name": name,
-            #"eval/true_return": true_return,
             "eval/q_estimate": q_est,
             "eval/dynamics_supervised": dyn_sup,
             "eval/env_mc": fixed_env,
@@ -1073,7 +1204,6 @@ def main() -> None:
             "name": name,
             "checkpoint": snap["path"],
             "timesteps": snap["timesteps"],
-            #"true_return": true_return,
             "q_estimate": q_est,
             "dynamics": {
                 "supervised": dyn_sup,
