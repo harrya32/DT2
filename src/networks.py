@@ -745,7 +745,7 @@ class DynamicsNet(nn.Module):
         policy_q_pairs: Sequence[Tuple[TorchPolicy | GaussianLinearPolicy, nn.Module]],
         gamma: float = 0.97,
         lambda_rank: float = 0.1,
-        rollout_horizon: int = 30,
+        rollout_horizon: int = 100,
         rollout_episodes: int = 128,
         epochs: int = 20,
         batch_size: int = 1024,
@@ -1050,7 +1050,18 @@ class RescaledQ(nn.Module):
         return self.base(states, actions) * scale + offset
 
 class QNet(nn.Module):
-    def __init__(self, state_dim: int, act_dim: int, hidden: int = 128):
+    def __init__(self, state_dim: int, act_dim: int, hidden: int = 256):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(state_dim + act_dim, hidden),
+            nn.LayerNorm(hidden),  
+            nn.SiLU(),
+            nn.Linear(hidden, hidden),
+            nn.LayerNorm(hidden),
+            nn.SiLU(),
+            nn.Linear(hidden, 1),
+        )
+    def __init__old(self, state_dim: int, act_dim: int, hidden: int = 128):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(state_dim + act_dim, hidden),
@@ -1088,7 +1099,7 @@ class QNet(nn.Module):
         samples: int = 16,
         act_low: float = -1.0,
         act_high: float = 1.0,
-        hidden: int = 128,
+        hidden: int = 256,
         device: Optional[torch.device] = None,
         use_amp: bool = True,
         log_hook: Optional[Callable[..., None]] = None,
@@ -1159,6 +1170,9 @@ class QNet(nn.Module):
                 epoch_loss += loss.item()
                 num_batches += 1
 
+            """tau = 0.005
+            for p, p_targ in zip(self.parameters(), target_q.parameters()):
+                p_targ.data.mul_(1 - tau).add_(tau * p.data)"""
             if (epoch + 1) % 5 == 0:
                 target_q.load_state_dict(self.state_dict())
 

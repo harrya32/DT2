@@ -636,7 +636,7 @@ def main() -> None:
     parser.add_argument("--vf-coef", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--rollout-steps", type=int, default=5_000, help="steps per policy for dataset collection")
-    parser.add_argument("--q-epochs", type=int, default=1000)
+    parser.add_argument("--q-epochs", type=int, default=2000)
     parser.add_argument("--q-batch", type=int, default=1024)
     parser.add_argument("--q-lr", type=float, default=3e-4)
     parser.add_argument("--q-samples", type=int, default=32)

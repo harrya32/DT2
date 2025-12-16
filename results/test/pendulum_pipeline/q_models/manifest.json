@@ -1,8 +1,8 @@
 {
-  "ppo_frac_0": "results/mse/pendulum_pipeline/q_models/ppo_frac_0.pt",
-  "ppo_frac_1000000": "results/mse/pendulum_pipeline/q_models/ppo_frac_1000000.pt",
-  "ppo_frac_2000000": "results/mse/pendulum_pipeline/q_models/ppo_frac_2000000.pt",
-  "ppo_frac_3000000": "results/mse/pendulum_pipeline/q_models/ppo_frac_3000000.pt",
-  "ppo_frac_4000000": "results/mse/pendulum_pipeline/q_models/ppo_frac_4000000.pt",
-  "ppo_frac_5000000": "results/mse/pendulum_pipeline/q_models/ppo_frac_5000000.pt"
+  "ppo_frac_0": "results/test/pendulum_pipeline/q_models/ppo_frac_0.pt",
+  "ppo_frac_1000000": "results/test/pendulum_pipeline/q_models/ppo_frac_1000000.pt",
+  "ppo_frac_2000000": "results/test/pendulum_pipeline/q_models/ppo_frac_2000000.pt",
+  "ppo_frac_3000000": "results/test/pendulum_pipeline/q_models/ppo_frac_3000000.pt",
+  "ppo_frac_4000000": "results/test/pendulum_pipeline/q_models/ppo_frac_4000000.pt",
+  "ppo_frac_5000000": "results/test/pendulum_pipeline/q_models/ppo_frac_5000000.pt"
 }
