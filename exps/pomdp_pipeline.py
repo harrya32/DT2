@@ -65,28 +65,43 @@ _DEFINED_WANDB_STEP_KEYS: Set[str] = set()
 # Custom POMDP Environment
 # =============================================================================
 
+# Discrete hidden modes - creates truly multi-modal transitions
+# Each mode has distinct dynamics that NLL (unimodal Gaussian) cannot capture
+# Moderate parameters: enough variance for model misspecification, but learnable by PPO
+HIDDEN_MODES = {
+    0: {"force": 1.5, "friction": 0.1, "action_scale": 1.0},    # Moderate positive bias
+    1: {"force": -1.5, "friction": 0.1, "action_scale": 1.0},   # Moderate negative bias
+    2: {"force": 0.0, "friction": 0.3, "action_scale": 0.5},    # Dampened controls (high friction)
+    3: {"force": 0.0, "friction": 0.0, "action_scale": 1.5},    # Slightly amplified controls
+}
+
+
 class POMDPEnv(gym.Env):
     """
     Partially Observable MDP for testing dynamics model misspecification.
     
-    Full State: [x, v, hidden_force, hidden_friction]
+    This version uses DISCRETE hidden modes to create truly multi-modal
+    transition distributions that a unimodal Gaussian (NLL) cannot capture.
+    
+    Full State: [x, v, hidden_mode]
     - x: position in [-2, 2]
     - v: velocity in [-2, 2]
-    - hidden_force: constant bias affecting acceleration, in [-0.5, 0.5]
-    - hidden_friction: friction coefficient affecting velocity, in [0.0, 0.3]
+    - hidden_mode: integer in {0, 1, 2, 3} determining dynamics behavior
     
-    Observation: [x, v] - the agent CANNOT see hidden_force or hidden_friction
+    Observation: [x, v] - the agent CANNOT see hidden_mode
     
     Action: continuous in [-1, 1], controls acceleration
     
-    Dynamics:
-    - v_new = v * (1 - hidden_friction) + (action + hidden_force) * dt
-    - x_new = x + v_new * dt
+    Hidden Modes create qualitatively different dynamics:
+    - Mode 0: Strong rightward force bias
+    - Mode 1: Strong leftward force bias  
+    - Mode 2: High friction + REVERSED controls (action has opposite effect!)
+    - Mode 3: No friction + amplified controls (very responsive)
     
-    The hidden variables are sampled once per episode and remain constant.
-    This creates systematic unpredictability from the agent's perspective:
-    - Same (x, v, action) can lead to different (x', v') depending on hidden state
-    - A dynamics model seeing only (x, v) cannot perfectly predict transitions
+    This creates multi-modal P(s'|s,a):
+    - Same (x, v, action) leads to 4 distinct possible outcomes
+    - NLL averages over modes → poor predictions
+    - Ranking-aware can still preserve policy ordering
     
     Reward: based on reaching goal position (x=0) with low velocity
     """
@@ -96,10 +111,13 @@ class POMDPEnv(gym.Env):
     def __init__(
         self,
         max_steps: int = 200,
-        hidden_force_range: Tuple[float, float] = (-0.5, 0.5),
-        hidden_friction_range: Tuple[float, float] = (0.0, 0.3),
+        hidden_force_range: Tuple[float, float] = (-0.5, 0.5),  # Legacy, ignored if use_discrete_modes=True
+        hidden_friction_range: Tuple[float, float] = (0.0, 0.3),  # Legacy, ignored if use_discrete_modes=True
         goal_position: float = 0.0,
         dt: float = 0.1,
+        use_discrete_modes: bool = True,
+        num_modes: int = 4,
+        mode_probs: Optional[List[float]] = None,
     ):
         super().__init__()
         self.max_steps = max_steps
@@ -107,9 +125,12 @@ class POMDPEnv(gym.Env):
         self.hidden_friction_range = hidden_friction_range
         self.goal_position = goal_position
         self.dt = dt
+        self.use_discrete_modes = use_discrete_modes
+        self.num_modes = min(num_modes, len(HIDDEN_MODES))
+        self.mode_probs = mode_probs  # If None, uniform distribution
         
         # Full state dim vs observation dim
-        self.full_state_dim = 4  # [x, v, hidden_force, hidden_friction]
+        self.full_state_dim = 3 if use_discrete_modes else 4  # [x, v, mode] or [x, v, force, friction]
         self.obs_dim = 2  # [x, v]
         
         # Observation space (what the agent sees)
@@ -125,6 +146,7 @@ class POMDPEnv(gym.Env):
         )
         
         self._full_state = None
+        self._hidden_mode = None
         self._step_count = 0
         self._rng = np.random.default_rng()
     
@@ -140,36 +162,56 @@ class POMDPEnv(gym.Env):
         x = self._rng.uniform(-1.0, 1.0)
         v = self._rng.uniform(-0.5, 0.5)
         
-        # Sample hidden variables for this episode (constant throughout)
-        hidden_force = self._rng.uniform(*self.hidden_force_range)
-        hidden_friction = self._rng.uniform(*self.hidden_friction_range)
+        if self.use_discrete_modes:
+            # Sample a hidden mode for this episode
+            if self.mode_probs is not None:
+                self._hidden_mode = self._rng.choice(self.num_modes, p=self.mode_probs[:self.num_modes])
+            else:
+                self._hidden_mode = self._rng.integers(0, self.num_modes)
+            self._full_state = np.array([x, v, float(self._hidden_mode)], dtype=np.float32)
+        else:
+            # Legacy continuous hidden variables
+            hidden_force = self._rng.uniform(*self.hidden_force_range)
+            hidden_friction = self._rng.uniform(*self.hidden_friction_range)
+            self._full_state = np.array([x, v, hidden_force, hidden_friction], dtype=np.float32)
         
-        self._full_state = np.array(
-            [x, v, hidden_force, hidden_friction], dtype=np.float32
-        )
         self._step_count = 0
-        
         return self._get_obs(), {}
     
     def step(self, action):
         action = np.clip(action, -1.0, 1.0).flatten()[0]
         
-        x, v, hidden_force, hidden_friction = self._full_state
+        x, v = self._full_state[0], self._full_state[1]
         
-        # Dynamics with hidden variables
-        # Acceleration is affected by hidden_force
-        acceleration = action + hidden_force
-        # Velocity is damped by hidden_friction
+        if self.use_discrete_modes:
+            # Get mode parameters
+            mode_params = HIDDEN_MODES[self._hidden_mode]
+            hidden_force = mode_params["force"]
+            hidden_friction = mode_params["friction"]
+            action_scale = mode_params["action_scale"]
+            
+            # Dynamics with mode-specific behavior
+            effective_action = action * action_scale
+            acceleration = effective_action + hidden_force
+        else:
+            # Legacy continuous hidden variables
+            hidden_force = self._full_state[2]
+            hidden_friction = self._full_state[3]
+            acceleration = action + hidden_force
+        
+        # Velocity update with friction
         v_new = v * (1 - hidden_friction) + acceleration * self.dt
         v_new = np.clip(v_new, -2.0, 2.0)
         
         x_new = x + v_new * self.dt
         x_new = np.clip(x_new, -2.0, 2.0)
         
-        # Hidden variables stay constant
-        self._full_state = np.array(
-            [x_new, v_new, hidden_force, hidden_friction], dtype=np.float32
-        )
+        # Update state
+        if self.use_discrete_modes:
+            self._full_state = np.array([x_new, v_new, float(self._hidden_mode)], dtype=np.float32)
+        else:
+            self._full_state = np.array([x_new, v_new, hidden_force, hidden_friction], dtype=np.float32)
+        
         self._step_count += 1
         
         # Reward only depends on observable state
@@ -202,6 +244,10 @@ class POMDPEnv(gym.Env):
     def get_full_state(self) -> np.ndarray:
         """For analysis: return the full state including hidden variables."""
         return self._full_state.copy()
+    
+    def get_hidden_mode(self) -> int:
+        """For analysis: return the current hidden mode."""
+        return self._hidden_mode if self.use_discrete_modes else -1
 
 
 def pomdp_reward_fn(obs: np.ndarray, action: np.ndarray) -> float:
@@ -279,6 +325,18 @@ class WandbMetricsCallback(BaseCallback):
         super().__init__(verbose=0)
         self.run = run
         self.prefix = prefix
+        self._metrics_defined = False
+        self._step_key = f"{prefix}/step"
+
+    def _on_training_start(self) -> None:
+        """Define metrics with custom step axis on first call."""
+        if self.run is None or self._metrics_defined:
+            return
+        # Define the step metric for PPO
+        self.run.define_metric(self._step_key)
+        # All ppo/* metrics will use ppo/step as their x-axis
+        self.run.define_metric(f"{self.prefix}/*", step_metric=self._step_key)
+        self._metrics_defined = True
 
     def _on_step(self) -> bool:
         return True
@@ -289,12 +347,12 @@ class WandbMetricsCallback(BaseCallback):
         log_dict = getattr(self.logger, "name_to_value", None)
         if not log_dict:
             return True
-        payload = {}
+        payload = {self._step_key: self.num_timesteps}
         for key, value in log_dict.items():
             if isinstance(value, (int, float)):
                 payload[f"{self.prefix}/{key}"] = value
         if payload:
-            wandb_log(self.run, payload, step=self.num_timesteps)
+            wandb_log(self.run, payload)
         return True
 
 
@@ -424,12 +482,16 @@ def make_pomdp_env(
     max_steps: int = 200,
     hidden_force_range: Tuple[float, float] = (-0.5, 0.5),
     hidden_friction_range: Tuple[float, float] = (0.0, 0.3),
+    use_discrete_modes: bool = True,
+    num_modes: int = 4,
 ):
     """Factory for creating the POMDP environment."""
     return POMDPEnv(
         max_steps=max_steps,
         hidden_force_range=hidden_force_range,
         hidden_friction_range=hidden_friction_range,
+        use_discrete_modes=use_discrete_modes,
+        num_modes=num_modes,
     )
 
 
@@ -452,6 +514,8 @@ def train_ppo_with_checkpoints(
     vf_coef: float,
     device: str,
     wandb_run: Optional[Any] = None,
+    use_discrete_modes: bool = True,
+    num_modes: int = 4,
 ) -> List[Dict[str, object]]:
     set_random_seed(seed)
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -462,6 +526,8 @@ def train_ppo_with_checkpoints(
             max_steps=max_steps,
             hidden_force_range=hidden_force_range,
             hidden_friction_range=hidden_friction_range,
+            use_discrete_modes=use_discrete_modes,
+            num_modes=num_modes,
         )
 
     vec_env = make_vec_env(env_fn, n_envs=n_envs, seed=seed)
@@ -504,12 +570,16 @@ def rollout_policy(
     hidden_friction_range: Tuple[float, float],
     total_steps: int,
     seed: int,
+    use_discrete_modes: bool = True,
+    num_modes: int = 4,
 ) -> Tuple[List[np.ndarray], List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]]]:
     """Rollout policy and collect (observation, action, reward, next_observation, done) tuples."""
     env = POMDPEnv(
         max_steps=max_steps,
         hidden_force_range=hidden_force_range,
         hidden_friction_range=hidden_friction_range,
+        use_discrete_modes=use_discrete_modes,
+        num_modes=num_modes,
     )
     rng = np.random.default_rng(seed)
     obs, _ = env.reset(seed=seed)
@@ -538,6 +608,8 @@ def build_offline_dataset(
     hidden_friction_range: Tuple[float, float],
     steps_per_policy: int,
     seed: int,
+    use_discrete_modes: bool = True,
+    num_modes: int = 4,
 ) -> OfflineDataset:
     all_states: List[np.ndarray] = []
     all_actions: List[np.ndarray] = []
@@ -550,7 +622,8 @@ def build_offline_dataset(
         model = policy_models[snap["name"]]
         init_states, transitions = rollout_policy(
             model, max_steps, hidden_force_range, hidden_friction_range,
-            steps_per_policy, seed + idx
+            steps_per_policy, seed + idx,
+            use_discrete_modes=use_discrete_modes, num_modes=num_modes
         )
         initial_states.extend(init_states)
         for s, a, r, sn, d in transitions:
@@ -774,11 +847,15 @@ def evaluate_sb3_policy(
     hidden_friction_range: Tuple[float, float],
     episodes: int,
     seed: int,
+    use_discrete_modes: bool = True,
+    num_modes: int = 4,
 ) -> float:
     env = POMDPEnv(
         max_steps=max_steps,
         hidden_force_range=hidden_force_range,
         hidden_friction_range=hidden_friction_range,
+        use_discrete_modes=use_discrete_modes,
+        num_modes=num_modes,
     )
     returns = []
     for ep in range(episodes):
@@ -803,12 +880,16 @@ def evaluate_sb3_policy_fixed_horizon(
     gamma: float,
     rollouts: int,
     seed: int,
+    use_discrete_modes: bool = True,
+    num_modes: int = 4,
 ) -> float:
     """Roll out PPO in the true env for a fixed horizon."""
     env = POMDPEnv(
         max_steps=max_steps,
         hidden_force_range=hidden_force_range,
         hidden_friction_range=hidden_friction_range,
+        use_discrete_modes=use_discrete_modes,
+        num_modes=num_modes,
     )
     rng = np.random.default_rng(seed)
     returns: List[float] = []
@@ -877,6 +958,8 @@ def analyze_transition_variance(
     hidden_friction_range: Tuple[float, float],
     num_samples: int = 1000,
     seed: int = 42,
+    use_discrete_modes: bool = True,
+    num_modes: int = 4,
 ) -> Dict[str, float]:
     """
     Analyze how much variance in transitions is due to hidden variables.
@@ -896,19 +979,30 @@ def analyze_transition_variance(
     for obs, action in zip(test_obs, test_actions):
         next_obs_samples = []
         
-        for _ in range(num_samples):
-            # Sample hidden variables
-            hidden_force = rng.uniform(*hidden_force_range)
-            hidden_friction = rng.uniform(*hidden_friction_range)
-            
-            # Compute dynamics
-            x, v = obs
-            acceleration = action[0] + hidden_force
-            v_new = v * (1 - hidden_friction) + acceleration * 0.1
-            v_new = np.clip(v_new, -2.0, 2.0)
-            x_new = np.clip(x + v_new * 0.1, -2.0, 2.0)
-            
-            next_obs_samples.append([x_new, v_new])
+        if use_discrete_modes:
+            # With discrete modes, compute outcome for each mode
+            for mode in range(num_modes):
+                mode_params = HIDDEN_MODES[mode]
+                x, v = obs
+                effective_action = action[0] * mode_params["action_scale"]
+                acceleration = effective_action + mode_params["force"]
+                v_new = v * (1 - mode_params["friction"]) + acceleration * 0.1
+                v_new = np.clip(v_new, -2.0, 2.0)
+                x_new = np.clip(x + v_new * 0.1, -2.0, 2.0)
+                next_obs_samples.append([x_new, v_new])
+        else:
+            # Continuous hidden variables
+            for _ in range(num_samples):
+                hidden_force = rng.uniform(*hidden_force_range)
+                hidden_friction = rng.uniform(*hidden_friction_range)
+                
+                x, v = obs
+                acceleration = action[0] + hidden_force
+                v_new = v * (1 - hidden_friction) + acceleration * 0.1
+                v_new = np.clip(v_new, -2.0, 2.0)
+                x_new = np.clip(x + v_new * 0.1, -2.0, 2.0)
+                
+                next_obs_samples.append([x_new, v_new])
         
         next_obs_samples = np.array(next_obs_samples)
         variance = np.var(next_obs_samples, axis=0).sum()
@@ -921,6 +1015,44 @@ def analyze_transition_variance(
     }
 
 
+def analyze_mode_separation(seed: int = 42) -> Dict[str, Any]:
+    """
+    Analyze how different the outcomes are across hidden modes.
+    
+    This shows the multi-modality that NLL cannot capture.
+    """
+    rng = np.random.default_rng(seed)
+    
+    # Test with a few representative (obs, action) pairs
+    test_cases = [
+        (np.array([0.0, 0.0]), np.array([0.5])),   # Center, positive action
+        (np.array([0.0, 0.0]), np.array([-0.5])),  # Center, negative action
+        (np.array([1.0, 0.5]), np.array([0.0])),   # Right side, no action
+        (np.array([-1.0, -0.5]), np.array([1.0])), # Left side, strong action
+    ]
+    
+    results = []
+    for obs, action in test_cases:
+        mode_outcomes = {}
+        for mode in range(len(HIDDEN_MODES)):
+            mode_params = HIDDEN_MODES[mode]
+            x, v = obs
+            effective_action = action[0] * mode_params["action_scale"]
+            acceleration = effective_action + mode_params["force"]
+            v_new = v * (1 - mode_params["friction"]) + acceleration * 0.1
+            v_new = np.clip(v_new, -2.0, 2.0)
+            x_new = np.clip(x + v_new * 0.1, -2.0, 2.0)
+            mode_outcomes[f"mode_{mode}"] = {"x_new": float(x_new), "v_new": float(v_new)}
+        
+        results.append({
+            "obs": obs.tolist(),
+            "action": action.tolist(),
+            "outcomes": mode_outcomes,
+        })
+    
+    return {"test_cases": results}
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -928,11 +1060,14 @@ def analyze_transition_variance(
 def main() -> None:
     parser = argparse.ArgumentParser(description="POMDP environment pipeline for testing dynamics misspecification")
     parser.add_argument("--max-steps", type=int, default=200, help="Max steps per episode")
-    parser.add_argument("--hidden-force-min", type=float, default=-1.5, help="Min hidden force bias")
-    parser.add_argument("--hidden-force-max", type=float, default=1.5, help="Max hidden force bias")
-    parser.add_argument("--hidden-friction-min", type=float, default=0.0, help="Min hidden friction")
-    parser.add_argument("--hidden-friction-max", type=float, default=0.6, help="Max hidden friction")
-    parser.add_argument("--total-steps", type=int, default=3_000_000)
+    parser.add_argument("--use-discrete-modes", action="store_true", default=True, help="Use discrete hidden modes (recommended)")
+    parser.add_argument("--use-continuous-hidden", action="store_true", help="Use continuous hidden variables instead of discrete modes")
+    parser.add_argument("--num-modes", type=int, default=4, help="Number of discrete hidden modes (1-4)")
+    parser.add_argument("--hidden-force-min", type=float, default=-1.5, help="Min hidden force bias (continuous mode)")
+    parser.add_argument("--hidden-force-max", type=float, default=1.5, help="Max hidden force bias (continuous mode)")
+    parser.add_argument("--hidden-friction-min", type=float, default=0.0, help="Min hidden friction (continuous mode)")
+    parser.add_argument("--hidden-friction-max", type=float, default=0.6, help="Max hidden friction (continuous mode)")
+    parser.add_argument("--total-steps", type=int, default=1_000_000)
     parser.add_argument("--ppo-fractions", type=float, nargs="*", default=[0.2, 0.4, 0.6, 0.8, 1.0])
     parser.add_argument("--n-envs", type=int, default=8)
     parser.add_argument("--n-steps", type=int, default=2048)
@@ -953,7 +1088,7 @@ def main() -> None:
     parser.add_argument("--dyn-batch", type=int, default=512)
     parser.add_argument("--dyn-lr", type=float, default=3e-4)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
-    parser.add_argument("--dyn-early-stop-patience", type=int, default=20)
+    parser.add_argument("--dyn-early-stop-patience", type=int, default=50)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"], help="Loss function for dynamics training")
     parser.add_argument("--lambda-rank", type=float, default=0.1)
@@ -979,6 +1114,10 @@ def main() -> None:
     ):
         parser.error("--results-only cannot be combined with force-training flags.")
 
+    # Determine if using discrete modes or continuous hidden variables
+    use_discrete_modes = not args.use_continuous_hidden
+    num_modes = args.num_modes
+    
     hidden_force_range = (args.hidden_force_min, args.hidden_force_max)
     hidden_friction_range = (args.hidden_friction_min, args.hidden_friction_max)
 
@@ -989,7 +1128,8 @@ def main() -> None:
     # Log environment info
     wandb_log(wandb_run, {
         "env/obs_dim": 2,
-        "env/hidden_dim": 2,
+        "env/use_discrete_modes": use_discrete_modes,
+        "env/num_modes": num_modes if use_discrete_modes else 0,
         "env/hidden_force_range": list(hidden_force_range),
         "env/hidden_friction_range": list(hidden_friction_range),
     })
@@ -999,12 +1139,21 @@ def main() -> None:
         print("[Analysis] Computing transition variance due to hidden variables...")
         variance_stats = analyze_transition_variance(
             args.max_steps, hidden_force_range, hidden_friction_range,
-            num_samples=1000, seed=args.seed
+            num_samples=1000, seed=args.seed,
+            use_discrete_modes=use_discrete_modes, num_modes=num_modes
         )
         print(f"  Mean transition variance: {variance_stats['mean_transition_variance']:.6f}")
         print(f"  Std transition variance: {variance_stats['std_transition_variance']:.6f}")
         print(f"  Max transition variance: {variance_stats['max_transition_variance']:.6f}")
         wandb_log(wandb_run, {f"analysis/{k}": v for k, v in variance_stats.items()})
+        
+        if use_discrete_modes:
+            print("\n[Analysis] Mode separation analysis:")
+            mode_analysis = analyze_mode_separation(seed=args.seed)
+            for i, case in enumerate(mode_analysis["test_cases"]):
+                print(f"  Case {i}: obs={case['obs']}, action={case['action']}")
+                for mode_name, outcome in case["outcomes"].items():
+                    print(f"    {mode_name}: x'={outcome['x_new']:.3f}, v'={outcome['v_new']:.3f}")
 
     # Step 1: Train PPO policies
     policy_dir = args.output_dir / "policies"
@@ -1039,6 +1188,8 @@ def main() -> None:
             vf_coef=args.vf_coef,
             device=device.type if device.type in {"cuda", "cpu"} else "cpu",
             wandb_run=wandb_run,
+            use_discrete_modes=use_discrete_modes,
+            num_modes=num_modes,
         )
         save_snapshots(snapshots_manifest, snapshots)
         policy_trained = True
@@ -1068,7 +1219,8 @@ def main() -> None:
         dataset = build_offline_dataset(
             snapshots, policy_models, args.max_steps,
             hidden_force_range, hidden_friction_range,
-            args.rollout_steps, args.seed
+            args.rollout_steps, args.seed,
+            use_discrete_modes=use_discrete_modes, num_modes=num_modes
         )
         np.savez_compressed(
             dataset_path,
@@ -1186,7 +1338,8 @@ def main() -> None:
         
         fixed_env = evaluate_sb3_policy_fixed_horizon(
             ppo_model, args.max_steps, hidden_force_range, hidden_friction_range,
-            args.eval_horizon, args.gamma, args.eval_rollouts, args.seed
+            args.eval_horizon, args.gamma, args.eval_rollouts, args.seed,
+            use_discrete_modes=use_discrete_modes, num_modes=num_modes
         )
 
         wandb_payload = {

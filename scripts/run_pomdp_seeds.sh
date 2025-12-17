@@ -11,7 +11,6 @@ cd "$(dirname "$0")/.."
 # Default parameters
 SEEDS=(0 1 2 3 4)
 OUTPUT_BASE="results/pomdp_pipeline"
-TOTAL_STEPS=1000000
 WANDB_PROJECT="DT2-pomdp"
 
 # Parse arguments
@@ -23,10 +22,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --output-base)
             OUTPUT_BASE="$2"
-            shift 2
-            ;;
-        --total-steps)
-            TOTAL_STEPS="$2"
             shift 2
             ;;
         --wandb-project)
@@ -48,7 +43,6 @@ WANDB_MODE=${WANDB_MODE:-online}
 
 echo "Running POMDP pipeline with seeds: ${SEEDS[*]}"
 echo "Output base: $OUTPUT_BASE"
-echo "Total steps: $TOTAL_STEPS"
 echo "W&B project: $WANDB_PROJECT (mode: $WANDB_MODE)"
 echo ""
 
@@ -60,7 +54,6 @@ for seed in "${SEEDS[@]}"; do
     python exps/pomdp_pipeline.py \
         --seed "$seed" \
         --output-dir "${OUTPUT_BASE}/seed_${seed}" \
-        --total-steps "$TOTAL_STEPS" \
         --wandb-project "$WANDB_PROJECT" \
         --wandb-mode "$WANDB_MODE" \
         --wandb-run-name "pomdp_seed_${seed}" \

@@ -242,6 +242,18 @@ class WandbMetricsCallback(BaseCallback):
         super().__init__(verbose=0)
         self.run = run
         self.prefix = prefix
+        self._metrics_defined = False
+        self._step_key = f"{prefix}/step"
+
+    def _on_training_start(self) -> None:
+        """Define metrics with custom step axis on first call."""
+        if self.run is None or self._metrics_defined:
+            return
+        # Define the step metric for PPO
+        self.run.define_metric(self._step_key)
+        # All ppo/* metrics will use ppo/step as their x-axis
+        self.run.define_metric(f"{self.prefix}/*", step_metric=self._step_key)
+        self._metrics_defined = True
 
     def _on_step(self) -> bool:
         return True
@@ -252,12 +264,12 @@ class WandbMetricsCallback(BaseCallback):
         log_dict = getattr(self.logger, "name_to_value", None)
         if not log_dict:
             return True
-        payload = {}
+        payload = {self._step_key: self.num_timesteps}
         for key, value in log_dict.items():
             if isinstance(value, (int, float)):
                 payload[f"{self.prefix}/{key}"] = value
         if payload:
-            wandb_log(self.run, payload, step=self.num_timesteps)
+            wandb_log(self.run, payload)
         return True
 
 
