@@ -57,7 +57,8 @@ for seed in "${SEEDS[@]}"; do
         --wandb-project "$WANDB_PROJECT" \
         --wandb-mode "$WANDB_MODE" \
         --wandb-run-name "pomdp_seed_${seed}" \
-        --analyze-variance
+        --analyze-variance \
+        --force-dynamics-training
     
     echo "Completed seed $seed"
     echo ""

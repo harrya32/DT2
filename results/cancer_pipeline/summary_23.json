@@ -1,0 +1,197 @@
+{
+  "config": {
+    "max_t": 200,
+    "setting": 5,
+    "total_steps": 10000,
+    "ppo_fractions": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "n_envs": 8,
+    "n_steps": 2048,
+    "batch_size": 512,
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "seed": 23,
+    "rollout_steps": 5000,
+    "q_epochs": 500,
+    "q_batch": 512,
+    "q_lr": 0.0003,
+    "q_samples": 32,
+    "dyn_epochs": 2000,
+    "dyn_batch": 512,
+    "dyn_lr": 0.0003,
+    "dyn_hidden_dim": 256,
+    "dyn_val_fraction": 0.1,
+    "dyn_early_stop_patience": 50,
+    "dyn_min_epochs": 50,
+    "dynamics_loss": "mse",
+    "lambda_rank": 0.1,
+    "eval_rollouts": 20,
+    "eval_horizon": 200,
+    "output_dir": "results/cancer_pipeline",
+    "device": "auto",
+    "force_policy_training": false,
+    "force_dataset_collection": true,
+    "force_q_training": true,
+    "force_dynamics_training": true,
+    "results_only": false,
+    "wandb_project": "DT2-cancer",
+    "wandb_entity": null,
+    "wandb_run_name": null,
+    "wandb_mode": "online"
+  },
+  "dataset_stats": {
+    "num_transitions": 30000,
+    "num_initial_states": 220,
+    "state_dim": 7,
+    "action_dim": 2,
+    "state_mean": [
+      6.766854763031006,
+      12.306214332580566,
+      6.830390930175781,
+      24.062026977539062,
+      11.513303756713867,
+      8.848590850830078,
+      11.50854778289795
+    ],
+    "state_std": [
+      7.065896987915039,
+      5.279181003570557,
+      5.346872806549072,
+      0.7799448370933533,
+      5.5037713050842285,
+      1.4570202827453613,
+      4.6244425773620605
+    ],
+    "action_mean": [
+      0.41335824131965637,
+      0.4614647924900055
+    ],
+    "action_std": [
+      0.612328052520752,
+      0.6296376585960388
+    ],
+    "reward_mean": 0.44875872135162354,
+    "reward_std": 5.951168060302734,
+    "reward_min": -99.88575744628906,
+    "reward_max": 100.9383316040039,
+    "done_rate": 0.00713333347812295
+  },
+  "num_transitions": 30000,
+  "q_model_paths": {
+    "ppo_frac_0": "results/cancer_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_20000": "results/cancer_pipeline/q_models/ppo_frac_20000.pt",
+    "ppo_frac_40000": "results/cancer_pipeline/q_models/ppo_frac_40000.pt",
+    "ppo_frac_60000": "results/cancer_pipeline/q_models/ppo_frac_60000.pt",
+    "ppo_frac_80000": "results/cancer_pipeline/q_models/ppo_frac_80000.pt",
+    "ppo_frac_100000": "results/cancer_pipeline/q_models/ppo_frac_100000.pt"
+  },
+  "dynamics_paths": {
+    "supervised": "results/cancer_pipeline/dynamics/dynamics_supervised.pt",
+    "ranking_new": {
+      "kendall": "results/cancer_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/cancer_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/cancer_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "results/cancer_pipeline/policies/ppo_frac_0",
+      "timesteps": 0,
+      "q_estimate": 33.4681396484375,
+      "dynamics": {
+        "supervised": -103.55425262451172,
+        "ranking_new": {
+          "kendall": -98.83623504638672,
+          "hinge": -100.81249237060547,
+          "listnet": -103.10460662841797
+        }
+      },
+      "env_mc": -23.29735751119669
+    },
+    {
+      "name": "ppo_frac_20000",
+      "checkpoint": "results/cancer_pipeline/policies/ppo_frac_20000",
+      "timesteps": 20000,
+      "q_estimate": 30.588226318359375,
+      "dynamics": {
+        "supervised": -111.1236801147461,
+        "ranking_new": {
+          "kendall": -105.33589172363281,
+          "hinge": -101.56333923339844,
+          "listnet": -109.8222885131836
+        }
+      },
+      "env_mc": -20.742238156351327
+    },
+    {
+      "name": "ppo_frac_40000",
+      "checkpoint": "results/cancer_pipeline/policies/ppo_frac_40000",
+      "timesteps": 40000,
+      "q_estimate": 40.24854278564453,
+      "dynamics": {
+        "supervised": -86.2110824584961,
+        "ranking_new": {
+          "kendall": -98.63423156738281,
+          "hinge": -102.40911102294922,
+          "listnet": -92.0938491821289
+        }
+      },
+      "env_mc": -16.78338650783118
+    },
+    {
+      "name": "ppo_frac_60000",
+      "checkpoint": "results/cancer_pipeline/policies/ppo_frac_60000",
+      "timesteps": 60000,
+      "q_estimate": 36.8607292175293,
+      "dynamics": {
+        "supervised": -67.8647232055664,
+        "ranking_new": {
+          "kendall": -68.80224609375,
+          "hinge": -103.68550109863281,
+          "listnet": -73.90337371826172
+        }
+      },
+      "env_mc": 11.903955409483856
+    },
+    {
+      "name": "ppo_frac_80000",
+      "checkpoint": "results/cancer_pipeline/policies/ppo_frac_80000",
+      "timesteps": 80000,
+      "q_estimate": 44.361698150634766,
+      "dynamics": {
+        "supervised": -50.07904815673828,
+        "ranking_new": {
+          "kendall": -58.210975646972656,
+          "hinge": -103.15411376953125,
+          "listnet": -67.1091537475586
+        }
+      },
+      "env_mc": 20.504429107078177
+    },
+    {
+      "name": "ppo_frac_100000",
+      "checkpoint": "results/cancer_pipeline/policies/ppo_frac_100000",
+      "timesteps": 100000,
+      "q_estimate": 61.69491195678711,
+      "dynamics": {
+        "supervised": -26.625946044921875,
+        "ranking_new": {
+          "kendall": -46.818233489990234,
+          "hinge": -101.4009780883789,
+          "listnet": -47.61851119995117
+        }
+      },
+      "env_mc": 45.203418854455514
+    }
+  ]
+}

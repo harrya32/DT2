@@ -1,0 +1,8 @@
+{
+  "ppo_frac_0": "results/cancer_pipeline/q_models/ppo_frac_0.pt",
+  "ppo_frac_20000": "results/cancer_pipeline/q_models/ppo_frac_20000.pt",
+  "ppo_frac_40000": "results/cancer_pipeline/q_models/ppo_frac_40000.pt",
+  "ppo_frac_60000": "results/cancer_pipeline/q_models/ppo_frac_60000.pt",
+  "ppo_frac_80000": "results/cancer_pipeline/q_models/ppo_frac_80000.pt",
+  "ppo_frac_100000": "results/cancer_pipeline/q_models/ppo_frac_100000.pt"
+}
