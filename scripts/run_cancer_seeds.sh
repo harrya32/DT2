@@ -37,7 +37,7 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[cancer_pipeline] Running seed ${seed}..."
-    python exps/cancer_pipeline.py --dynamics-loss "mse" --force-dataset-collection --force-q-training --rollout-steps 5000 --force-dynamics-training --dyn-early-stop-patience 50 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cancer_pipeline.py --dynamics-loss "nll" --force-dataset-collection --force-q-training --rollout-steps 1000 --force-dynamics-training --dyn-early-stop-patience 50 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
     echo "[cancer_pipeline] Completed seed ${seed}"
     echo
 done

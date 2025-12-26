@@ -825,8 +825,8 @@ class DynamicsNet(nn.Module):
                 target_vals.append(target_val)
             target_tensor = torch.tensor(target_vals, dtype=torch.float32, device=device)
 
-        def rollout_return(pi: TorchPolicy | GaussianLinearPolicy, deterministic: bool = True) -> torch.Tensor:
-            """Compute model-based return estimate with reduced variance."""
+        def rollout_return(pi: TorchPolicy | GaussianLinearPolicy, q: torch.nn.Module, deterministic: bool = True, bootstrapping: bool = True) -> torch.Tensor:
+            """Compute model-based return estimate with  value bootstrapping."""
             idx = torch.randint(0, s0.size(0), (rollout_episodes,), device=device)
             s = s0[idx]
             total = torch.zeros(rollout_episodes, device=device)
@@ -837,6 +837,13 @@ class DynamicsNet(nn.Module):
                 total = total + discount * r
                 discount = discount * gamma
                 s = self.sample_next(s, a, deterministic=deterministic)
+            
+            with torch.no_grad():
+                if bootstrapping:
+                    a_final = self._sample_policy_actions(pi, s, 1, act_low, act_high, deterministic=deterministic)
+                    v_final = q(s, a_final)
+                    total = total + discount * v_final
+                    
             return total.mean()
 
         def compute_ranking_loss(model_vals: torch.Tensor, target_vals: torch.Tensor) -> torch.Tensor:
@@ -919,8 +926,8 @@ class DynamicsNet(nn.Module):
 
                 with torch.amp.autocast("cuda", enabled=use_amp):
                     model_vals = []
-                    for pi, _ in policy_q_pairs:
-                        model_vals.append(rollout_return(pi, deterministic=True))
+                    for pi, q in policy_q_pairs:
+                        model_vals.append(rollout_return(pi, q, deterministic=True))
                     model_tensor = torch.stack(model_vals)
 
                     if torch.isfinite(model_tensor).all():
