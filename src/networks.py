@@ -745,7 +745,7 @@ class DynamicsNet(nn.Module):
         policy_q_pairs: Sequence[Tuple[TorchPolicy | GaussianLinearPolicy, nn.Module]],
         gamma: float = 0.97,
         lambda_rank: float = 0.1,
-        rollout_horizon: int = 100,
+        rollout_horizon: int = 10, #was 100 w/out bootstrapping
         rollout_episodes: int = 128,
         epochs: int = 20,
         batch_size: int = 1024,
@@ -838,12 +838,12 @@ class DynamicsNet(nn.Module):
                 discount = discount * gamma
                 s = self.sample_next(s, a, deterministic=deterministic)
             
-            with torch.no_grad():
-                if bootstrapping:
-                    a_final = self._sample_policy_actions(pi, s, 1, act_low, act_high, deterministic=deterministic)
-                    v_final = q(s, a_final)
-                    total = total + discount * v_final
-                    
+
+            if bootstrapping:
+                a_final = self._sample_policy_actions(pi, s, 1, act_low, act_high, deterministic=deterministic)
+                v_final = q(s, a_final)
+                total = total + discount * v_final
+
             return total.mean()
 
         def compute_ranking_loss(model_vals: torch.Tensor, target_vals: torch.Tensor) -> torch.Tensor:
@@ -979,8 +979,8 @@ class DynamicsNet(nn.Module):
                     val_rank_loss = 0.0
                     if lambda_rank > 0.0:
                         model_vals = []
-                        for pi, _ in policy_q_pairs:
-                            model_vals.append(rollout_return(pi, deterministic=True))
+                        for pi, q in policy_q_pairs:
+                            model_vals.append(rollout_return(pi, q, deterministic=True))
                         model_tensor = torch.stack(model_vals)
                         if torch.isfinite(model_tensor).all():
                             val_rank_loss = float(compute_ranking_loss(model_tensor, target_tensor).item())

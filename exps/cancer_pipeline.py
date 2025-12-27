@@ -1071,7 +1071,7 @@ def main() -> None:
     parser.add_argument("--dyn-hidden-dim", type=int, default=256)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
     parser.add_argument("--dyn-early-stop-patience", type=int, default=50)
-    parser.add_argument("--dyn-min-epochs", type=int, default=50)
+    parser.add_argument("--dyn-min-epochs", type=int, default=0)
     parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"],
                         help="Loss function for dynamics training")
     parser.add_argument("--lambda-rank", type=float, default=0.1)
