@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(26 27 28 29 30)
+DEFAULT_SEEDS=(100 101 102 103 104 105)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -37,7 +37,7 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[cancer_pipeline] Running seed ${seed}..."
-    python exps/cancer_pipeline.py --dyn-hidden-dim 128 --dynamics-loss "nll" --rollout-steps 1000 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cancer_pipeline.py --dyn-hidden-dim 128 --dynamics-loss "mse" --rollout-steps 1000 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
     echo "[cancer_pipeline] Completed seed ${seed}"
     echo
 done

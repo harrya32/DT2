@@ -18,7 +18,7 @@
     "clip_range": 0.2,
     "ent_coef": 0.01,
     "vf_coef": 0.5,
-    "seed": 8,
+    "seed": 5,
     "rollout_steps": 10000,
     "q_epochs": 1000,
     "q_batch": 1024,
@@ -72,91 +72,91 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": -31.18206214904785,
+      "q_estimate": -31.22494888305664,
       "dynamics": {
-        "supervised": -7334.07421875,
+        "supervised": -6229.79443359375,
         "ranking_new": {
-          "kendall": -34943.8671875,
-          "hinge": -9141.4970703125,
-          "listnet": -8618.986328125
+          "kendall": -38005.0,
+          "hinge": -6382.51416015625,
+          "listnet": -7449.0234375
         }
       },
-      "env_mc": -7130.187387222892
+      "env_mc": -7129.060856413873
     },
     {
       "name": "ppo_frac_200000",
       "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "q_estimate": -1.915726900100708,
+      "q_estimate": -1.9079023599624634,
       "dynamics": {
-        "supervised": -6119.2451171875,
+        "supervised": -6130.58984375,
         "ranking_new": {
-          "kendall": -31501.939453125,
-          "hinge": -8721.2646484375,
-          "listnet": -7924.98291015625
+          "kendall": -36884.02734375,
+          "hinge": -6113.2626953125,
+          "listnet": -7051.46142578125
         }
       },
-      "env_mc": -6257.012243973346
+      "env_mc": -6258.597885000407
     },
     {
       "name": "ppo_frac_400000",
       "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": 14.868891716003418,
+      "q_estimate": 14.868510246276855,
       "dynamics": {
-        "supervised": -6003.59423828125,
+        "supervised": -5826.8125,
         "ranking_new": {
-          "kendall": -23082.029296875,
-          "hinge": -8521.0908203125,
-          "listnet": -7149.11328125
+          "kendall": -34127.80859375,
+          "hinge": -5864.9326171875,
+          "listnet": -6769.30517578125
         }
       },
-      "env_mc": -6008.442134729674
+      "env_mc": -6008.058415686276
     },
     {
       "name": "ppo_frac_600000",
       "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "q_estimate": 18.139820098876953,
+      "q_estimate": 18.136463165283203,
       "dynamics": {
-        "supervised": -5896.2763671875,
+        "supervised": -5778.8203125,
         "ranking_new": {
-          "kendall": -22351.609375,
-          "hinge": -8520.3095703125,
-          "listnet": -6972.826171875
+          "kendall": -33500.390625,
+          "hinge": -5885.521484375,
+          "listnet": -6754.486328125
         }
       },
-      "env_mc": -5945.654888085131
+      "env_mc": -5944.920788222802
     },
     {
       "name": "ppo_frac_800000",
       "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 16.818796157836914,
+      "q_estimate": 16.819734573364258,
       "dynamics": {
-        "supervised": -5912.24560546875,
+        "supervised": -5841.9345703125,
         "ranking_new": {
-          "kendall": -20515.388671875,
-          "hinge": -8485.7060546875,
-          "listnet": -6964.87548828125
+          "kendall": -33114.14453125,
+          "hinge": -5908.115234375,
+          "listnet": -6631.3974609375
         }
       },
-      "env_mc": -5940.6016127336225
+      "env_mc": -5939.82311238587
     },
     {
       "name": "ppo_frac_1000000",
       "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "q_estimate": 22.262258529663086,
+      "q_estimate": 22.270978927612305,
       "dynamics": {
-        "supervised": -5932.3232421875,
+        "supervised": -5893.5341796875,
         "ranking_new": {
-          "kendall": -20402.853515625,
-          "hinge": -8508.6767578125,
-          "listnet": -7090.21533203125
+          "kendall": -32998.1015625,
+          "hinge": -5795.10205078125,
+          "listnet": -6420.869140625
         }
       },
-      "env_mc": -5939.466729196412
+      "env_mc": -5938.687738663938
     }
   ]
 }
