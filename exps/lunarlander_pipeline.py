@@ -446,11 +446,10 @@ def train_dynamics_models(
 
 
     policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
-    ranking_model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
     ranking_new_models: Dict[str, DynamicsNet] = {}
     for loss_name in ("kendall", "hinge", "listnet"):
         model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
-        model.train_ranking_aware_model_new(
+        model.train_ranking_aware_model(
             dataset,
             policy_q_pairs=policy_q_pairs,
             gamma=gamma,

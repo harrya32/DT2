@@ -776,6 +776,7 @@ def train_dynamics_models(
     min_epochs: int,
     dynamics_loss: str = "nll",
     hidden_dim: int = 256,
+    backbone: str = "mlp",
     wandb_run: Optional[Any] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet]]:
     """Train supervised and ranking-aware dynamics models."""
@@ -790,6 +791,7 @@ def train_dynamics_models(
         state_upper=CANCER_OBS_HIGH,
         wrapped_dims=[],  # No wrapped dims in this env
         hidden=hidden_dim,
+        backbone=backbone,
     ).to(device)
     sup_model.train(
         dataset,
@@ -816,8 +818,9 @@ def train_dynamics_models(
             state_upper=CANCER_OBS_HIGH,
             wrapped_dims=[],
             hidden=hidden_dim,
+            backbone=backbone,
         ).to(device)
-        model.train_ranking_aware_model_new(
+        model.train_ranking_aware_model(
             dataset,
             policy_q_pairs=policy_q_pairs,
             gamma=gamma,
@@ -1075,6 +1078,7 @@ def main() -> None:
     parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"],
                         help="Loss function for dynamics training")
     parser.add_argument("--lambda-rank", type=float, default=0.1)
+    parser.add_argument("--backbone", type=str, default="mlp", choices=["mlp", "resnet", "ode", "transformer", "gru"],)
     
     # Evaluation
     parser.add_argument("--eval-rollouts", type=int, default=200)
@@ -1282,7 +1286,7 @@ def main() -> None:
     wandb_log(wandb_run, q_log)
 
     # Step 4: Train dynamics models
-    dynamics_dir = args.output_dir / "dynamics"
+    dynamics_dir = args.output_dir / args.backbone / "dynamics"
     dynamics_manifest = dynamics_dir / "manifest.json"
     dynamics_trained = False
     dynamics_train_time: Optional[float] = None
@@ -1310,6 +1314,7 @@ def main() -> None:
             min_epochs=args.dyn_min_epochs,
             dynamics_loss=args.dynamics_loss,
             hidden_dim=args.dyn_hidden_dim,
+            backbone=args.backbone,
             wandb_run=wandb_run,
         )
         dynamics_paths = save_dynamics_models(sup_model, ranking_new_models, dynamics_dir)
@@ -1429,7 +1434,7 @@ def main() -> None:
         "results": results,
     }
 
-    summary_path = args.output_dir / f"summary_{args.seed}.json"
+    summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"\nSaved summary to {summary_path}")

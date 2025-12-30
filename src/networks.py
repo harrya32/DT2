@@ -15,6 +15,127 @@ from .policies import GaussianLinearPolicy, TorchPolicy
 from .utils import DEVICE
 
 
+# ==============================================================================
+# Backbone Architectures
+# ==============================================================================
+
+class BaseBackbone(nn.Module):
+    """Interface for backbones."""
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
+
+class MLPBackbone(BaseBackbone):
+    def __init__(self, input_dim: int, hidden: int):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden),
+            nn.SiLU(),
+            nn.Linear(hidden, hidden),
+            nn.SiLU(),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+class ResNetBackbone(BaseBackbone):
+    class ResidualBlock(nn.Module):
+        def __init__(self, dim: int, dropout: float = 0.1):
+            super().__init__()
+            self.block = nn.Sequential(
+                nn.Linear(dim, dim),
+                nn.LayerNorm(dim),
+                nn.SiLU(),
+                nn.Dropout(dropout),
+                nn.Linear(dim, dim),
+                nn.LayerNorm(dim),
+            )
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x + self.block(x)
+
+    def __init__(self, input_dim: int, hidden: int, num_blocks: int = 4):
+        super().__init__()
+        self.input_proj = nn.Linear(input_dim, hidden)
+        self.blocks = nn.Sequential(*[
+            self.ResidualBlock(hidden) for _ in range(num_blocks)
+        ])
+        self.activation = nn.SiLU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.input_proj(x)
+        x = self.blocks(x)
+        return self.activation(x)
+
+class NeuralODEBackbone(BaseBackbone):
+    """
+    Treats the transformation from input -> hidden as an ODE evolution.
+    z(0) = Linear(x)
+    dz/dt = MLP(z)
+    output = z(T)
+    Using explicit RK4 solver.
+    """
+    def __init__(self, input_dim: int, hidden: int, steps: int = 1):
+        super().__init__()
+        self.input_proj = nn.Linear(input_dim, hidden)
+        
+        # The derivative function dz/dt
+        self.ode_func = nn.Sequential(
+            nn.Linear(hidden, hidden),
+            nn.Tanh(), # Tanh often more stable for ODEs
+            nn.Linear(hidden, hidden)
+        )
+        self.steps = steps
+        self.dt = 1.0 / steps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        z = self.input_proj(x)
+        
+        # RK4 Integration
+        for _ in range(self.steps):
+            k1 = self.ode_func(z)
+            k2 = self.ode_func(z + 0.5 * self.dt * k1)
+            k3 = self.ode_func(z + 0.5 * self.dt * k2)
+            k4 = self.ode_func(z + self.dt * k3)
+            z = z + (self.dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+            
+        return z
+
+class TransformerBackbone(BaseBackbone):
+    """
+    Transformer adapter. 
+    Note: Without sequence data, this acts as a self-attention mechanism 
+    over a single token (which is mostly just a fancy MLP), but the architecture
+    is ready for sequences if dimensions are adjusted.
+    """
+    def __init__(self, input_dim: int, hidden: int, nhead: int = 4, layers: int = 2):
+        super().__init__()
+        self.input_proj = nn.Linear(input_dim, hidden)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden, nhead=nhead, batch_first=True, dim_feedforward=hidden*2)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=layers)
+        self.pos_token = nn.Parameter(torch.randn(1, 1, hidden))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [Batch, Dim] -> [Batch, 1, Dim]
+        x_seq = x.unsqueeze(1)
+        h = self.input_proj(x_seq) + self.pos_token
+        out = self.transformer(h)
+        return out.squeeze(1)
+
+class GRUBackbone(BaseBackbone):
+    """
+    GRU adapter for single-step inputs.
+    """
+    def __init__(self, input_dim: int, hidden: int, layers: int = 2):
+        super().__init__()
+        self.gru = nn.GRU(input_dim, hidden, num_layers=layers, batch_first=True)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [Batch, Dim] -> [Batch, 1, Dim]
+        x_seq = x.unsqueeze(1)
+        out, _ = self.gru(x_seq)
+        return out.squeeze(1)
+
+
 class DynamicsNet(nn.Module):
     def __init__(
         self,
@@ -24,49 +145,40 @@ class DynamicsNet(nn.Module):
         state_low: Optional[torch.Tensor] = None,
         state_upper: Optional[torch.Tensor] = None,
         wrapped_dims: Optional[Sequence[int]] = None,
+        backbone: str = "mlp",
     ) -> None:
 
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(state_dim + act_dim, hidden),
-            nn.SiLU(),
-            nn.Linear(hidden, hidden),
-            nn.SiLU(),
-        )
+        
+        # --- Select Backbone ---
+        input_dim = state_dim + act_dim
+        backbone = backbone.lower()
+        
+        if backbone == "mlp":
+            self.net = MLPBackbone(input_dim, hidden)
+        elif backbone == "resnet":
+            self.net = ResNetBackbone(input_dim, hidden)
+        elif backbone == "ode":
+            self.net = NeuralODEBackbone(input_dim, hidden)
+        elif backbone == "transformer":
+            self.net = TransformerBackbone(input_dim, hidden)
+        elif backbone == "gru":
+            self.net = GRUBackbone(input_dim, hidden)
+        else:
+            raise ValueError(f"Unknown backbone type: {backbone}")
+            
+        self.backbone_type = backbone
+        
         self.mean_head = nn.Linear(hidden, state_dim)
         self.logvar_head = nn.Linear(hidden, state_dim)
 
         if state_low is None:
-            state_low = torch.tensor(
-                [
-                    -2.5,
-                    -2.5,
-                    -10.0,
-                    -10.0,
-                    -math.pi,
-                    -10.0,
-                    0.0,
-                    0.0,
-                ],
-                dtype=torch.float32,
-            )
+            state_low = torch.tensor([-2.5, -2.5, -10.0, -10.0, -math.pi, -10.0, 0.0, 0.0], dtype=torch.float32)
         else:
             state_low = state_low.detach().to(dtype=torch.float32)
 
         if state_upper is None:
-            state_upper = torch.tensor(
-                [
-                    2.5,
-                    2.5,
-                    10.0,
-                    10.0,
-                    math.pi,
-                    10.0,
-                    1.0,
-                    1.0,
-                ],
-                dtype=torch.float32,
-            )
+            state_upper = torch.tensor([2.5, 2.5, 10.0, 10.0, math.pi, 10.0, 1.0, 1.0], dtype=torch.float32)
         else:
             state_upper = state_upper.detach().to(dtype=torch.float32)
 
@@ -84,7 +196,6 @@ class DynamicsNet(nn.Module):
             raise ValueError(f"wrapped_dims indices out of range: {invalid}")
         self.wrapped_dims = tuple(int(d) for d in sorted(set(dims)))
 
-        # Input/output normalization buffers (initialized to identity transform)
         self.register_buffer("state_mean", torch.zeros(state_dim))
         self.register_buffer("state_std", torch.ones(state_dim))
         self.register_buffer("action_mean", torch.zeros(act_dim))
@@ -99,7 +210,9 @@ class DynamicsNet(nn.Module):
         a_norm = (a - self.action_mean) / (self.action_std + 1e-8)
         
         x = torch.cat([s_norm, a_norm], dim=-1)
+        
         h = self.net(x)
+        
         mean_norm = self.mean_head(h)  # Predicts normalized delta
         logvar_norm = self.logvar_head(h)  # Log-variance in normalized space
         logvar_norm = torch.clamp(logvar_norm, min=-10.0, max=2.0)
@@ -107,8 +220,7 @@ class DynamicsNet(nn.Module):
         # Denormalize mean prediction: convert from normalized delta to actual s_next
         mean = mean_norm * (self.delta_std + 1e-8) + self.delta_mean + s
         
-        # Denormalize variance: var_actual = var_norm * delta_std^2
-        # So logvar_actual = logvar_norm + 2 * log(delta_std)
+        # Denormalize variance
         logvar = logvar_norm + 2.0 * torch.log(self.delta_std + 1e-8)
         
         return mean, logvar
@@ -265,38 +377,6 @@ class DynamicsNet(nn.Module):
         train_idx = perm[val_count:]
         return train_idx, val_idx
 
-    def _q_aware_objective(
-        self,
-        states: torch.Tensor,
-        actions: torch.Tensor,
-        next_states: torch.Tensor,
-        target_policy: TorchPolicy | GaussianLinearPolicy,
-        q_fn: nn.Module,
-        dyn_loss_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
-        gamma: float,
-        lambda_td: float,
-        act_low: float,
-        act_high: float,
-        samples: int,
-        reward_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    ) -> torch.Tensor:
-        dyn_loss = dyn_loss_fn(states, actions, next_states)
-        a_pi = self._sample_policy_actions(target_policy, states, 1, act_low, act_high)
-        s_next_model = self.sample_next(states, a_pi)
-        reward = reward_fn(states, a_pi)
-
-        if samples > 1:
-            s_rep = s_next_model.repeat_interleave(samples, dim=0)
-            a_rep = self._sample_policy_actions(target_policy, s_next_model, samples, act_low, act_high)
-            q_next = q_fn(s_rep, a_rep).view(s_next_model.size(0), samples).mean(dim=1)
-        else:
-            a_rep = self._sample_policy_actions(target_policy, s_next_model, 1, act_low, act_high)
-            q_next = q_fn(s_next_model, a_rep)
-
-        q_curr = q_fn(states, a_pi)
-        td_loss = (q_curr - (reward + gamma * q_next)).pow(2).mean()
-        return (1.0 - lambda_td) * dyn_loss + lambda_td * td_loss
-                    
     def train(
         self,
         dataset: OfflineDataset | Mapping[str, np.ndarray],
@@ -380,366 +460,8 @@ class DynamicsNet(nn.Module):
             self.load_state_dict(best_state)
 
         return losses
-    
-    def train_q_aware_model(
-        self, 
-        dataset: OfflineDataset | Mapping[str, np.ndarray],
-        target_policy: TorchPolicy | GaussianLinearPolicy,
-        q_fn: nn.Module,
-        gamma: float = 0.97,
-        lambda_td: float = 1.0,
-        epochs: int = 20,
-        batch_size: int = 1024,
-        lr: float = 5e-4,
-        use_amp: bool = True,
-        act_low: float = -1.0,
-        act_high: float = 1.0,
-        samples: int = 4,
-        hidden: int = 128,
-        dynamics_loss: str = "nll",
-        reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
-        device: Optional[torch.device] = None,
-        log_hook: Optional[Callable[..., None]] = None,
-        val_fraction: float = 0.1,
-        early_stop_patience: int = 50,
-        min_epochs: int = 50,
-        min_delta: float = 0.0,
-    ) -> DynamicsNet:
-        
-        if reward_fn is None:
-            raise ValueError("reward_fn must be provided for q-aware training.")
-
-        _ = hidden  # maintained for API compatibility
-
-        device = device or DEVICE
-        self.to(device)
-        data = self._as_dict(dataset)
-        states = torch.tensor(data["s"], dtype=torch.float32, device=device)
-        actions = torch.tensor(data["a"], dtype=torch.float32, device=device)
-        next_states = torch.tensor(data["s_next"], dtype=torch.float32, device=device)
-        N = states.shape[0]
-
-        q_fn = q_fn.to(device)
-        for param in q_fn.parameters():
-            param.requires_grad_(False)
-
-        dyn_loss_fn = self._select_dynamics_loss(dynamics_loss)
-
-        optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
-        use_amp = use_amp and device.type == "cuda"
-        scaler = torch.amp.GradScaler("cuda", enabled=use_amp) if use_amp else None
-        train_idx, val_idx = self._split_train_val_indices(N, val_fraction, device)
-        train_states = states[train_idx]
-        train_actions = actions[train_idx]
-        train_next = next_states[train_idx]
-        train_N = train_states.shape[0]
-        train_indices = torch.arange(train_N, device=device)
-
-        val_tensors = None
-        if val_idx is not None:
-            val_tensors = (
-                states[val_idx],
-                actions[val_idx],
-                next_states[val_idx],
-            )
-
-        # Fit normalizer on training data
-        if not self._normalizer_fitted:
-            self.fit_normalizer(train_states, train_actions, train_next)
-
-        losses: List[float] = []
-        best_state = copy.deepcopy(self.state_dict()) if val_tensors is not None else None
-        best_val = math.inf
-        epochs_without_improve = 0
-
-        for epoch in range(epochs):
-            epoch_loss = 0.0
-            num_valid_batches = 0
-            perm = train_indices[torch.randperm(train_N, device=device)]
-            for start in range(0, train_N, batch_size):
-                idx = perm[start : start + batch_size]
-                sb, ab, snb = train_states[idx], train_actions[idx], train_next[idx]
-
-                optimizer.zero_grad(set_to_none=True)
-
-                with torch.amp.autocast("cuda", enabled=use_amp):
-                    loss = self._q_aware_objective(
-                        sb,
-                        ab,
-                        snb,
-                        target_policy,
-                        q_fn,
-                        dyn_loss_fn,
-                        gamma,
-                        lambda_td,
-                        act_low,
-                        act_high,
-                        samples,
-                        reward_fn,
-                    )
-
-                if not torch.isfinite(loss):
-                    continue
-
-                if use_amp:
-                    scaler.scale(loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                    optimizer.step()
-
-                epoch_loss += loss.item()
-                num_valid_batches += 1
-
-            avg_loss = epoch_loss / max(1, num_valid_batches)
-            val_loss: Optional[float] = None
-            if val_tensors is not None:
-                vs, va, vn = val_tensors
-                with torch.no_grad():
-                    total = 0.0
-                    batches = 0
-                    for start in range(0, vs.size(0), batch_size):
-                        vsb = vs[start : start + batch_size]
-                        vab = va[start : start + batch_size]
-                        vnb = vn[start : start + batch_size]
-                        val_obj = self._q_aware_objective(
-                            vsb,
-                            vab,
-                            vnb,
-                            target_policy,
-                            q_fn,
-                            dyn_loss_fn,
-                            gamma,
-                            lambda_td,
-                            act_low,
-                            act_high,
-                            samples,
-                            reward_fn,
-                        )
-                        total += float(val_obj.item())
-                        batches += 1
-                    val_loss = total / max(1, batches)
-
-                if val_loss + min_delta < best_val:
-                    best_val = val_loss
-                    epochs_without_improve = 0
-                    best_state = copy.deepcopy(self.state_dict())
-                else:
-                    epochs_without_improve += 1
-
-            losses.append(avg_loss)
-            if log_hook is not None:
-                log_hook(epoch, avg_loss, val_loss)
-
-            if (
-                val_tensors is not None
-                and early_stop_patience > 0
-                and epoch + 1 >= min_epochs
-                and epochs_without_improve >= early_stop_patience
-            ):
-                break
-
-        if best_state is not None:
-            self.load_state_dict(best_state)
-
-        return losses
 
     def train_ranking_aware_model(
-        self,
-        dataset: OfflineDataset | Mapping[str, np.ndarray],
-        policy_q_pairs: Sequence[Tuple[TorchPolicy | GaussianLinearPolicy, nn.Module]],
-        gamma: float = 0.97,
-        lambda_rank: float = 0.1,
-        rollout_horizon: int = 50,
-        rollout_episodes: int = 32,
-        epochs: int = 20,
-        batch_size: int = 1024,
-        lr: float = 5e-4,
-        use_amp: bool = True,
-        act_low: float = -1.0,
-        act_high: float = 1.0,
-        hidden: int = 128,
-        dynamics_loss: str = "nll",
-        reward_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
-        device: Optional[torch.device] = None,
-        log_hook: Optional[Callable[..., None]] = None,
-        val_fraction: float = 0.1,
-        early_stop_patience: int = 50,
-        min_epochs: int = 50,
-        min_delta: float = 0.0,
-    ) -> DynamicsNet:
-        
-        if reward_fn is None:
-            raise ValueError("reward_fn must be provided for ranking-aware training.")
-
-        from .fqe import estimate_V_from_Q_on_s0
-
-        _ = hidden  # maintained for API compatibility
-
-        device = device or DEVICE
-        self.to(device)
-        data = self._as_dict(dataset)
-        states = torch.tensor(data["s"], dtype=torch.float32, device=device)
-        actions = torch.tensor(data["a"], dtype=torch.float32, device=device)
-        next_states = torch.tensor(data["s_next"], dtype=torch.float32, device=device)
-        N = states.shape[0]
-
-        dyn_loss_fn = self._select_dynamics_loss(dynamics_loss)
-        optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
-        use_amp = use_amp and device.type == "cuda"
-        scaler = torch.amp.GradScaler("cuda", enabled=use_amp) if use_amp else None
-        train_idx, val_idx = self._split_train_val_indices(N, val_fraction, device)
-        train_states = states[train_idx]
-        train_actions = actions[train_idx]
-        train_next = next_states[train_idx]
-        train_indices = torch.arange(train_states.shape[0], device=device)
-        val_tensors = None
-        if val_idx is not None:
-            val_tensors = (
-                states[val_idx],
-                actions[val_idx],
-                next_states[val_idx],
-            )
-
-        # Fit normalizer on training data
-        if not self._normalizer_fitted:
-            self.fit_normalizer(train_states, train_actions, train_next)
-
-        for policy, q in policy_q_pairs:
-            q = q.to(device)
-            for param in q.parameters():
-                param.requires_grad_(False)
-
-        s0 = torch.tensor(data["s0"], dtype=torch.float32, device=device)
-
-        def rollout_return(pi: TorchPolicy | GaussianLinearPolicy) -> torch.Tensor:
-            idx = torch.randint(0, s0.size(0), (rollout_episodes,), device=device)
-            s = s0[idx]
-            total = torch.zeros(rollout_episodes, device=device)
-            discount = torch.ones(rollout_episodes, device=device)
-            for _ in range(rollout_horizon):
-                a = self._sample_policy_actions(pi, s, 1, act_low, act_high)
-                s_next = self.sample_next(s, a)
-                r = reward_fn(s, a)
-                total = total + discount * r
-                discount = discount * gamma
-                s = s_next
-            return total.mean()
-
-        losses: List[float] = []
-        best_state = copy.deepcopy(self.state_dict()) if val_tensors is not None else None
-        best_val = math.inf
-        epochs_without_improve = 0
-        latest_rank_term: Optional[float] = None
-
-        for epoch in range(epochs):
-            epoch_loss = 0.0
-            perm = train_indices[torch.randperm(train_indices.size(0), device=device)]
-            for start in range(0, perm.size(0), batch_size):
-                idx = perm[start : start + batch_size]
-                sb, ab, snb = train_states[idx], train_actions[idx], train_next[idx]
-
-                with torch.amp.autocast("cuda", enabled=use_amp):
-                    loss = (1.0 - lambda_rank) * dyn_loss_fn(sb, ab, snb)
-
-                if use_amp:
-                    scaler.scale(loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                    optimizer.step()
-
-                optimizer.zero_grad(set_to_none=True)
-                epoch_loss += loss.item()
-
-            latest_rank_term = None
-            if lambda_rank > 0.0:
-                with torch.amp.autocast("cuda", enabled=use_amp):
-                    target_vals = []
-                    model_vals = []
-                    for pi, q in policy_q_pairs:
-                        target_val = estimate_V_from_Q_on_s0(q, data["s0"], pi, K=32)
-                        target_vals.append(target_val)
-                        model_vals.append(rollout_return(pi))
-
-                    model_tensor = torch.stack(model_vals)
-                    target_tensor = torch.tensor(target_vals, dtype=model_tensor.dtype, device=device)
-                    if torch.isfinite(target_tensor).all() and torch.isfinite(model_tensor).all():
-                        terms = []
-                        for i in range(len(policy_q_pairs)):
-                            for j in range(i + 1, len(policy_q_pairs)):
-                                sign = torch.sign(target_tensor[i] - target_tensor[j])
-                                diff = (model_tensor[i] - model_tensor[j]) * sign
-                                terms.append(F.relu(-diff))
-                        rank_loss = torch.stack(terms).mean() if terms else torch.zeros((), device=device)
-                        rank_term = lambda_rank * rank_loss
-                        latest_rank_term = float(rank_term.item())
-
-                        if use_amp:
-                            scaler.scale(rank_term).backward()
-                            scaler.unscale_(optimizer)
-                            torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                            scaler.step(optimizer)
-                            scaler.update()
-                        else:
-                            rank_term.backward()
-                            torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                            optimizer.step()
-
-                        optimizer.zero_grad(set_to_none=True)
-                        epoch_loss += latest_rank_term
-
-            avg_loss = epoch_loss / self._num_batches(train_states.size(0), batch_size)
-            val_loss: Optional[float] = None
-            if val_tensors is not None:
-                vs, va, vn = val_tensors
-                with torch.no_grad():
-                    total = 0.0
-                    batches = 0
-                    for start in range(0, vs.size(0), batch_size):
-                        vsb = vs[start : start + batch_size]
-                        vab = va[start : start + batch_size]
-                        vnb = vn[start : start + batch_size]
-                        dyn_val = dyn_loss_fn(vsb, vab, vnb)
-                        total += float(((1.0 - lambda_rank) * dyn_val).item())
-                        batches += 1
-                    val_loss = total / max(1, batches)
-                if latest_rank_term is not None:
-                    val_loss += latest_rank_term
-
-                if val_loss + min_delta < best_val:
-                    best_val = val_loss
-                    epochs_without_improve = 0
-                    best_state = copy.deepcopy(self.state_dict())
-                else:
-                    epochs_without_improve += 1
-
-            losses.append(avg_loss)
-            if log_hook is not None:
-                log_hook(epoch, avg_loss, val_loss)
-
-            if (
-                val_tensors is not None
-                and early_stop_patience > 0
-                and epoch + 1 >= min_epochs
-                and epochs_without_improve >= early_stop_patience
-            ):
-                break
-        
-        if best_state is not None:
-            self.load_state_dict(best_state)
-
-        return losses
-
-    def train_ranking_aware_model_new(
         self,
         dataset: OfflineDataset | Mapping[str, np.ndarray],
         policy_q_pairs: Sequence[Tuple[TorchPolicy | GaussianLinearPolicy, nn.Module]],
@@ -1177,9 +899,6 @@ class QNet(nn.Module):
                 epoch_loss += loss.item()
                 num_batches += 1
 
-            """tau = 0.005
-            for p, p_targ in zip(self.parameters(), target_q.parameters()):
-                p_targ.data.mul_(1 - tau).add_(tau * p.data)"""
             if (epoch + 1) % 5 == 0:
                 target_q.load_state_dict(self.state_dict())
 
@@ -1188,4 +907,3 @@ class QNet(nn.Module):
                 log_hook(epoch, avg_loss)
 
         return RescaledQ(self, reward_mean, reward_std, gamma)
-
