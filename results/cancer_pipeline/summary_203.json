@@ -33,7 +33,7 @@
     "dyn_early_stop_patience": 20,
     "dyn_min_epochs": 0,
     "dynamics_loss": "mse",
-    "lambda_rank": 0.5,
+    "lambda_rank": 1.0,
     "eval_rollouts": 10,
     "eval_horizon": 200,
     "output_dir": "results/cancer_pipeline",
@@ -107,25 +107,25 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/cancer_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": 46.52457809448242,
+      "q_estimate": 46.5687255859375,
       "dynamics": {
-        "supervised": -99.65396881103516,
-        "supervised_mse": 0.21732090413570404,
-        "supervised_train_mse": 0.2956784665584564,
+        "supervised": -99.06908416748047,
+        "supervised_mse": 0.21594254672527313,
+        "supervised_train_mse": 0.2936692237854004,
         "ranking_new": {
-          "kendall": -98.49467468261719,
-          "hinge": -66.91622161865234,
-          "listnet": -101.53470611572266
+          "kendall": -28.64158058166504,
+          "hinge": -41.643497467041016,
+          "listnet": -21.51581573486328
         },
         "ranking_new_mse": {
-          "kendall": 0.23709677159786224,
-          "hinge": 0.2577289640903473,
-          "listnet": 0.21027761697769165
+          "kendall": 0.3421136736869812,
+          "hinge": 0.32961663603782654,
+          "listnet": 0.33581840991973877
         },
         "ranking_new_train_mse": {
-          "kendall": 0.3175089657306671,
-          "hinge": 0.350911021232605,
-          "listnet": 0.2838385999202728
+          "kendall": 0.5021939873695374,
+          "hinge": 0.4847426414489746,
+          "listnet": 0.49935534596443176
         }
       },
       "env_mc": -22.7885936486796
@@ -134,25 +134,25 @@
       "name": "ppo_frac_20000",
       "checkpoint": "results/cancer_pipeline/policies/ppo_frac_20000",
       "timesteps": 20000,
-      "q_estimate": 36.10664749145508,
+      "q_estimate": 36.0843505859375,
       "dynamics": {
-        "supervised": -88.30410766601562,
-        "supervised_mse": 0.21732090413570404,
-        "supervised_train_mse": 0.2956784665584564,
+        "supervised": -57.87042236328125,
+        "supervised_mse": 0.21594254672527313,
+        "supervised_train_mse": 0.2936692237854004,
         "ranking_new": {
-          "kendall": -99.78255462646484,
-          "hinge": -60.31549072265625,
-          "listnet": -99.63648986816406
+          "kendall": -26.271879196166992,
+          "hinge": -40.49385070800781,
+          "listnet": -21.751495361328125
         },
         "ranking_new_mse": {
-          "kendall": 0.23709677159786224,
-          "hinge": 0.2577289640903473,
-          "listnet": 0.21027761697769165
+          "kendall": 0.3421136736869812,
+          "hinge": 0.32961663603782654,
+          "listnet": 0.33581840991973877
         },
         "ranking_new_train_mse": {
-          "kendall": 0.3175089657306671,
-          "hinge": 0.350911021232605,
-          "listnet": 0.2838385999202728
+          "kendall": 0.5021939873695374,
+          "hinge": 0.4847426414489746,
+          "listnet": 0.49935534596443176
         }
       },
       "env_mc": -20.22717042099544
@@ -161,25 +161,25 @@
       "name": "ppo_frac_40000",
       "checkpoint": "results/cancer_pipeline/policies/ppo_frac_40000",
       "timesteps": 40000,
-      "q_estimate": 42.00336837768555,
+      "q_estimate": 42.064247131347656,
       "dynamics": {
-        "supervised": -33.663169860839844,
-        "supervised_mse": 0.21732090413570404,
-        "supervised_train_mse": 0.2956784665584564,
+        "supervised": -39.02656936645508,
+        "supervised_mse": 0.21594254672527313,
+        "supervised_train_mse": 0.2936692237854004,
         "ranking_new": {
-          "kendall": -99.3213119506836,
-          "hinge": -55.6394157409668,
-          "listnet": -78.68587493896484
+          "kendall": -25.67414665222168,
+          "hinge": -40.76392364501953,
+          "listnet": -21.344284057617188
         },
         "ranking_new_mse": {
-          "kendall": 0.23709677159786224,
-          "hinge": 0.2577289640903473,
-          "listnet": 0.21027761697769165
+          "kendall": 0.3421136736869812,
+          "hinge": 0.32961663603782654,
+          "listnet": 0.33581840991973877
         },
         "ranking_new_train_mse": {
-          "kendall": 0.3175089657306671,
-          "hinge": 0.350911021232605,
-          "listnet": 0.2838385999202728
+          "kendall": 0.5021939873695374,
+          "hinge": 0.4847426414489746,
+          "listnet": 0.49935534596443176
         }
       },
       "env_mc": -16.254166119211135
@@ -188,25 +188,25 @@
       "name": "ppo_frac_60000",
       "checkpoint": "results/cancer_pipeline/policies/ppo_frac_60000",
       "timesteps": 60000,
-      "q_estimate": 49.55595016479492,
+      "q_estimate": 49.42311477661133,
       "dynamics": {
-        "supervised": -20.428565979003906,
-        "supervised_mse": 0.21732090413570404,
-        "supervised_train_mse": 0.2956784665584564,
+        "supervised": -30.757125854492188,
+        "supervised_mse": 0.21594254672527313,
+        "supervised_train_mse": 0.2936692237854004,
         "ranking_new": {
-          "kendall": -97.16777038574219,
-          "hinge": -51.000877380371094,
-          "listnet": -56.081539154052734
+          "kendall": -24.911191940307617,
+          "hinge": -40.63764190673828,
+          "listnet": -21.372358322143555
         },
         "ranking_new_mse": {
-          "kendall": 0.23709677159786224,
-          "hinge": 0.2577289640903473,
-          "listnet": 0.21027761697769165
+          "kendall": 0.3421136736869812,
+          "hinge": 0.32961663603782654,
+          "listnet": 0.33581840991973877
         },
         "ranking_new_train_mse": {
-          "kendall": 0.3175089657306671,
-          "hinge": 0.350911021232605,
-          "listnet": 0.2838385999202728
+          "kendall": 0.5021939873695374,
+          "hinge": 0.4847426414489746,
+          "listnet": 0.49935534596443176
         }
       },
       "env_mc": 22.774429342239706
@@ -215,25 +215,25 @@
       "name": "ppo_frac_80000",
       "checkpoint": "results/cancer_pipeline/policies/ppo_frac_80000",
       "timesteps": 80000,
-      "q_estimate": 50.62528610229492,
+      "q_estimate": 50.61821365356445,
       "dynamics": {
-        "supervised": -13.207414627075195,
-        "supervised_mse": 0.21732090413570404,
-        "supervised_train_mse": 0.2956784665584564,
+        "supervised": -30.392093658447266,
+        "supervised_mse": 0.21594254672527313,
+        "supervised_train_mse": 0.2936692237854004,
         "ranking_new": {
-          "kendall": -94.7895736694336,
-          "hinge": -46.9571647644043,
-          "listnet": 0.20798225700855255
+          "kendall": -23.932666778564453,
+          "hinge": -40.37085723876953,
+          "listnet": -22.097198486328125
         },
         "ranking_new_mse": {
-          "kendall": 0.23709677159786224,
-          "hinge": 0.2577289640903473,
-          "listnet": 0.21027761697769165
+          "kendall": 0.3421136736869812,
+          "hinge": 0.32961663603782654,
+          "listnet": 0.33581840991973877
         },
         "ranking_new_train_mse": {
-          "kendall": 0.3175089657306671,
-          "hinge": 0.350911021232605,
-          "listnet": 0.2838385999202728
+          "kendall": 0.5021939873695374,
+          "hinge": 0.4847426414489746,
+          "listnet": 0.49935534596443176
         }
       },
       "env_mc": 25.081244453876078
@@ -242,25 +242,25 @@
       "name": "ppo_frac_100000",
       "checkpoint": "results/cancer_pipeline/policies/ppo_frac_100000",
       "timesteps": 100000,
-      "q_estimate": 57.24481201171875,
+      "q_estimate": 57.216556549072266,
       "dynamics": {
-        "supervised": -11.135354042053223,
-        "supervised_mse": 0.21732090413570404,
-        "supervised_train_mse": 0.2956784665584564,
+        "supervised": -21.425460815429688,
+        "supervised_mse": 0.21594254672527313,
+        "supervised_train_mse": 0.2936692237854004,
         "ranking_new": {
-          "kendall": -90.98477935791016,
-          "hinge": -41.298858642578125,
-          "listnet": 9.37872314453125
+          "kendall": -22.31086540222168,
+          "hinge": -39.915767669677734,
+          "listnet": -23.558507919311523
         },
         "ranking_new_mse": {
-          "kendall": 0.23709677159786224,
-          "hinge": 0.2577289640903473,
-          "listnet": 0.21027761697769165
+          "kendall": 0.3421136736869812,
+          "hinge": 0.32961663603782654,
+          "listnet": 0.33581840991973877
         },
         "ranking_new_train_mse": {
-          "kendall": 0.3175089657306671,
-          "hinge": 0.350911021232605,
-          "listnet": 0.2838385999202728
+          "kendall": 0.5021939873695374,
+          "hinge": 0.4847426414489746,
+          "listnet": 0.49935534596443176
         }
       },
       "env_mc": 46.28095105322991

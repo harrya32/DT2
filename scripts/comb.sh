@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(0 1 2 3 4)
+DEFAULT_SEEDS=(19 20 21 22 23 24 25 26 27 28 29 30)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -37,9 +37,8 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "Running seed ${seed}..."
-    #python exps/lunarlander_pipeline.py --force-dynamics-training --dyn-early-stop-patience 50 --lambda-rank 0.5 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/pendulum_pipeline.py --force-q-training --force-dynamics-training --skip-sup-model --dyn-early-stop-patience 100 --lambda-rank 0.1 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/anisotropic_pipeline.py --force-dynamics-training --skip-sup-model --dyn-early-stop-patience 100 --lambda-rank 0.5 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_pipeline.py --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py  --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
     echo "Completed seed ${seed}"
     echo
 done

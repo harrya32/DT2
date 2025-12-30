@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 DEFAULT_SEEDS=(200 201 202 203 204)
 SEEDS=("${DEFAULT_SEEDS[@]}")
-LAMBDA_RANKS=(0.1 0.5 0.9)
+LAMBDA_RANKS=(1)
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do

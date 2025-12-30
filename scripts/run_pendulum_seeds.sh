@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(5 6 7 8 9)
+DEFAULT_SEEDS=(9 10 11 12 13 14)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -37,7 +37,7 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[pendulum_pipeline] Running seed ${seed}..."
-    python exps/pendulum_pipeline.py --dynamics-loss "mse" --force-policy-training --force-dataset-collection --force-q-training --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py --dynamics-loss "mse" --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
     echo "[pendulum_pipeline] Completed seed ${seed}"
     echo
 done
