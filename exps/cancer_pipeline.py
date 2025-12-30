@@ -789,7 +789,7 @@ def train_dynamics_models(
         act_dim=act_dim,
         state_low=CANCER_OBS_LOW,
         state_upper=CANCER_OBS_HIGH,
-        wrapped_dims=[],  # No wrapped dims in this env
+        wrapped_dims=[], 
         hidden=hidden_dim,
         backbone=backbone,
     ).to(device)

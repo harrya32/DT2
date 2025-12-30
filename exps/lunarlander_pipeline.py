@@ -425,12 +425,14 @@ def train_dynamics_models(
     early_stop_patience: int,
     min_epochs: int,
     dynamics_loss: str = "nll",
+    hidden_dim: int = 256,
+    backbone: str = "mlp",
     wandb_run: Optional[Any] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet], DynamicsNet, Dict[str, DynamicsNet]]:
     state_dim = dataset.states.shape[1]
     act_dim = dataset.actions.shape[1]
 
-    sup_model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
+    sup_model = DynamicsNet(state_dim=state_dim, act_dim=act_dim, hidden=hidden_dim, backbone=backbone).to(device)
     sup_model.train(
         dataset,
         epochs=dyn_epochs,
@@ -448,7 +450,7 @@ def train_dynamics_models(
     policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
     ranking_new_models: Dict[str, DynamicsNet] = {}
     for loss_name in ("kendall", "hinge", "listnet"):
-        model = DynamicsNet(state_dim=state_dim, act_dim=act_dim).to(device)
+        model = DynamicsNet(state_dim=state_dim, act_dim=act_dim, hidden=hidden_dim, backbone=backbone).to(device)
         model.train_ranking_aware_model(
             dataset,
             policy_q_pairs=policy_q_pairs,
@@ -639,12 +641,15 @@ def main() -> None:
     parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=1024)
     parser.add_argument("--dyn-lr", type=float, default=3e-4)
+    parser.add_argument("--dyn-hidden-dim", type=int, default=256)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
     parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"], help="Loss function for dynamics training")
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
+    parser.add_argument("--backbone", type=str, default="mlp", choices=["mlp", "resnet", "ode", "transformer", "gru"],)
+
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=500)
     parser.add_argument("--eval-horizon", type=int, default=500)
@@ -788,7 +793,7 @@ def main() -> None:
         q_log["timing/q_training_sec"] = q_train_time
     wandb_log(wandb_run, q_log)
 
-    dynamics_dir = args.output_dir / "dynamics"
+    dynamics_dir = args.output_dir / args.backbone / "dynamics"
     dynamics_manifest = dynamics_dir / "manifest.json"
     dynamics_trained = False
     dynamics_train_time: Optional[float] = None
@@ -819,6 +824,8 @@ def main() -> None:
             early_stop_patience=args.dyn_early_stop_patience,
             min_epochs=args.dyn_min_epochs,
             dynamics_loss=args.dynamics_loss,
+            hidden_dim=args.dyn_hidden_dim,
+            backbone=args.backbone,
             wandb_run=wandb_run,
         )
         dynamics_paths = save_dynamics_models(
@@ -912,7 +919,7 @@ def main() -> None:
         "results": results,
     }
 
-    summary_path = args.output_dir / f"summary_{args.seed}.json"
+    summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Saved summary to {summary_path}")

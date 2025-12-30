@@ -405,13 +405,15 @@ def load_q_models(directory: Path, device: torch.device) -> Tuple[Dict[str, torc
     return models, saved
 
 
-def make_dynamics_net(state_dim: int, act_dim: int) -> DynamicsNet:
+def make_dynamics_net(state_dim: int, act_dim: int, hidden_dim: int = 256, backbone: str = "mlp") -> DynamicsNet:
     return DynamicsNet(
         state_dim=state_dim,
         act_dim=act_dim,
         state_low=PENDULUM_STATE_LOW,
         state_upper=PENDULUM_STATE_HIGH,
         wrapped_dims=[],  # Pendulum uses cos/sin encoding, no raw angles
+        hidden=hidden_dim,
+        backbone=backbone,
     )
 
 
@@ -430,6 +432,8 @@ def train_dynamics_models(
     early_stop_patience: int,
     min_epochs: int,
     dynamics_loss: str = "nll",
+    hidden_dim: int = 256,
+    backbone: str = "mlp",
     wandb_run: Optional[Any] = None,
     skip_sup_model: bool = False,
 ) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet]]:
@@ -439,7 +443,7 @@ def train_dynamics_models(
     if skip_sup_model:
         sup_model = None
     else:
-        sup_model = make_dynamics_net(state_dim, act_dim).to(device)
+        sup_model = make_dynamics_net(state_dim, act_dim, hidden_dim=hidden_dim, backbone=backbone).to(device)
         sup_model.train(
             dataset,
             epochs=dyn_epochs,
@@ -458,7 +462,7 @@ def train_dynamics_models(
     # Train additional ranking-aware models using the new loss variants.
     ranking_new_models: Dict[str, DynamicsNet] = {}
     for loss_name in ("kendall", "hinge", "listnet"):
-        model = make_dynamics_net(state_dim, act_dim).to(device)
+        model = make_dynamics_net(state_dim, act_dim, hidden_dim=hidden_dim, backbone=backbone).to(device)
         model.train_ranking_aware_model(
             dataset,
             policy_q_pairs=policy_q_pairs,
@@ -643,12 +647,14 @@ def main() -> None:
     parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=1024)
     parser.add_argument("--dyn-lr", type=float, default=3e-4)
+    parser.add_argument("--dyn-hidden-dim", type=int, default=256)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
     parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"], help="Loss function for dynamics training")
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
+    parser.add_argument("--backbone", type=str, default="mlp", choices=["mlp", "resnet", "ode", "transformer", "gru"],)
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=256)
     parser.add_argument("--eval-horizon", type=int, default=200)
@@ -798,7 +804,7 @@ def main() -> None:
         },
     )
 
-    dynamics_dir = args.output_dir / "dynamics"
+    dynamics_dir = args.output_dir / args.backbone / "dynamics"
     dynamics_manifest = dynamics_dir / "manifest.json"
     if dynamics_manifest.exists() and not args.force_dynamics_training:
         print("[Step 4] Using existing dynamics models...")
@@ -829,6 +835,8 @@ def main() -> None:
             early_stop_patience=args.dyn_early_stop_patience,
             min_epochs=args.dyn_min_epochs,
             dynamics_loss=args.dynamics_loss,
+            hidden_dim=args.dyn_hidden_dim,
+            backbone=args.backbone,
             wandb_run=wandb_run,
             skip_sup_model=args.skip_sup_model,
         )
@@ -927,7 +935,7 @@ def main() -> None:
         "results": results,
     }
 
-    summary_path = args.output_dir / f"summary_{args.seed}.json"
+    summary_path = args.output_dir /  args.backbone / f"summary_{args.seed}.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Saved summary to {summary_path}")

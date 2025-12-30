@@ -1,0 +1,10 @@
+{
+  "supervised": "results/nll/lunarlander_pipeline/ode/dynamics/dynamics_supervised.pt",
+  "ranking": "results/nll/lunarlander_pipeline/ode/dynamics/dynamics_ranking.pt",
+  "q_aware": {},
+  "ranking_new": {
+    "kendall": "results/nll/lunarlander_pipeline/ode/dynamics/dynamics_ranking_new_kendall.pt",
+    "hinge": "results/nll/lunarlander_pipeline/ode/dynamics/dynamics_ranking_new_hinge.pt",
+    "listnet": "results/nll/lunarlander_pipeline/ode/dynamics/dynamics_ranking_new_listnet.pt"
+  }
+}
