@@ -858,6 +858,55 @@ def main() -> None:
     print("[Step 5-7] Evaluating policies across true env, Q, MC env, and dynamics...")
     results = []
     initial_states = dataset.initial_states
+
+    # === MSE Evaluation Helpers (train/test) ===
+    def calc_dynamics_mse(dynamics_model, states, actions, next_states, device):
+        with torch.no_grad():
+            s = torch.tensor(states, dtype=torch.float32, device=device)
+            a = torch.tensor(actions, dtype=torch.float32, device=device)
+            s_next_true = torch.tensor(next_states, dtype=torch.float32, device=device)
+            s_next_pred = dynamics_model.sample_next(s, a, deterministic=True)
+            mse = torch.mean((s_next_pred - s_next_true) ** 2).item()
+        return mse
+
+    def sample_training_transitions(dataset, n_samples=1000, seed=0):
+        rng = np.random.default_rng(seed)
+        n_total = dataset.states.shape[0]
+        idx = rng.choice(n_total, size=min(n_samples, n_total), replace=n_samples > n_total)
+        return dataset.states[idx], dataset.actions[idx], dataset.next_states[idx]
+
+    # Generate a test set of transitions for MSE evaluation
+    def generate_dynamics_test_set_with_policies(env_id, n_transitions_per_policy=200, seed=0):
+        env = gym.make(env_id)
+        rng = np.random.default_rng(seed)
+        all_states = []
+        all_actions = []
+        all_next_states = []
+        for policy_name, policy in torch_policies.items():
+            obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
+            for _ in range(n_transitions_per_policy):
+                obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+                action_tensor = policy.sample_torch_actions(obs_tensor, deterministic=True)
+                action = action_tensor.squeeze(0).cpu().numpy()
+                next_obs, _, terminated, truncated, _ = env.step(action)
+                all_states.append(obs.copy())
+                all_actions.append(action.copy())
+                all_next_states.append(next_obs.copy())
+                obs = next_obs
+                if terminated or truncated:
+                    obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
+        env.close()
+        return (
+            np.asarray(all_states, dtype=np.float32),
+            np.asarray(all_actions, dtype=np.float32),
+            np.asarray(all_next_states, dtype=np.float32),
+        )
+
+    test_states, test_actions, test_next_states = generate_dynamics_test_set_with_policies(
+        args.env_id, n_transitions_per_policy=200, seed=args.seed+999
+    )
+    train_states, train_actions, train_next_states = sample_training_transitions(dataset, n_samples=1000, seed=args.seed+123)
+
     for snap in snapshots:
         name = snap["name"]
         policy = torch_policies[name]
@@ -874,6 +923,8 @@ def main() -> None:
         )
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
         dyn_sup = None
+        dyn_sup_mse = None
+        dyn_sup_train_mse = None
         if sup_model is not None:
             dyn_sup = evaluate_in_dynamics_mc(
                 sup_model,
@@ -884,8 +935,12 @@ def main() -> None:
                 device,
                 args.eval_rollouts,
             )
-        
+            dyn_sup_mse = calc_dynamics_mse(sup_model, test_states, test_actions, test_next_states, device)
+            dyn_sup_train_mse = calc_dynamics_mse(sup_model, train_states, train_actions, train_next_states, device)
+
         dyn_rank_new: Dict[str, float] = {}
+        dyn_rank_new_mse: Dict[str, float] = {}
+        dyn_rank_new_train_mse: Dict[str, float] = {}
         for loss_name, dyn_model in ranking_new_models.items():
             dyn_rank_new[loss_name] = evaluate_in_dynamics_mc(
                 dyn_model,
@@ -896,6 +951,8 @@ def main() -> None:
                 device,
                 args.eval_rollouts,
             )
+            dyn_rank_new_mse[loss_name] = calc_dynamics_mse(dyn_model, test_states, test_actions, test_next_states, device)
+            dyn_rank_new_train_mse[loss_name] = calc_dynamics_mse(dyn_model, train_states, train_actions, train_next_states, device)
 
         wandb_payload = {
             "eval/policy_name": name,
@@ -904,8 +961,14 @@ def main() -> None:
         }
         if dyn_sup is not None:
             wandb_payload["eval/dynamics_supervised"] = dyn_sup
+            wandb_payload["eval/dynamics_supervised_mse"] = dyn_sup_mse
+            wandb_payload["eval/dynamics_supervised_train_mse"] = dyn_sup_train_mse
         for loss_name, val in dyn_rank_new.items():
             wandb_payload[f"eval/dynamics_ranking_new_{loss_name}"] = val
+        for loss_name, val in dyn_rank_new_mse.items():
+            wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_mse"] = val
+        for loss_name, val in dyn_rank_new_train_mse.items():
+            wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_train_mse"] = val
 
         wandb_log(
             wandb_run,
@@ -922,7 +985,11 @@ def main() -> None:
                 "q_estimate": q_est,
                 "dynamics": {
                     "supervised": dyn_sup,
+                    "supervised_mse": dyn_sup_mse,
+                    "supervised_train_mse": dyn_sup_train_mse,
                     "ranking_new": dyn_rank_new,
+                    "ranking_new_mse": dyn_rank_new_mse,
+                    "ranking_new_train_mse": dyn_rank_new_train_mse,
                 },
             }
         )

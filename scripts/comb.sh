@@ -37,13 +37,20 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "Running seed ${seed}..."
-    python exps/lunarlander_pipeline.py --backbone "ode" --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_pipeline.py  --backbone "ode" --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/cancer_pipeline.py  --backbone "ode" --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cancer_pipeline.py  --backbone "ode" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cancer_pipeline.py  --backbone "resnet" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cancer_pipeline.py  --backbone "mlp" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
 
-    python exps/lunarlander_pipeline.py --backbone "resnet" --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_pipeline.py  --backbone "resnet" --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/cancer_pipeline.py  --backbone "resnet" --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+
+    python exps/pendulum_pipeline.py  --backbone "ode" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py  --backbone "resnet" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py  --backbone "mlp" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+
+
+    python exps/lunarlander_pipeline.py --backbone "ode" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_pipeline.py --backbone "resnet" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_pipeline.py --backbone "mlp" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+
     echo "Completed seed ${seed}"
     echo
 done
