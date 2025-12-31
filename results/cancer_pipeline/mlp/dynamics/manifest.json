@@ -1,8 +1,8 @@
 {
-  "supervised": "results/cancer_pipeline/dynamics/dynamics_supervised.pt",
+  "supervised": "results/cancer_pipeline/mlp/dynamics/dynamics_supervised.pt",
   "ranking_new": {
-    "kendall": "results/cancer_pipeline/dynamics/dynamics_ranking_new_kendall.pt",
-    "hinge": "results/cancer_pipeline/dynamics/dynamics_ranking_new_hinge.pt",
-    "listnet": "results/cancer_pipeline/dynamics/dynamics_ranking_new_listnet.pt"
+    "kendall": "results/cancer_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt",
+    "hinge": "results/cancer_pipeline/mlp/dynamics/dynamics_ranking_new_hinge.pt",
+    "listnet": "results/cancer_pipeline/mlp/dynamics/dynamics_ranking_new_listnet.pt"
   }
 }
