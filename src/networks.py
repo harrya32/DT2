@@ -102,24 +102,33 @@ class NeuralODEBackbone(BaseBackbone):
 
 class TransformerBackbone(BaseBackbone):
     """
-    Transformer adapter. 
-    Note: Without sequence data, this acts as a self-attention mechanism 
-    over a single token (which is mostly just a fancy MLP), but the architecture
-    is ready for sequences if dimensions are adjusted.
+    Transformer adapter that supports both single-step and batched sequence inputs.
     """
-    def __init__(self, input_dim: int, hidden: int, nhead: int = 4, layers: int = 2):
+    def __init__(self, input_dim: int, hidden: int, nhead: int = 4, layers: int = 2, max_len: int = 512):
         super().__init__()
         self.input_proj = nn.Linear(input_dim, hidden)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden, nhead=nhead, batch_first=True, dim_feedforward=hidden*2)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden,
+            nhead=nhead,
+            batch_first=True,
+            dim_feedforward=hidden * 2,
+        )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=layers)
-        self.pos_token = nn.Parameter(torch.randn(1, 1, hidden))
+        self.max_len = max_len
+        self.pos_embedding = nn.Parameter(torch.randn(1, max_len, hidden))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [Batch, Dim] -> [Batch, 1, Dim]
-        x_seq = x.unsqueeze(1)
-        h = self.input_proj(x_seq) + self.pos_token
+        # Accept [B, D] or [B, T, D]
+        is_seq = x.dim() == 3
+        x_seq = x if is_seq else x.unsqueeze(1)
+        B, T, _ = x_seq.shape
+        if T > self.max_len:
+            raise ValueError(f"TransformerBackbone sequence length {T} exceeds max_len {self.max_len}.")
+
+        pos = self.pos_embedding[:, :T, :]
+        h = self.input_proj(x_seq) + pos
         out = self.transformer(h)
-        return out.squeeze(1)
+        return out if is_seq else out.squeeze(1)
 
 class GRUBackbone(BaseBackbone):
     """
@@ -130,10 +139,11 @@ class GRUBackbone(BaseBackbone):
         self.gru = nn.GRU(input_dim, hidden, num_layers=layers, batch_first=True)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [Batch, Dim] -> [Batch, 1, Dim]
-        x_seq = x.unsqueeze(1)
+        # Accept [B, D] or [B, T, D]
+        is_seq = x.dim() == 3
+        x_seq = x if is_seq else x.unsqueeze(1)
         out, _ = self.gru(x_seq)
-        return out.squeeze(1)
+        return out if is_seq else out.squeeze(1)
 
 
 class DynamicsNet(nn.Module):
@@ -225,19 +235,29 @@ class DynamicsNet(nn.Module):
         
         return mean, logvar
 
-    def nll(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
+    def nll(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor, mask: Optional[torch.Tensor] = None):
         mean, logvar = self.forward(s, a)
         diff = self._circular_diff(s_next, mean, s_next - mean)
         inv_var = torch.exp(-logvar)
         nll = 0.5 * (logvar + diff ** 2 * inv_var + math.log(2 * math.pi))
-        return nll.sum(dim=-1).mean()
+        nll = nll.sum(dim=-1)  # sum over state dims -> [B] or [B, T]
+        if mask is not None:
+            nll = self._apply_mask(nll, mask)
+            denom = mask.sum().clamp(min=1.0)
+            return nll.sum() / denom
+        return nll.mean()
 
-    def mse(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
+    def mse(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor, mask: Optional[torch.Tensor] = None):
         mean, _ = self.forward(s, a)
         diff = self._circular_diff(s_next, mean, s_next - mean)
-        return (diff ** 2).mean()
+        mse = (diff ** 2).mean(dim=-1)  # mean over state dims -> [B] or [B, T]
+        if mask is not None:
+            mse = self._apply_mask(mse, mask)
+            denom = mask.sum().clamp(min=1.0)
+            return mse.sum() / denom
+        return mse.mean()
 
-    def balanced_loss(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor):
+    def balanced_loss(self, s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor, mask: Optional[torch.Tensor] = None):
         mean, logvar = self.forward(s, a)
         diff = self._circular_diff(s_next, mean, s_next - mean)
 
@@ -248,11 +268,15 @@ class DynamicsNet(nn.Module):
         # Weight by inverse range^2
         weights = 1.0 / (self.state_high - self.state_low).pow(2)
         nll = (weights * nll).sum(dim=-1)
+        if mask is not None:
+            nll = self._apply_mask(nll, mask)
+            denom = mask.sum().clamp(min=1.0)
+            return nll.sum() / denom
         return nll.mean()
     
     def _dataset_tensors(
         self, dataset: OfflineDataset | Mapping[str, np.ndarray], device: torch.device
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         if isinstance(dataset, OfflineDataset):
             data = dataset.as_dict()
         else:
@@ -260,10 +284,35 @@ class DynamicsNet(nn.Module):
         states = torch.tensor(data["s"], dtype=torch.float32, device=device)
         actions = torch.tensor(data["a"], dtype=torch.float32, device=device)
         next_states = torch.tensor(data["s_next"], dtype=torch.float32, device=device)
-        return states, actions, next_states
+        mask = None
+        if "mask" in data:
+            mask = torch.tensor(data["mask"], dtype=torch.float32, device=device)
+        return states, actions, next_states, mask
     
     def _as_dict(self, dataset: OfflineDataset | Mapping[str, np.ndarray]) -> Mapping[str, np.ndarray]:
         return dataset.as_dict() if isinstance(dataset, OfflineDataset) else dataset
+
+    @staticmethod
+    def _flatten_time(tensor: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Collapse batch/time dims for statistics when input is [B, T, D]; honor mask if provided."""
+        if tensor.dim() == 3:
+            flat = tensor.reshape(-1, tensor.size(-1))
+            if mask is None:
+                return flat
+            flat_mask = mask.reshape(-1)
+            keep = flat_mask > 0.5
+            return flat[keep]
+        return tensor
+
+    @staticmethod
+    def _apply_mask(values: torch.Tensor, mask: Optional[torch.Tensor]) -> torch.Tensor:
+        """Apply optional mask to values; mask expected shape [B] or [B, T]."""
+        if mask is None:
+            return values
+        # Broadcast mask to match values, then normalize by valid count
+        while mask.dim() < values.dim():
+            mask = mask.unsqueeze(-1)
+        return values * mask
     
     def _sample_policy_actions(
         self,
@@ -317,31 +366,36 @@ class DynamicsNet(nn.Module):
         states: torch.Tensor,
         actions: torch.Tensor,
         next_states: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
     ) -> None:
         """Compute and store normalization statistics from training data.
         
         Should be called once before training with the full training dataset.
         """
         with torch.no_grad():
-            self.state_mean = states.mean(dim=0)
-            self.state_std = states.std(dim=0).clamp(min=1e-6)
-            self.action_mean = actions.mean(dim=0)
-            self.action_std = actions.std(dim=0).clamp(min=1e-6)
+            flat_states = self._flatten_time(states, mask)
+            flat_actions = self._flatten_time(actions, mask)
+            flat_next = self._flatten_time(next_states, mask)
+
+            self.state_mean = flat_states.mean(dim=0)
+            self.state_std = flat_states.std(dim=0).clamp(min=1e-6)
+            self.action_mean = flat_actions.mean(dim=0)
+            self.action_std = flat_actions.std(dim=0).clamp(min=1e-6)
             
             # Compute delta statistics
-            deltas = next_states - states
+            deltas = flat_next - flat_states
             # Handle wrapped dims with circular mean
             for dim in self.wrapped_dims:
                 deltas[..., dim] = torch.atan2(
-                    torch.sin(next_states[..., dim] - states[..., dim]),
-                    torch.cos(next_states[..., dim] - states[..., dim]),
+                    torch.sin(flat_next[..., dim] - flat_states[..., dim]),
+                    torch.cos(flat_next[..., dim] - flat_states[..., dim]),
                 )
             self.delta_mean = deltas.mean(dim=0)
             self.delta_std = deltas.std(dim=0).clamp(min=1e-6)
             
         self._normalizer_fitted = True
 
-    def _select_dynamics_loss(self, name: str) -> Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]:
+    def _select_dynamics_loss(self, name: str) -> Callable[[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]], torch.Tensor]:
         name = name.lower()
         losses = {
             "nll": self.nll,
@@ -394,19 +448,25 @@ class DynamicsNet(nn.Module):
         
         device = device or DEVICE
         self.to(device)
-        states, actions, next_states = self._dataset_tensors(dataset, device)
+        states, actions, next_states, mask = self._dataset_tensors(dataset, device)
         train_idx, val_idx = self._split_train_val_indices(states.size(0), val_fraction, device)
-        train_dataset = TensorDataset(states[train_idx], actions[train_idx], next_states[train_idx])
+        if mask is None:
+            train_dataset = TensorDataset(states[train_idx], actions[train_idx], next_states[train_idx])
+        else:
+            train_dataset = TensorDataset(states[train_idx], actions[train_idx], next_states[train_idx], mask[train_idx])
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
 
         val_loader = None
         if val_idx is not None:
-            val_dataset = TensorDataset(states[val_idx], actions[val_idx], next_states[val_idx])
+            if mask is None:
+                val_dataset = TensorDataset(states[val_idx], actions[val_idx], next_states[val_idx])
+            else:
+                val_dataset = TensorDataset(states[val_idx], actions[val_idx], next_states[val_idx], mask[val_idx])
             val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
 
         # Fit normalizer on training data
         if not self._normalizer_fitted:
-            self.fit_normalizer(states[train_idx], actions[train_idx], next_states[train_idx])
+            self.fit_normalizer(states[train_idx], actions[train_idx], next_states[train_idx], None if mask is None else mask[train_idx])
 
         loss_fn = self._select_dynamics_loss(dynamics_loss)
         optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
@@ -417,8 +477,13 @@ class DynamicsNet(nn.Module):
 
         for epoch in range(epochs):
             epoch_loss = 0.0
-            for sb, ab, snb in train_loader:
-                loss = loss_fn(sb, ab, snb)
+            for batch in train_loader:
+                if mask is None:
+                    sb, ab, snb = batch
+                    mb = None
+                else:
+                    sb, ab, snb, mb = batch
+                loss = loss_fn(sb, ab, snb, mb)
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
@@ -431,8 +496,13 @@ class DynamicsNet(nn.Module):
                 with torch.no_grad():
                     total = 0.0
                     batches = 0
-                    for vs, va, vns in val_loader:
-                        val = loss_fn(vs, va, vns)
+                    for batch in val_loader:
+                        if mask is None:
+                            vs, va, vns = batch
+                            mb = None
+                        else:
+                            vs, va, vns, mb = batch
+                        val = loss_fn(vs, va, vns, mb)
                         total += float(val.item())
                         batches += 1
                     val_loss = total / max(1, batches)
@@ -509,6 +579,7 @@ class DynamicsNet(nn.Module):
         states = torch.tensor(data["s"], dtype=torch.float32, device=device)
         actions = torch.tensor(data["a"], dtype=torch.float32, device=device)
         next_states = torch.tensor(data["s_next"], dtype=torch.float32, device=device)
+        mask = torch.tensor(data["mask"], dtype=torch.float32, device=device) if "mask" in data else None
         N = states.shape[0]
 
         dyn_loss_fn = self._select_dynamics_loss(dynamics_loss)
@@ -519,6 +590,7 @@ class DynamicsNet(nn.Module):
         train_states = states[train_idx]
         train_actions = actions[train_idx]
         train_next = next_states[train_idx]
+        train_mask = None if mask is None else mask[train_idx]
         train_indices = torch.arange(train_states.shape[0], device=device)
         val_tensors = None
         if val_idx is not None:
@@ -526,11 +598,12 @@ class DynamicsNet(nn.Module):
                 states[val_idx],
                 actions[val_idx],
                 next_states[val_idx],
+                None if mask is None else mask[val_idx],
             )
 
         # Fit normalizer on training data
         if not self._normalizer_fitted:
-            self.fit_normalizer(train_states, train_actions, train_next)
+            self.fit_normalizer(train_states, train_actions, train_next, train_mask)
 
         for policy, q in policy_q_pairs:
             q = q.to(device)
@@ -618,11 +691,12 @@ class DynamicsNet(nn.Module):
             for start in range(0, perm.size(0), batch_size):
                 idx = perm[start : start + batch_size]
                 sb, ab, snb = train_states[idx], train_actions[idx], train_next[idx]
+                mb = None if train_mask is None else train_mask[idx]
 
                 optimizer.zero_grad(set_to_none=True)
 
                 with torch.amp.autocast("cuda", enabled=use_amp):
-                    dyn_loss = (1.0 - lambda_rank) * dyn_loss_fn(sb, ab, snb)
+                    dyn_loss = (1.0 - lambda_rank) * dyn_loss_fn(sb, ab, snb, mb)
 
                 if not torch.isfinite(dyn_loss):
                     continue
@@ -684,7 +758,7 @@ class DynamicsNet(nn.Module):
             # --- Validation ---
             val_loss: Optional[float] = None
             if val_tensors is not None:
-                vs, va, vn = val_tensors
+                vs, va, vn, val_mask = val_tensors
                 with torch.no_grad():
                     total_dyn = 0.0
                     batches = 0
@@ -692,7 +766,10 @@ class DynamicsNet(nn.Module):
                         vsb = vs[vstart : vstart + batch_size]
                         vab = va[vstart : vstart + batch_size]
                         vnb = vn[vstart : vstart + batch_size]
-                        dyn_val = dyn_loss_fn(vsb, vab, vnb)
+                        vmb = None
+                        if val_mask is not None:
+                            vmb = val_mask[vstart : vstart + batch_size]
+                        dyn_val = dyn_loss_fn(vsb, vab, vnb, vmb)
                         total_dyn += float(dyn_val.item())
                         batches += 1
                     val_dyn_loss = total_dyn / max(1, batches)

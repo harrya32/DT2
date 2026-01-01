@@ -699,7 +699,94 @@ def load_offline_dataset(npz_path: Path) -> OfflineDataset:
             next_states=data["s_next"].astype(np.float32, copy=False),
             dones=data["done"].astype(np.float32, copy=False),
             initial_states=data["s0"].astype(np.float32, copy=False),
+            mask=data["mask"].astype(np.float32, copy=False) if "mask" in data else None,
         )
+
+
+def make_sequence_dataset(dataset: OfflineDataset, seq_len: int, overlap: int = 0) -> OfflineDataset:
+    """Create fixed-length episode-respecting sequences with padding masks for dynamics training."""
+    if seq_len <= 1:
+        return dataset
+
+    stride = max(1, seq_len - max(0, overlap))
+
+    s_all = dataset.states
+    a_all = dataset.actions
+    r_all = dataset.rewards
+    sn_all = dataset.next_states
+    d_all = dataset.dones
+
+    episode_starts = [0]
+    for i, done in enumerate(d_all):
+        if bool(done):
+            episode_starts.append(i + 1)
+    if episode_starts[-1] != len(d_all):
+        episode_starts.append(len(d_all))
+
+    seq_s = []
+    seq_a = []
+    seq_r = []
+    seq_sn = []
+    seq_d = []
+    seq_mask = []
+
+    for start_idx, end_idx in zip(episode_starts[:-1], episode_starts[1:]):
+        ep_s = s_all[start_idx:end_idx]
+        ep_a = a_all[start_idx:end_idx]
+        ep_r = r_all[start_idx:end_idx]
+        ep_sn = sn_all[start_idx:end_idx]
+        ep_d = d_all[start_idx:end_idx]
+
+        ep_len = ep_s.shape[0]
+        if ep_len == 0:
+            continue
+
+        for window_start in range(0, ep_len, stride):
+            window_end = window_start + seq_len
+            s_slice = ep_s[window_start:window_end]
+            a_slice = ep_a[window_start:window_end]
+            r_slice = ep_r[window_start:window_end]
+            sn_slice = ep_sn[window_start:window_end]
+            d_slice = ep_d[window_start:window_end]
+
+            cur_len = s_slice.shape[0]
+            if cur_len < seq_len:
+                pad_len = seq_len - cur_len
+                s_slice = np.pad(s_slice, ((0, pad_len), (0, 0)), mode="constant")
+                a_slice = np.pad(a_slice, ((0, pad_len), (0, 0)), mode="constant")
+                r_slice = np.pad(r_slice, ((0, pad_len)), mode="constant")
+                sn_slice = np.pad(sn_slice, ((0, pad_len), (0, 0)), mode="constant")
+                d_slice = np.pad(d_slice, ((0, pad_len)), mode="constant")
+                mask_slice = np.concatenate([np.ones(cur_len, dtype=np.float32), np.zeros(pad_len, dtype=np.float32)])
+            else:
+                mask_slice = np.ones(seq_len, dtype=np.float32)
+
+            seq_s.append(s_slice)
+            seq_a.append(a_slice)
+            seq_r.append(r_slice)
+            seq_sn.append(sn_slice)
+            seq_d.append(d_slice)
+            seq_mask.append(mask_slice)
+
+    if not seq_s:
+        raise ValueError(f"Not enough transitions to form sequences of length {seq_len}.")
+
+    seq_s_arr = np.stack(seq_s, axis=0).astype(np.float32, copy=False)
+    seq_a_arr = np.stack(seq_a, axis=0).astype(np.float32, copy=False)
+    seq_r_arr = np.stack(seq_r, axis=0).astype(np.float32, copy=False)
+    seq_sn_arr = np.stack(seq_sn, axis=0).astype(np.float32, copy=False)
+    seq_d_arr = np.stack(seq_d, axis=0).astype(np.float32, copy=False)
+    mask = np.stack(seq_mask, axis=0).astype(np.float32, copy=False)
+
+    return OfflineDataset(
+        states=seq_s_arr,
+        actions=seq_a_arr,
+        rewards=seq_r_arr,
+        next_states=seq_sn_arr,
+        dones=seq_d_arr,
+        initial_states=dataset.initial_states,
+        mask=mask,
+    )
 
 
 def train_q_networks(
@@ -715,8 +802,8 @@ def train_q_networks(
 ) -> Dict[str, QNet]:
     """Train Q-networks for each policy using FQE."""
     q_models: Dict[str, QNet] = {}
-    state_dim = dataset.states.shape[1]
-    act_dim = dataset.actions.shape[1]
+    state_dim = dataset.states.shape[-1]
+    act_dim = dataset.actions.shape[-1]
     
     for name, policy in policies.items():
         q_net = QNet(state_dim=state_dim, act_dim=act_dim).to(device)
@@ -780,8 +867,8 @@ def train_dynamics_models(
     wandb_run: Optional[Any] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet]]:
     """Train supervised and ranking-aware dynamics models."""
-    state_dim = dataset.states.shape[1]  # 7
-    act_dim = dataset.actions.shape[1]   # 2
+    state_dim = dataset.states.shape[-1]
+    act_dim = dataset.actions.shape[-1]
 
     # Supervised dynamics
     sup_model = DynamicsNet(
@@ -1079,6 +1166,8 @@ def main() -> None:
                         help="Loss function for dynamics training")
     parser.add_argument("--lambda-rank", type=float, default=0.1)
     parser.add_argument("--backbone", type=str, default="mlp", choices=["mlp", "resnet", "ode", "transformer", "gru"],)
+    parser.add_argument("--dyn-seq-len", type=int, default=1, help="Sequence length for dynamics backbones (set >1 for Transformer/GRU)")
+    parser.add_argument("--dyn-seq-overlap", type=int, default=0, help="Overlap between sequences (0 = none)")
     
     # Evaluation
     parser.add_argument("--eval-rollouts", type=int, default=200)
@@ -1207,6 +1296,9 @@ def main() -> None:
         )
         print(f"Dataset saved to {dataset_path} with {len(dataset.states)} transitions")
 
+    # Build sequence dataset for dynamics (episode-aware, padded with mask)
+    dyn_dataset = make_sequence_dataset(dataset, args.dyn_seq_len, args.dyn_seq_overlap)
+
     # Log dataset statistics
     dataset_stats = analyze_dataset_statistics(dataset)
     wandb_log(wandb_run, {
@@ -1300,7 +1392,7 @@ def main() -> None:
         print("[Step 4] Training dynamics models...")
         start_time = time.perf_counter()
         sup_model, ranking_new_models = train_dynamics_models(
-            dataset,
+            dyn_dataset,
             torch_policies,
             q_models,
             device=device,
@@ -1344,13 +1436,31 @@ def main() -> None:
     # Helper: Sample a batch of transitions from the training dataset
     def sample_training_transitions(dataset, n_samples=1000, seed=0):
         rng = np.random.default_rng(seed)
-        n_total = dataset.states.shape[0]
+        states = dataset.states
+        actions = dataset.actions
+        next_states = dataset.next_states
+        mask = getattr(dataset, "mask", None)
+        if states.ndim == 3:
+            B, T, D = states.shape
+            flat_s = states.reshape(B * T, D)
+            flat_a = actions.reshape(B * T, actions.shape[-1])
+            flat_sn = next_states.reshape(B * T, D)
+            if mask is not None:
+                flat_mask = mask.reshape(B * T)
+                keep = flat_mask > 0.5
+                flat_s = flat_s[keep]
+                flat_a = flat_a[keep]
+                flat_sn = flat_sn[keep]
+            states = flat_s
+            actions = flat_a
+            next_states = flat_sn
+        n_total = states.shape[0]
         idx = rng.choice(n_total, size=min(n_samples, n_total), replace=n_samples > n_total)
-        return dataset.states[idx], dataset.actions[idx], dataset.next_states[idx]
+        return states[idx], actions[idx], next_states[idx]
 
     # Evaluate and log
     # Sample a batch of training transitions for MSE eval
-    train_states, train_actions, train_next_states = sample_training_transitions(dataset, n_samples=1000, seed=args.seed+123)
+    train_states, train_actions, train_next_states = sample_training_transitions(dyn_dataset, n_samples=1000, seed=args.seed+123)
 
     for snap in snapshots:
         name = snap["name"]

@@ -4,8 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19)
+DEFAULT_SEEDS=(0 1 2 3 4 5 6 7 8 9)
+OLD_DEFAULT_SEEDS=(8 9)
 SEEDS=("${DEFAULT_SEEDS[@]}")
+OLD_SEEDS=("${OLD_DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -35,11 +37,11 @@ if [[ ${#SEEDS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-for seed in "${SEEDS[@]}"; do
+for seed in "${OLD_SEEDS[@]}"; do
     echo "Running seed ${seed}..."
-    python exps/cancer_pipeline.py  --backbone "ode" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/cancer_pipeline.py  --backbone "resnet" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/cancer_pipeline.py  --backbone "mlp" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    #python exps/cancer_pipeline.py  --backbone "ode" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    #python exps/cancer_pipeline.py  --backbone "resnet" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    #python exps/cancer_pipeline.py  --backbone "mlp" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
 
 
     python exps/pendulum_pipeline.py  --backbone "ode" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
@@ -50,6 +52,21 @@ for seed in "${SEEDS[@]}"; do
     python exps/lunarlander_pipeline.py --backbone "ode" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
     python exps/lunarlander_pipeline.py --backbone "resnet" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
     python exps/lunarlander_pipeline.py --backbone "mlp" --lambda-rank 0.4 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+
+    echo "Completed seed ${seed}"
+    echo
+done
+
+for seed in "${SEEDS[@]}"; do
+    echo "Running seed ${seed}..."
+    python exps/cancer_pipeline.py  --backbone "transformer" --lambda-rank 0.1 --dyn-hidden-dim 128 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cancer_pipeline.py  --backbone "GRU" --lambda-rank 0.1 --dyn-hidden-dim 128 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+
+    python exps/pendulum_pipeline.py  --backbone "transformer" --lambda-rank 0.1 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_pipeline.py  --backbone "GRU" --lambda-rank 0.1 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+
+    python exps/lunarlander_pipeline.py --backbone "transformer" --lambda-rank 0.1 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_pipeline.py --backbone "GRU" --lambda-rank 0.1 --dyn-hidden-dim 64 --force-dynamics-training --seed "$seed" "${EXTRA_ARGS[@]}"
 
     echo "Completed seed ${seed}"
     echo

@@ -17,9 +17,10 @@ class OfflineDataset:
     next_states: np.ndarray
     dones: np.ndarray
     initial_states: np.ndarray
+    mask: Optional[np.ndarray] = None  # Optional padding mask for sequence inputs [B, T]
 
     def as_dict(self) -> Dict[str, np.ndarray]:
-        return {
+        data = {
             "s": self.states,
             "a": self.actions,
             "r": self.rewards,
@@ -27,6 +28,9 @@ class OfflineDataset:
             "done": self.dones,
             "s0": self.initial_states,
         }
+        if self.mask is not None:
+            data["mask"] = self.mask
+        return data
 
     def to_tensors(self, device: torch.device) -> Dict[str, torch.Tensor]:
         data = self.as_dict()
