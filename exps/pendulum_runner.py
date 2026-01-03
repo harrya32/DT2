@@ -84,6 +84,7 @@ def main() -> None:
         state_low=PENDULUM_STATE_LOW,
         state_upper=PENDULUM_STATE_HIGH,
         wrapped_dims=[],  # Pendulum uses cos/sin encoding, no raw angles
+        termination_fn_torch=None,  # Pendulum has no termination, only truncation
     )
 
 

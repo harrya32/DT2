@@ -1,7 +1,9 @@
 {
   "config": {
     "env_id": "Pendulum-v1",
-    "total_steps": 5000000,
+    "output_dir": "results/test/pendulum_pipeline",
+    "wandb_project": "DT2-pendulum",
+    "total_steps": 1000000,
     "ppo_fractions": [
       0.2,
       0.4,
@@ -13,14 +15,14 @@
     "n_steps": 2048,
     "batch_size": 1024,
     "learning_rate": 0.0003,
-    "gamma": 0.95,
+    "gamma": 0.97,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
-    "ent_coef": 0.0,
+    "ent_coef": 0.01,
     "vf_coef": 0.5,
     "seed": 5,
-    "rollout_steps": 5000,
-    "q_epochs": 2000,
+    "rollout_steps": 10000,
+    "q_epochs": 1000,
     "q_batch": 1024,
     "q_lr": 0.0003,
     "q_samples": 32,
@@ -29,7 +31,7 @@
     "dyn_lr": 0.0003,
     "dyn_hidden_dim": 64,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 200,
+    "dyn_early_stop_patience": 20,
     "dyn_min_epochs": 50,
     "dynamics_loss": "nll",
     "lambda_td": 0.1,
@@ -38,17 +40,14 @@
     "dyn_seq_len": 8,
     "dyn_seq_overlap": 0,
     "eval_episodes": 20,
-    "eval_rollouts": 256,
-    "eval_horizon": 200,
-    "output_dir": "results/test/pendulum_pipeline",
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
     "device": "auto",
     "force_policy_training": false,
     "force_dataset_collection": false,
     "force_q_training": false,
     "force_dynamics_training": true,
-    "skip_sup_model": false,
     "results_only": false,
-    "wandb_project": "DT2-pendulum",
     "wandb_entity": null,
     "wandb_run_name": null,
     "wandb_mode": "online"
@@ -77,163 +76,163 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "env_mc": -121.2141595980648,
-      "q_estimate": -107.8493881225586,
+      "q_estimate": -107.82445526123047,
       "dynamics": {
-        "supervised": -118.13739776611328,
-        "supervised_mse": 0.0015961532481014729,
-        "supervised_train_mse": 0.0014007561840116978,
+        "supervised": -213.6611785888672,
+        "supervised_mse": 0.00224107108078897,
+        "supervised_train_mse": 0.0018066107295453548,
         "ranking_new": {
-          "kendall": -123.960205078125,
-          "hinge": -114.76560974121094,
-          "listnet": -28.688133239746094
+          "kendall": -176.6780242919922,
+          "hinge": -178.0584716796875,
+          "listnet": -63.27290725708008
         },
         "ranking_new_mse": {
-          "kendall": 0.0009991147089749575,
-          "hinge": 0.02787420153617859,
-          "listnet": 0.02692442014813423
+          "kendall": 0.0024021111894398928,
+          "hinge": 0.06747525185346603,
+          "listnet": 0.04712506756186485
         },
         "ranking_new_train_mse": {
-          "kendall": 0.0008919857209548354,
-          "hinge": 0.02729111909866333,
-          "listnet": 0.026356184855103493
+          "kendall": 0.0025370384100824594,
+          "hinge": 0.06580986082553864,
+          "listnet": 0.0485200397670269
         }
-      }
+      },
+      "env_mc": -192.2821760712754
     },
     {
       "name": "ppo_frac_1000000",
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "env_mc": -78.50978226065791,
-      "q_estimate": -73.01293182373047,
+      "q_estimate": -73.01362609863281,
       "dynamics": {
-        "supervised": -79.74201965332031,
-        "supervised_mse": 0.0015867524780333042,
-        "supervised_train_mse": 0.0014592510415241122,
+        "supervised": -137.8561248779297,
+        "supervised_mse": 0.0022262728307396173,
+        "supervised_train_mse": 0.0018519428558647633,
         "ranking_new": {
-          "kendall": -79.53384399414062,
-          "hinge": -106.10104370117188,
-          "listnet": -36.225341796875
+          "kendall": -154.75637817382812,
+          "hinge": -152.1334228515625,
+          "listnet": -52.51137924194336
         },
         "ranking_new_mse": {
-          "kendall": 0.0010011033155024052,
-          "hinge": 0.02759266085922718,
-          "listnet": 0.0274405125528574
+          "kendall": 0.0023836586624383926,
+          "hinge": 0.06814782321453094,
+          "listnet": 0.048720963299274445
         },
         "ranking_new_train_mse": {
-          "kendall": 0.0009204233647324145,
-          "hinge": 0.02682272344827652,
-          "listnet": 0.02747575007379055
+          "kendall": 0.0024406739976257086,
+          "hinge": 0.06773341447114944,
+          "listnet": 0.04755731299519539
         }
-      }
+      },
+      "env_mc": -92.7675652709353
     },
     {
       "name": "ppo_frac_2000000",
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_2000000",
       "timesteps": 2000000,
-      "env_mc": -76.21849388360467,
-      "q_estimate": -70.55509185791016,
+      "q_estimate": -70.56097412109375,
       "dynamics": {
-        "supervised": -85.14612579345703,
-        "supervised_mse": 0.0015512291574850678,
-        "supervised_train_mse": 0.0014567554462701082,
+        "supervised": -143.0389862060547,
+        "supervised_mse": 0.0021309475414454937,
+        "supervised_train_mse": 0.0018333380576223135,
         "ranking_new": {
-          "kendall": -82.02336883544922,
-          "hinge": -91.31055450439453,
-          "listnet": -37.494571685791016
+          "kendall": -118.70110321044922,
+          "hinge": -147.14256286621094,
+          "listnet": -45.4887809753418
         },
         "ranking_new_mse": {
-          "kendall": 0.0010542947566136718,
-          "hinge": 0.027363331988453865,
-          "listnet": 0.026857983320951462
+          "kendall": 0.0024295852053910494,
+          "hinge": 0.0676402673125267,
+          "listnet": 0.048260558396577835
         },
         "ranking_new_train_mse": {
-          "kendall": 0.0009065188351087272,
-          "hinge": 0.026762260124087334,
-          "listnet": 0.02652287855744362
+          "kendall": 0.0023584668524563313,
+          "hinge": 0.06812737137079239,
+          "listnet": 0.04778826981782913
         }
-      }
+      },
+      "env_mc": -89.67244231645937
     },
     {
       "name": "ppo_frac_3000000",
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_3000000",
       "timesteps": 3000000,
-      "env_mc": -75.52050216912758,
-      "q_estimate": -70.15526580810547,
+      "q_estimate": -70.15345001220703,
       "dynamics": {
-        "supervised": -80.74336242675781,
-        "supervised_mse": 0.0015973583795130253,
-        "supervised_train_mse": 0.0015244081150740385,
+        "supervised": -110.38722229003906,
+        "supervised_mse": 0.0021912697702646255,
+        "supervised_train_mse": 0.0019988701678812504,
         "ranking_new": {
-          "kendall": -81.01898193359375,
-          "hinge": -78.595458984375,
-          "listnet": -38.39961242675781
+          "kendall": -143.93858337402344,
+          "hinge": -164.8987274169922,
+          "listnet": -47.94914245605469
         },
         "ranking_new_mse": {
-          "kendall": 0.0010395749704912305,
-          "hinge": 0.028099076822400093,
-          "listnet": 0.02686401829123497
+          "kendall": 0.0024127813521772623,
+          "hinge": 0.06756985932588577,
+          "listnet": 0.04831699654459953
         },
         "ranking_new_train_mse": {
-          "kendall": 0.0008579506538808346,
-          "hinge": 0.027113748714327812,
-          "listnet": 0.027284204959869385
+          "kendall": 0.0022919250186532736,
+          "hinge": 0.0679391473531723,
+          "listnet": 0.04845456779003143
         }
-      }
+      },
+      "env_mc": -87.72482447388278
     },
     {
       "name": "ppo_frac_4000000",
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_4000000",
       "timesteps": 4000000,
-      "env_mc": -75.39819193436806,
-      "q_estimate": -69.23704528808594,
+      "q_estimate": -69.23519897460938,
       "dynamics": {
-        "supervised": -81.26217651367188,
-        "supervised_mse": 0.0015093922847881913,
-        "supervised_train_mse": 0.0014361270004883409,
+        "supervised": -133.4622039794922,
+        "supervised_mse": 0.002236080588772893,
+        "supervised_train_mse": 0.0019366308115422726,
         "ranking_new": {
-          "kendall": -80.70095825195312,
-          "hinge": -88.19468688964844,
-          "listnet": -40.07398986816406
+          "kendall": -122.10710906982422,
+          "hinge": -146.87335205078125,
+          "listnet": -46.556095123291016
         },
         "ranking_new_mse": {
-          "kendall": 0.0010204336140304804,
-          "hinge": 0.027907440438866615,
-          "listnet": 0.026571080088615417
+          "kendall": 0.0023066839203238487,
+          "hinge": 0.06724707782268524,
+          "listnet": 0.04865932837128639
         },
         "ranking_new_train_mse": {
-          "kendall": 0.0008806821424514055,
-          "hinge": 0.026997288689017296,
-          "listnet": 0.026710307225584984
+          "kendall": 0.0024132844991981983,
+          "hinge": 0.06661821901798248,
+          "listnet": 0.04776247218251228
         }
-      }
+      },
+      "env_mc": -87.60555951046112
     },
     {
       "name": "ppo_frac_5000000",
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_5000000",
       "timesteps": 5000000,
-      "env_mc": -75.3872031685995,
-      "q_estimate": -70.57117462158203,
+      "q_estimate": -70.57029724121094,
       "dynamics": {
-        "supervised": -78.89983367919922,
-        "supervised_mse": 0.0015438252594321966,
-        "supervised_train_mse": 0.0014615297550335526,
+        "supervised": -116.24127197265625,
+        "supervised_mse": 0.0022322949953377247,
+        "supervised_train_mse": 0.00189885962754488,
         "ranking_new": {
-          "kendall": -81.37519836425781,
-          "hinge": -89.65831756591797,
-          "listnet": -39.2915153503418
+          "kendall": -130.62550354003906,
+          "hinge": -162.80613708496094,
+          "listnet": -52.058753967285156
         },
         "ranking_new_mse": {
-          "kendall": 0.001045436249114573,
-          "hinge": 0.027807893231511116,
-          "listnet": 0.026895591989159584
+          "kendall": 0.0023257846478372812,
+          "hinge": 0.0666482001543045,
+          "listnet": 0.04843952879309654
         },
         "ranking_new_train_mse": {
-          "kendall": 0.0008537103421986103,
-          "hinge": 0.026576487347483635,
-          "listnet": 0.026383548974990845
+          "kendall": 0.002338545396924019,
+          "hinge": 0.0674906000494957,
+          "listnet": 0.04818850755691528
         }
-      }
+      },
+      "env_mc": -88.68725186441272
     }
   ]
 }

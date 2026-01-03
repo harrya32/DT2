@@ -36,8 +36,8 @@ if [[ ${#SEEDS[@]} -eq 0 ]]; then
 fi
 
 for seed in "${SEEDS[@]}"; do
-    echo "[pendulum_pipeline] Running seed ${seed}..."
-    python exps/pendulum_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    echo "[pendulum_pipeline] Completed seed ${seed}"
+    echo "[walker_pipeline] Running seed ${seed}..."
+    python exps/walker_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    echo "[walker_pipeline] Completed seed ${seed}"
     echo
 done

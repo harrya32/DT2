@@ -55,6 +55,40 @@ def lunarlander_reward_torch(states: torch.Tensor, actions: torch.Tensor) -> tor
     return shaping - 0.3 * torch.sum(actions * actions, dim=-1)
 
 
+def lunarlander_termination_torch(states: torch.Tensor) -> torch.Tensor:
+    """
+    Check termination conditions for LunarLander.
+    
+    LunarLander terminates when:
+    - Lander crashes (y <= 0 with high velocity or bad angle)
+    - Lander goes out of bounds (|x| >= 1.0)
+    - Successfully landed (both legs contact, low velocity)
+    
+    For simplicity, we check the crash/out-of-bounds conditions:
+    - y < 0 (below ground)
+    - |x| > 1.0 (out of horizontal bounds)
+    
+    Returns:
+        Boolean tensor indicating which states are terminated.
+    """
+    x, y, xdot, ydot, theta, thetadot, leg1, leg2 = states.unbind(-1)
+    
+    # Out of bounds horizontally
+    out_of_bounds = torch.abs(x) >= 1.0
+    
+    # Crashed (below ground level)
+    crashed = y < 0.0
+    
+    # Successfully landed (both legs touching and low velocity)
+    # leg1, leg2 are 1.0 when in contact
+    legs_contact = (leg1 > 0.5) & (leg2 > 0.5)
+    low_velocity = (torch.abs(xdot) < 0.1) & (torch.abs(ydot) < 0.1)
+    landed = legs_contact & low_velocity & (y < 0.5)
+    
+    terminated = out_of_bounds | crashed | landed
+    return terminated
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -84,6 +118,7 @@ def main() -> None:
         reward_fn_torch=lunarlander_reward_torch,
         act_low=LUNARLANDER_ACT_LOW,
         act_high=LUNARLANDER_ACT_HIGH,
+        termination_fn_torch=lunarlander_termination_torch,
     )
 
 

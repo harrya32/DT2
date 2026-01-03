@@ -773,8 +773,22 @@ def evaluate_in_dynamics(
     device: torch.device,
     rollouts: int,
     reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
 ) -> float:
-    """Evaluate a policy by rolling out in a learned dynamics model."""
+    """Evaluate a policy by rolling out in a learned dynamics model.
+    
+    Args:
+        dynamics: Learned dynamics model
+        policy: Policy to evaluate
+        initial_states: Array of initial states to start rollouts from
+        horizon: Maximum number of steps per rollout
+        gamma: Discount factor
+        device: PyTorch device
+        rollouts: Number of rollouts to average over
+        reward_fn_torch: Reward function (states, actions) -> rewards
+        termination_fn_torch: Optional termination function (states) -> bool tensor.
+            If provided, rewards after termination are zeroed out.
+    """
     if initial_states.shape[0] == 0:
         raise ValueError("No initial states available for dynamics evaluation.")
     idx = np.random.choice(
@@ -785,12 +799,24 @@ def evaluate_in_dynamics(
     states = torch.tensor(initial_states[idx], dtype=torch.float32, device=device)
     total = torch.zeros(states.size(0), device=device)
     discount = torch.ones_like(total)
+    alive = torch.ones_like(total, dtype=torch.bool)  # Track which rollouts are still alive
+    
     for _ in range(horizon):
         actions = policy.sample_torch_actions(states, deterministic=True)
         rewards = reward_fn_torch(states, actions)
-        total += discount * rewards
+        # Only accumulate rewards for alive rollouts
+        total += discount * rewards * alive.float()
         discount = discount * gamma
         states = dynamics.sample_next(states, actions, deterministic=True)
+        
+        # Check termination if function provided
+        if termination_fn_torch is not None:
+            terminated = termination_fn_torch(states)
+            alive = alive & ~terminated
+            # Exit early if all rollouts have terminated
+            if not alive.any():
+                break
+    
     return float(total.mean().item())
 
 
@@ -802,8 +828,21 @@ def evaluate_sb3_policy_fixed_horizon(
     rollouts: int,
     seed: int,
     reward_fn: Callable[[np.ndarray, np.ndarray], float],
+    respect_termination: bool = True,
 ) -> float:
-    """Roll out PPO in the true env for a fixed horizon, ignoring terminations."""
+    """Roll out PPO in the true env for a fixed horizon.
+    
+    Args:
+        model: PPO model to evaluate
+        env_id: Gymnasium environment ID
+        horizon: Maximum number of steps per rollout
+        gamma: Discount factor
+        rollouts: Number of rollouts to average over
+        seed: Random seed
+        reward_fn: Reward function (state, action) -> float
+        respect_termination: If True, stop accumulating rewards after termination.
+            If False, reset and continue (legacy behavior).
+    """
     env = gym.make(env_id)
     rng = np.random.default_rng(seed)
     returns: List[float] = []
@@ -817,7 +856,11 @@ def evaluate_sb3_policy_fixed_horizon(
             discount = discount * gamma
             obs, _, terminated, truncated, _ = env.step(action)
             if terminated or truncated:
-                obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
+                if respect_termination:
+                    break  # Exit loop, episode is done
+                else:
+                    # Legacy behavior: reset and continue
+                    obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
         returns.append(total)
     env.close()
     return float(np.mean(returns))
@@ -1054,6 +1097,7 @@ def run_pipeline(
     state_low: Optional[torch.Tensor] = None,
     state_upper: Optional[torch.Tensor] = None,
     wrapped_dims: Optional[List[int]] = None,
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
 ) -> Dict[str, Any]:
     """
     Run the complete offline RL pipeline.
@@ -1068,6 +1112,8 @@ def run_pipeline(
         state_low: Optional lower bounds for state dimensions (for DynamicsNet)
         state_upper: Optional upper bounds for state dimensions (for DynamicsNet)
         wrapped_dims: Optional list of dimension indices that are wrapped (e.g., angles)
+        termination_fn_torch: Optional termination function (states) -> bool tensor.
+            Used for dynamics-based evaluation to check if episode should terminate.
     
     Returns:
         Summary dictionary with all results
@@ -1291,7 +1337,8 @@ def run_pipeline(
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
         dyn_sup = evaluate_in_dynamics(
             sup_model, policy, initial_states, args.eval_horizon,
-            args.gamma, device, args.eval_rollouts, reward_fn_torch
+            args.gamma, device, args.eval_rollouts, reward_fn_torch,
+            termination_fn_torch=termination_fn_torch,
         )
 
         # MSE evaluation
@@ -1304,7 +1351,8 @@ def run_pipeline(
         for loss_name, dyn_model in ranking_new_models.items():
             dyn_rank_new[loss_name] = evaluate_in_dynamics(
                 dyn_model, policy, initial_states, args.eval_horizon,
-                args.gamma, device, args.eval_rollouts, reward_fn_torch
+                args.gamma, device, args.eval_rollouts, reward_fn_torch,
+                termination_fn_torch=termination_fn_torch,
             )
             dyn_rank_new_mse[loss_name] = calc_dynamics_mse(
                 dyn_model, test_states, test_actions, test_next_states, device
