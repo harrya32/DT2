@@ -677,6 +677,9 @@ def train_dynamics_models(
     hidden_dim: int = 256,
     backbone: str = "mlp",
     wandb_run: Optional[Any] = None,
+    state_low: Optional[torch.Tensor] = None,
+    state_upper: Optional[torch.Tensor] = None,
+    wrapped_dims: Optional[List[int]] = None,
 ) -> Tuple[DynamicsNet, Dict[str, DynamicsNet]]:
     """Train supervised and ranking-aware dynamics models."""
     state_dim = dataset.states.shape[-1]
@@ -688,6 +691,9 @@ def train_dynamics_models(
         act_dim=act_dim,
         hidden=hidden_dim,
         backbone=backbone,
+        state_low=state_low,
+        state_upper=state_upper,
+        wrapped_dims=wrapped_dims if wrapped_dims is not None else [],
     ).to(device)
     sup_model.train(
         dataset,
@@ -711,6 +717,9 @@ def train_dynamics_models(
             act_dim=act_dim,
             hidden=hidden_dim,
             backbone=backbone,
+            state_low=state_low,
+            state_upper=state_upper,
+            wrapped_dims=wrapped_dims if wrapped_dims is not None else [],
         ).to(device)
         model.train_ranking_aware_model(
             dataset,
@@ -1026,7 +1035,6 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--results-only", action="store_true")
     
     # W&B
-    parser.add_argument("--wandb-project", type=str, default="")
     parser.add_argument("--wandb-entity", type=str, default=None)
     parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument("--wandb-mode", type=str, default="online", choices=["online", "offline", "disabled"])
@@ -1043,6 +1051,9 @@ def run_pipeline(
     reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     act_low: float = -1.0,
     act_high: float = 1.0,
+    state_low: Optional[torch.Tensor] = None,
+    state_upper: Optional[torch.Tensor] = None,
+    wrapped_dims: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
     Run the complete offline RL pipeline.
@@ -1054,6 +1065,9 @@ def run_pipeline(
         reward_fn_torch: PyTorch reward function (states, actions) -> Tensor
         act_low: Action space lower bound
         act_high: Action space upper bound
+        state_low: Optional lower bounds for state dimensions (for DynamicsNet)
+        state_upper: Optional upper bounds for state dimensions (for DynamicsNet)
+        wrapped_dims: Optional list of dimension indices that are wrapped (e.g., angles)
     
     Returns:
         Summary dictionary with all results
@@ -1240,6 +1254,9 @@ def run_pipeline(
             hidden_dim=args.dyn_hidden_dim,
             backbone=args.backbone,
             wandb_run=wandb_run,
+            state_low=state_low,
+            state_upper=state_upper,
+            wrapped_dims=wrapped_dims,
         )
         dynamics_paths = save_dynamics_models(sup_model, ranking_new_models, dynamics_dir)
         dynamics_trained = True

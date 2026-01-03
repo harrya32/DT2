@@ -24,6 +24,8 @@ from base_pipeline import add_common_args, run_pipeline
 ENV_ID = "Pendulum-v1"
 PENDULUM_ACT_LOW = -2.0
 PENDULUM_ACT_HIGH = 2.0
+PENDULUM_STATE_LOW = torch.tensor([-1.0, -1.0, -8.0], dtype=torch.float32)
+PENDULUM_STATE_HIGH = torch.tensor([1.0, 1.0, 8.0], dtype=torch.float32)
 
 
 # =============================================================================
@@ -62,7 +64,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("results/nll/pendulum_pipeline"),
+        default=Path("results/test/pendulum_pipeline"),
     )
     parser.add_argument("--wandb-project", type=str, default="DT2-pendulum")
     
@@ -79,6 +81,9 @@ def main() -> None:
         reward_fn_torch=pendulum_reward_torch,
         act_low=PENDULUM_ACT_LOW,
         act_high=PENDULUM_ACT_HIGH,
+        state_low=PENDULUM_STATE_LOW,
+        state_upper=PENDULUM_STATE_HIGH,
+        wrapped_dims=[],  # Pendulum uses cos/sin encoding, no raw angles
     )
 
 
