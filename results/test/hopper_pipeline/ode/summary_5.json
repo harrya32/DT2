@@ -1,0 +1,238 @@
+{
+  "config": {
+    "env_id": "Hopper-v4",
+    "output_dir": "results/test/hopper_pipeline",
+    "wandb_project": "DT2-hopper",
+    "total_steps": 1000000,
+    "ppo_fractions": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "n_envs": 8,
+    "n_steps": 2048,
+    "batch_size": 1024,
+    "learning_rate": 0.0003,
+    "gamma": 0.97,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "seed": 5,
+    "rollout_steps": 10000,
+    "q_epochs": 1000,
+    "q_batch": 1024,
+    "q_lr": 0.0003,
+    "q_samples": 32,
+    "dyn_epochs": 2000,
+    "dyn_batch": 1024,
+    "dyn_lr": 0.0003,
+    "dyn_hidden_dim": 64,
+    "dyn_val_fraction": 0.1,
+    "dyn_early_stop_patience": 20,
+    "dyn_min_epochs": 50,
+    "dynamics_loss": "nll",
+    "lambda_td": 0.1,
+    "lambda_rank": 0.1,
+    "backbone": "ode",
+    "dyn_seq_len": 1,
+    "dyn_seq_overlap": 0,
+    "eval_episodes": 20,
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
+    "device": "auto",
+    "force_policy_training": false,
+    "force_dataset_collection": false,
+    "force_q_training": false,
+    "force_dynamics_training": true,
+    "results_only": false,
+    "wandb_entity": null,
+    "wandb_run_name": null,
+    "wandb_mode": "online"
+  },
+  "num_transitions": 60000,
+  "q_model_paths": {
+    "ppo_frac_0": "results/test/hopper_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_200000": "results/test/hopper_pipeline/q_models/ppo_frac_200000.pt",
+    "ppo_frac_400000": "results/test/hopper_pipeline/q_models/ppo_frac_400000.pt",
+    "ppo_frac_600000": "results/test/hopper_pipeline/q_models/ppo_frac_600000.pt",
+    "ppo_frac_800000": "results/test/hopper_pipeline/q_models/ppo_frac_800000.pt",
+    "ppo_frac_1000000": "results/test/hopper_pipeline/q_models/ppo_frac_1000000.pt"
+  },
+  "dynamics_paths": {
+    "supervised": "results/test/hopper_pipeline/ode/dynamics/dynamics_supervised.pt",
+    "ranking": "results/test/hopper_pipeline/ode/dynamics/dynamics_ranking.pt",
+    "q_aware": {},
+    "ranking_new": {
+      "kendall": "results/test/hopper_pipeline/ode/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/test/hopper_pipeline/ode/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/test/hopper_pipeline/ode/dynamics/dynamics_ranking_new_listnet.pt"
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_0",
+      "timesteps": 0,
+      "q_estimate": 57.727996826171875,
+      "dynamics": {
+        "supervised": 34.0028076171875,
+        "supervised_mse": 0.03142757713794708,
+        "supervised_train_mse": 0.039419736713171005,
+        "ranking_new": {
+          "kendall": 20.7132568359375,
+          "hinge": 15.403960227966309,
+          "listnet": 30.76833152770996
+        },
+        "ranking_new_mse": {
+          "kendall": 0.04179610684514046,
+          "hinge": 0.04143562167882919,
+          "listnet": 0.04705384373664856
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.05108843743801117,
+          "hinge": 0.05004354938864708,
+          "listnet": 0.05577627196907997
+        }
+      },
+      "env_mc": 31.539285005159126
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_200000",
+      "timesteps": 200000,
+      "q_estimate": 60.00313949584961,
+      "dynamics": {
+        "supervised": 64.95912170410156,
+        "supervised_mse": 0.03142757713794708,
+        "supervised_train_mse": 0.039419736713171005,
+        "ranking_new": {
+          "kendall": 50.719505310058594,
+          "hinge": 47.22026062011719,
+          "listnet": 54.34431076049805
+        },
+        "ranking_new_mse": {
+          "kendall": 0.04179610684514046,
+          "hinge": 0.04143562167882919,
+          "listnet": 0.04705384373664856
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.05108843743801117,
+          "hinge": 0.05004354938864708,
+          "listnet": 0.05577627196907997
+        }
+      },
+      "env_mc": 60.66729695275575
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_400000",
+      "timesteps": 400000,
+      "q_estimate": 63.24345397949219,
+      "dynamics": {
+        "supervised": 56.165283203125,
+        "supervised_mse": 0.03142757713794708,
+        "supervised_train_mse": 0.039419736713171005,
+        "ranking_new": {
+          "kendall": 54.10529708862305,
+          "hinge": 64.71623992919922,
+          "listnet": 71.9027328491211
+        },
+        "ranking_new_mse": {
+          "kendall": 0.04179610684514046,
+          "hinge": 0.04143562167882919,
+          "listnet": 0.04705384373664856
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.05108843743801117,
+          "hinge": 0.05004354938864708,
+          "listnet": 0.05577627196907997
+        }
+      },
+      "env_mc": 64.29422643894969
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_600000",
+      "timesteps": 600000,
+      "q_estimate": 63.35198211669922,
+      "dynamics": {
+        "supervised": 47.48106002807617,
+        "supervised_mse": 0.03142757713794708,
+        "supervised_train_mse": 0.039419736713171005,
+        "ranking_new": {
+          "kendall": 55.840553283691406,
+          "hinge": 66.8695068359375,
+          "listnet": 65.96544647216797
+        },
+        "ranking_new_mse": {
+          "kendall": 0.04179610684514046,
+          "hinge": 0.04143562167882919,
+          "listnet": 0.04705384373664856
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.05108843743801117,
+          "hinge": 0.05004354938864708,
+          "listnet": 0.05577627196907997
+        }
+      },
+      "env_mc": 63.4979970654696
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_800000",
+      "timesteps": 800000,
+      "q_estimate": 63.930259704589844,
+      "dynamics": {
+        "supervised": 48.899253845214844,
+        "supervised_mse": 0.03142757713794708,
+        "supervised_train_mse": 0.039419736713171005,
+        "ranking_new": {
+          "kendall": 58.55224609375,
+          "hinge": 71.94906616210938,
+          "listnet": 63.28789138793945
+        },
+        "ranking_new_mse": {
+          "kendall": 0.04179610684514046,
+          "hinge": 0.04143562167882919,
+          "listnet": 0.04705384373664856
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.05108843743801117,
+          "hinge": 0.05004354938864708,
+          "listnet": 0.05577627196907997
+        }
+      },
+      "env_mc": 64.12912810842033
+    },
+    {
+      "name": "ppo_frac_1000000",
+      "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_1000000",
+      "timesteps": 1000000,
+      "q_estimate": 64.13196563720703,
+      "dynamics": {
+        "supervised": 63.22494125366211,
+        "supervised_mse": 0.03142757713794708,
+        "supervised_train_mse": 0.039419736713171005,
+        "ranking_new": {
+          "kendall": 53.85880661010742,
+          "hinge": 68.47784423828125,
+          "listnet": 65.6100082397461
+        },
+        "ranking_new_mse": {
+          "kendall": 0.04179610684514046,
+          "hinge": 0.04143562167882919,
+          "listnet": 0.04705384373664856
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.05108843743801117,
+          "hinge": 0.05004354938864708,
+          "listnet": 0.05577627196907997
+        }
+      },
+      "env_mc": 64.83572058400954
+    }
+  ]
+}

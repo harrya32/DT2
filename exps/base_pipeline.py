@@ -429,7 +429,7 @@ def train_ppo_with_checkpoints(
         ent_coef=ent_coef,
         vf_coef=vf_coef,
         device=device,
-        verbose=1,
+        verbose=0,
     )
 
     snapshots: List[Dict[str, object]] = []
