@@ -35,6 +35,8 @@
     "lambda_td": 0.1,
     "lambda_rank": 0.4,
     "backbone": "ode",
+    "dyn_seq_len": 1,
+    "dyn_seq_overlap": 0,
     "eval_episodes": 20,
     "eval_rollouts": 256,
     "eval_horizon": 200,
@@ -76,25 +78,25 @@
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
       "env_mc": -116.18299166297285,
-      "q_estimate": -107.85929107666016,
+      "q_estimate": -107.85845184326172,
       "dynamics": {
-        "supervised": -146.19403076171875,
-        "supervised_mse": 0.000240221168496646,
-        "supervised_train_mse": 0.000582197098992765,
+        "supervised": -122.70742797851562,
+        "supervised_mse": 1.3291809409565758e-05,
+        "supervised_train_mse": 0.00012839124246966094,
         "ranking_new": {
-          "kendall": -111.90475463867188,
-          "hinge": -121.79103088378906,
-          "listnet": -58.05973815917969
+          "kendall": -115.65159606933594,
+          "hinge": -113.7916030883789,
+          "listnet": -21.15554428100586
         },
         "ranking_new_mse": {
-          "kendall": 2.9657512641279027e-06,
-          "hinge": 0.003832443617284298,
-          "listnet": 0.005329239182174206
+          "kendall": 9.653409506427124e-06,
+          "hinge": 0.004877209663391113,
+          "listnet": 0.004682428669184446
         },
         "ranking_new_train_mse": {
-          "kendall": 2.141717959602829e-05,
-          "hinge": 0.006062822882086039,
-          "listnet": 0.004668237641453743
+          "kendall": 8.671504474477842e-05,
+          "hinge": 0.008289288729429245,
+          "listnet": 0.0040053813718259335
         }
       }
     },
@@ -103,25 +105,25 @@
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
       "env_mc": -73.36312140470642,
-      "q_estimate": -73.01473236083984,
+      "q_estimate": -73.01101684570312,
       "dynamics": {
-        "supervised": -116.42433166503906,
-        "supervised_mse": 0.000240221168496646,
-        "supervised_train_mse": 0.000582197098992765,
+        "supervised": -75.51058959960938,
+        "supervised_mse": 1.3291809409565758e-05,
+        "supervised_train_mse": 0.00012839124246966094,
         "ranking_new": {
-          "kendall": -73.6049575805664,
-          "hinge": -102.3897476196289,
-          "listnet": -28.986534118652344
+          "kendall": -79.74308776855469,
+          "hinge": -94.88143920898438,
+          "listnet": -14.49924087524414
         },
         "ranking_new_mse": {
-          "kendall": 2.9657512641279027e-06,
-          "hinge": 0.003832443617284298,
-          "listnet": 0.005329239182174206
+          "kendall": 9.653409506427124e-06,
+          "hinge": 0.004877209663391113,
+          "listnet": 0.004682428669184446
         },
         "ranking_new_train_mse": {
-          "kendall": 2.141717959602829e-05,
-          "hinge": 0.006062822882086039,
-          "listnet": 0.004668237641453743
+          "kendall": 8.671504474477842e-05,
+          "hinge": 0.008289288729429245,
+          "listnet": 0.0040053813718259335
         }
       }
     },
@@ -130,25 +132,25 @@
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_2000000",
       "timesteps": 2000000,
       "env_mc": -71.5488071677534,
-      "q_estimate": -70.55781555175781,
+      "q_estimate": -70.55701446533203,
       "dynamics": {
-        "supervised": -112.21408081054688,
-        "supervised_mse": 0.000240221168496646,
-        "supervised_train_mse": 0.000582197098992765,
+        "supervised": -71.77998352050781,
+        "supervised_mse": 1.3291809409565758e-05,
+        "supervised_train_mse": 0.00012839124246966094,
         "ranking_new": {
-          "kendall": -70.67499542236328,
-          "hinge": -97.72674560546875,
-          "listnet": -25.9981689453125
+          "kendall": -76.18143463134766,
+          "hinge": -93.88738250732422,
+          "listnet": -14.856924057006836
         },
         "ranking_new_mse": {
-          "kendall": 2.9657512641279027e-06,
-          "hinge": 0.003832443617284298,
-          "listnet": 0.005329239182174206
+          "kendall": 9.653409506427124e-06,
+          "hinge": 0.004877209663391113,
+          "listnet": 0.004682428669184446
         },
         "ranking_new_train_mse": {
-          "kendall": 2.141717959602829e-05,
-          "hinge": 0.006062822882086039,
-          "listnet": 0.004668237641453743
+          "kendall": 8.671504474477842e-05,
+          "hinge": 0.008289288729429245,
+          "listnet": 0.0040053813718259335
         }
       }
     },
@@ -157,25 +159,25 @@
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_3000000",
       "timesteps": 3000000,
       "env_mc": -71.09927177646908,
-      "q_estimate": -70.15392303466797,
+      "q_estimate": -70.15483856201172,
       "dynamics": {
-        "supervised": -97.84929656982422,
-        "supervised_mse": 0.000240221168496646,
-        "supervised_train_mse": 0.000582197098992765,
+        "supervised": -71.25630187988281,
+        "supervised_mse": 1.3291809409565758e-05,
+        "supervised_train_mse": 0.00012839124246966094,
         "ranking_new": {
-          "kendall": -69.54306030273438,
-          "hinge": -102.09010314941406,
-          "listnet": -23.555511474609375
+          "kendall": -70.50198364257812,
+          "hinge": -92.28848266601562,
+          "listnet": -14.904669761657715
         },
         "ranking_new_mse": {
-          "kendall": 2.9657512641279027e-06,
-          "hinge": 0.003832443617284298,
-          "listnet": 0.005329239182174206
+          "kendall": 9.653409506427124e-06,
+          "hinge": 0.004877209663391113,
+          "listnet": 0.004682428669184446
         },
         "ranking_new_train_mse": {
-          "kendall": 2.141717959602829e-05,
-          "hinge": 0.006062822882086039,
-          "listnet": 0.004668237641453743
+          "kendall": 8.671504474477842e-05,
+          "hinge": 0.008289288729429245,
+          "listnet": 0.0040053813718259335
         }
       }
     },
@@ -184,25 +186,25 @@
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_4000000",
       "timesteps": 4000000,
       "env_mc": -71.0284007360186,
-      "q_estimate": -69.23694610595703,
+      "q_estimate": -69.23735809326172,
       "dynamics": {
-        "supervised": -91.41929626464844,
-        "supervised_mse": 0.000240221168496646,
-        "supervised_train_mse": 0.000582197098992765,
+        "supervised": -74.34966278076172,
+        "supervised_mse": 1.3291809409565758e-05,
+        "supervised_train_mse": 0.00012839124246966094,
         "ranking_new": {
-          "kendall": -76.27783203125,
-          "hinge": -95.36088562011719,
-          "listnet": -23.78362464904785
+          "kendall": -74.2234878540039,
+          "hinge": -95.07061767578125,
+          "listnet": -13.931690216064453
         },
         "ranking_new_mse": {
-          "kendall": 2.9657512641279027e-06,
-          "hinge": 0.003832443617284298,
-          "listnet": 0.005329239182174206
+          "kendall": 9.653409506427124e-06,
+          "hinge": 0.004877209663391113,
+          "listnet": 0.004682428669184446
         },
         "ranking_new_train_mse": {
-          "kendall": 2.141717959602829e-05,
-          "hinge": 0.006062822882086039,
-          "listnet": 0.004668237641453743
+          "kendall": 8.671504474477842e-05,
+          "hinge": 0.008289288729429245,
+          "listnet": 0.0040053813718259335
         }
       }
     },
@@ -211,25 +213,25 @@
       "checkpoint": "results/test/pendulum_pipeline/policies/ppo_frac_5000000",
       "timesteps": 5000000,
       "env_mc": -70.90484087740458,
-      "q_estimate": -70.57190704345703,
+      "q_estimate": -70.57199096679688,
       "dynamics": {
-        "supervised": -88.48050689697266,
-        "supervised_mse": 0.000240221168496646,
-        "supervised_train_mse": 0.000582197098992765,
+        "supervised": -70.87890625,
+        "supervised_mse": 1.3291809409565758e-05,
+        "supervised_train_mse": 0.00012839124246966094,
         "ranking_new": {
-          "kendall": -70.17758178710938,
-          "hinge": -99.9296875,
-          "listnet": -23.455093383789062
+          "kendall": -71.7810287475586,
+          "hinge": -90.49083709716797,
+          "listnet": -15.381967544555664
         },
         "ranking_new_mse": {
-          "kendall": 2.9657512641279027e-06,
-          "hinge": 0.003832443617284298,
-          "listnet": 0.005329239182174206
+          "kendall": 9.653409506427124e-06,
+          "hinge": 0.004877209663391113,
+          "listnet": 0.004682428669184446
         },
         "ranking_new_train_mse": {
-          "kendall": 2.141717959602829e-05,
-          "hinge": 0.006062822882086039,
-          "listnet": 0.004668237641453743
+          "kendall": 8.671504474477842e-05,
+          "hinge": 0.008289288729429245,
+          "listnet": 0.0040053813718259335
         }
       }
     }
