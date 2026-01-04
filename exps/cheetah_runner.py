@@ -4,7 +4,7 @@ HalfCheetah-specific pipeline using the base pipeline infrastructure.
 This is a lightweight script that defines environment-specific components
 and delegates to the shared base pipeline.
 
-HalfCheetah-v4 details:
+HalfCheetah-v5 details:
 - State dimension: 17 (positions and velocities of joints)
 - Action dimension: 6 (torques applied to joints)
 - Reward: forward_velocity - 0.1 * control_cost
@@ -25,7 +25,7 @@ from base_pipeline import add_common_args, run_pipeline
 # Environment Constants
 # =============================================================================
 
-ENV_ID = "HalfCheetah-v4"
+ENV_ID = "HalfCheetah-v5"
 CHEETAH_ACT_LOW = -1.0
 CHEETAH_ACT_HIGH = 1.0
 

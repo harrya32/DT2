@@ -31,7 +31,7 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[walker_pipeline] Running seed ${seed}..."
-    python exps/walker_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" 
+    python exps/walker_runner.py --backbone "transformer" --force-q-training --force-policy-training --q-epochs 200 --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" 
     
     python exps/walker_runner.py --backbone "gru" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
 
