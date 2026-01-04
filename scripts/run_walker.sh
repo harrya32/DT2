@@ -6,7 +6,6 @@ cd "$ROOT_DIR"
 
 DEFAULT_SEEDS=(0 1 2 3 4 5 6 7 8 9)
 SEEDS=("${DEFAULT_SEEDS[@]}")
-EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -18,14 +17,9 @@ while [[ $# -gt 0 ]]; do
             IFS=',' read -r -a SEEDS <<< "$2"
             shift 2
             ;;
-        --)
-            shift
-            EXTRA_ARGS=("$@")
-            break
-            ;;
         *)
-            EXTRA_ARGS+=("$1")
-            shift
+            echo "Error: unknown argument: $1" >&2
+            exit 1
             ;;
     esac
 done
@@ -37,7 +31,16 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[walker_pipeline] Running seed ${seed}..."
-    python exps/walker_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" 
+    
+    python exps/walker_runner.py --backbone "gru" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+
+    python exps/walker_runner.py --backbone "mlp" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+
+    python exps/walker_runner.py --backbone "ode" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+
+    python exps/walker_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+
     echo "[walker_pipeline] Completed seed ${seed}"
     echo
 done
