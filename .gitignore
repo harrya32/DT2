@@ -6,3 +6,6 @@ src/__pycache__/
 *.log
 wandb/
 .DS_Store
+wandb/latest_run
+debug.log
+debug-internal.log

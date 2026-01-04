@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(0 1 2 3 4 5 6 7 8 9)
+DEFAULT_SEEDS=(1 2 3 4 5 6 7 8 9)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 
 while [[ $# -gt 0 ]]; do
@@ -35,11 +35,11 @@ for seed in "${SEEDS[@]}"; do
     
     python exps/walker_runner.py --backbone "gru" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
 
-    python exps/walker_runner.py --backbone "mlp" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+    #python exps/walker_runner.py --backbone "mlp" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"#
 
-    python exps/walker_runner.py --backbone "ode" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+    #python exps/walker_runner.py --backbone "ode" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
 
-    python exps/walker_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+    #python exps/walker_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
 
     echo "[walker_pipeline] Completed seed ${seed}"
     echo
