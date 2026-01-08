@@ -1,5 +1,7 @@
 {
   "supervised": "results/cancer_pipeline/transformer/dynamics/dynamics_supervised.pt",
+  "ranking": "results/cancer_pipeline/transformer/dynamics/dynamics_ranking.pt",
+  "q_aware": {},
   "ranking_new": {
     "kendall": "results/cancer_pipeline/transformer/dynamics/dynamics_ranking_new_kendall.pt",
     "hinge": "results/cancer_pipeline/transformer/dynamics/dynamics_ranking_new_hinge.pt",

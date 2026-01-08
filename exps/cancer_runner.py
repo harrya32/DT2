@@ -1,8 +1,15 @@
 """
-Cancer Treatment (Ghaffari) pipeline using the base pipeline infrastructure.
+Cancer Treatment (Ghaffari) pipeline using predefined expert clinical policies.
 
-This is a lightweight script that defines environment-specific components
-and delegates to the shared base pipeline where possible.
+This pipeline evaluates Off-Policy Evaluation (OPE) methods using interpretable
+clinical treatment strategies instead of PPO-trained policies.
+
+Expert Policies:
+- NoTreatment: Baseline with no intervention
+- StandardFractionatedRadio (SFR): 2 Gy/day radiotherapy, 5 days/week
+- MetronomicChemo: Continuous low-dose chemotherapy
+- AdaptiveTherapy: Treatment holidays based on tumor burden
+- AggressiveMTD: Maximum tolerated dose of both modalities
 
 The Cancer environment from DTRGym models combined radiotherapy and chemotherapy
 for cancer with metastasis. Key features:
@@ -81,6 +88,102 @@ except ImportError:
 # Action bounds for cancer treatment
 CANCER_ACT_LOW = np.array([0.0, 0.0], dtype=np.float32)  # [D_min, v_M_min]
 CANCER_ACT_HIGH = np.array([10.0, 8.0], dtype=np.float32)  # [D_max, v_M_max]
+
+
+# =============================================================================
+# Expert Clinical Policies
+# =============================================================================
+
+class ExpertPolicy:
+    """Base class for expert clinical policies."""
+    def __init__(self, name: str):
+        self.name = name
+
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        raise NotImplementedError
+
+
+class NoTreatment(ExpertPolicy):
+    """Baseline: No treatment at all."""
+    def __init__(self):
+        super().__init__("NoTreatment")
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        return np.array([0.0, 0.0], dtype=np.float32)
+
+
+class StandardFractionatedRadio(ExpertPolicy):
+    """
+    Standard Fractionated Radiotherapy: 2 Gy/day, 5 days/week.
+    This is a classic clinical radiotherapy protocol.
+    """
+    def __init__(self):
+        super().__init__("SFR_2Gy_5d")
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        # Schedule: 5 days on, 2 days off (weekends)
+        day_of_week = time_step % 7
+        if day_of_week < 5:
+            return np.array([2.0, 0.0], dtype=np.float32)  # 2 Gy Radio, 0 Chemo
+        else:
+            return np.array([0.0, 0.0], dtype=np.float32)
+
+
+class MetronomicChemo(ExpertPolicy):
+    """
+    Metronomic Chemotherapy: Continuous low-dose chemotherapy.
+    Known for anti-angiogenic effects and reduced toxicity.
+    """
+    def __init__(self, dose: float = 2.0):
+        super().__init__(f"MetronomicChemo_{dose}")
+        self.dose = dose
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        return np.array([0.0, self.dose], dtype=np.float32)
+
+
+class AdaptiveTherapy(ExpertPolicy):
+    """
+    Adaptive Therapy: Treat only when tumor exceeds threshold.
+    Inspired by evolutionary game theory approaches to cancer treatment.
+    """
+    def __init__(self, threshold_fraction: float = 0.5, init_tumor_size: float = 1e7):
+        super().__init__("AdaptiveTherapy")
+        # Treat if tumor grows beyond threshold_fraction of initial size
+        self.threshold = np.log(init_tumor_size * threshold_fraction)
+        
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        # obs[0] is T_p (primary tumor) in log scale
+        tumor_size_log = obs[0]
+        
+        # If tumor is large, use combination therapy
+        if tumor_size_log > self.threshold:
+            return np.array([2.0, 4.0], dtype=np.float32)
+        else:
+            return np.array([0.0, 0.0], dtype=np.float32)
+
+
+class AggressiveMTD(ExpertPolicy):
+    """
+    Aggressive Maximum Tolerated Dose: High doses of both modalities.
+    Traditional approach aiming for maximum tumor kill.
+    """
+    def __init__(self):
+        super().__init__("AggressiveMTD")
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        return np.array([4.0, 6.0], dtype=np.float32)
+
+
+def get_clinical_policies() -> List[ExpertPolicy]:
+    """Get all predefined clinical expert policies."""
+    return [
+        NoTreatment(),
+        StandardFractionatedRadio(),
+        MetronomicChemo(dose=2.0),
+        AdaptiveTherapy(),
+        AggressiveMTD(),
+    ]
 
 # Observation bounds (log-transformed)
 CANCER_OBS_LOW = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=torch.float32)
@@ -263,11 +366,78 @@ def cancer_reward_with_termination_torch(
 
 
 # =============================================================================
-# Cancer-specific Policy Adapter
+# Cancer-specific Policy Adapters
 # =============================================================================
 
+class ExpertPolicyAdapter(TorchPolicy):
+    """
+    Adapter that wraps ExpertPolicy to conform to TorchPolicy interface.
+    
+    Since expert policies may depend on time_step, we track a virtual time
+    that resets for each batch of initial states.
+    """
+    
+    def __init__(
+        self,
+        expert: ExpertPolicy,
+        act_low: np.ndarray = CANCER_ACT_LOW,
+        act_high: np.ndarray = CANCER_ACT_HIGH,
+    ):
+        self.expert = expert
+        self.name = expert.name
+        self.act_low_arr = act_low
+        self.act_high_arr = act_high
+        self.action_dim = ACT_DIM
+        self._time_step = 0  # Track virtual time for time-dependent policies
+
+    def reset_time(self):
+        """Reset the virtual time step counter."""
+        self._time_step = 0
+
+    def step_time(self):
+        """Increment the virtual time step."""
+        self._time_step += 1
+
+    def sample_torch_actions(
+        self,
+        states: torch.Tensor,
+        repeats: int = 1,
+        deterministic: bool = False,
+        act_low: Optional[np.ndarray] = None,
+        act_high: Optional[np.ndarray] = None,
+    ) -> torch.Tensor:
+        """
+        Sample actions for a batch of states.
+        
+        Note: For time-dependent policies, all states in the batch get the same
+        time_step. Use reset_time() and step_time() to manage rollouts.
+        """
+        if act_low is None:
+            act_low = self.act_low_arr
+        if act_high is None:
+            act_high = self.act_high_arr
+            
+        base = states
+        if repeats > 1:
+            base = states.repeat_interleave(repeats, dim=0)
+        
+        obs_np = base.detach().cpu().numpy()
+        batch_size = obs_np.shape[0]
+        
+        # Get actions for each observation
+        actions = np.zeros((batch_size, self.action_dim), dtype=np.float32)
+        for i in range(batch_size):
+            actions[i] = self.expert.get_action(obs_np[i], self._time_step)
+        
+        action_tensor = torch.tensor(actions, device=states.device, dtype=torch.float32)
+        
+        low_tensor = torch.tensor(act_low, device=states.device, dtype=torch.float32)
+        high_tensor = torch.tensor(act_high, device=states.device, dtype=torch.float32)
+        return action_tensor.clamp(min=low_tensor, max=high_tensor)
+
+
 class CancerPolicyAdapter(SB3PolicyAdapter):
-    """Adapter for cancer environment with array-based action bounds."""
+    """Adapter for cancer environment with array-based action bounds (for PPO models)."""
     
     def __init__(
         self,
@@ -324,8 +494,13 @@ class CancerPolicyAdapter(SB3PolicyAdapter):
 
 
 def make_cancer_policy_adapters(policy_models: Dict[str, PPO]) -> Dict[str, TorchPolicy]:
-    """Create CancerPolicyAdapter instances for each loaded model."""
+    """Create CancerPolicyAdapter instances for each loaded PPO model."""
     return {name: CancerPolicyAdapter(name, model) for name, model in policy_models.items()}
+
+
+def make_expert_policy_adapters(experts: List[ExpertPolicy]) -> Dict[str, ExpertPolicyAdapter]:
+    """Create ExpertPolicyAdapter instances for each expert policy."""
+    return {expert.name: ExpertPolicyAdapter(expert) for expert in experts}
 
 
 # =============================================================================
@@ -403,7 +578,7 @@ def rollout_cancer_policy(
     total_steps: int,
     seed: int,
 ) -> Tuple[List[np.ndarray], List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]]]:
-    """Rollout policy and collect transitions."""
+    """Rollout PPO policy and collect transitions."""
     env = create_cancer_env(max_t=max_t, setting=setting)
     rng = np.random.default_rng(seed)
     obs, info = env.reset(seed=seed)
@@ -429,6 +604,42 @@ def rollout_cancer_policy(
     return initial_states, transitions
 
 
+def rollout_expert_policy(
+    expert: ExpertPolicy,
+    max_t: int,
+    setting: int,
+    total_steps: int,
+    seed: int,
+) -> Tuple[List[np.ndarray], List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]]]:
+    """Rollout expert policy and collect transitions."""
+    env = create_cancer_env(max_t=max_t, setting=setting)
+    rng = np.random.default_rng(seed)
+    obs, info = env.reset(seed=seed)
+    initial_states: List[np.ndarray] = [obs.copy()]
+    transitions: List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]] = []
+    steps = 0
+    time_step = 0
+    
+    while steps < total_steps:
+        action = expert.get_action(obs, time_step)
+        action = np.asarray(action, dtype=np.float32)
+        next_obs, reward, terminated, truncated, info = env.step(action)
+        done = float(terminated or truncated)
+        
+        transitions.append((obs.copy(), action.copy(), float(reward), next_obs.copy(), done))
+        obs = next_obs
+        steps += 1
+        time_step += 1
+        
+        if done:
+            obs, info = env.reset(seed=int(rng.integers(0, 1_000_000)))
+            initial_states.append(obs.copy())
+            time_step = 0  # Reset time step for new episode
+    
+    env.close()
+    return initial_states, transitions
+
+
 def build_cancer_offline_dataset(
     policy_snapshots: Sequence[Dict[str, object]],
     policy_models: Dict[str, PPO],
@@ -437,7 +648,7 @@ def build_cancer_offline_dataset(
     steps_per_policy: int,
     seed: int,
 ) -> OfflineDataset:
-    """Build offline dataset by rolling out multiple policies."""
+    """Build offline dataset by rolling out multiple PPO policies."""
     all_states: List[np.ndarray] = []
     all_actions: List[np.ndarray] = []
     all_rewards: List[float] = []
@@ -457,6 +668,45 @@ def build_cancer_offline_dataset(
             all_rewards.append(r)
             all_next_states.append(sn)
             all_dones.append(d)
+
+    return OfflineDataset(
+        states=np.asarray(all_states, dtype=np.float32),
+        actions=np.asarray(all_actions, dtype=np.float32),
+        rewards=np.asarray(all_rewards, dtype=np.float32),
+        next_states=np.asarray(all_next_states, dtype=np.float32),
+        dones=np.asarray(all_dones, dtype=np.float32),
+        initial_states=np.asarray(initial_states, dtype=np.float32),
+    )
+
+
+def build_expert_offline_dataset(
+    experts: List[ExpertPolicy],
+    max_t: int,
+    setting: int,
+    steps_per_policy: int,
+    seed: int,
+) -> OfflineDataset:
+    """Build offline dataset by rolling out expert policies."""
+    all_states: List[np.ndarray] = []
+    all_actions: List[np.ndarray] = []
+    all_rewards: List[float] = []
+    all_next_states: List[np.ndarray] = []
+    all_dones: List[float] = []
+    initial_states: List[np.ndarray] = []
+
+    for idx, expert in enumerate(experts):
+        print(f"  Rolling out {expert.name}...")
+        init_states, transitions = rollout_expert_policy(
+            expert, max_t, setting, steps_per_policy, seed + idx * 1000
+        )
+        initial_states.extend(init_states)
+        for s, a, r, sn, d in transitions:
+            all_states.append(s)
+            all_actions.append(a)
+            all_rewards.append(r)
+            all_next_states.append(sn)
+            all_dones.append(d)
+        print(f"    Collected {len(transitions)} transitions, {len(init_states)} episodes")
 
     return OfflineDataset(
         states=np.asarray(all_states, dtype=np.float32),
@@ -612,7 +862,7 @@ def evaluate_cancer_sb3_policy(
     rollouts: int,
     seed: int,
 ) -> float:
-    """Evaluate policy in true environment with fixed horizon."""
+    """Evaluate PPO policy in true environment with fixed horizon."""
     env = create_cancer_env(max_t=max_t, setting=setting)
     returns: List[float] = []
     
@@ -637,6 +887,40 @@ def evaluate_cancer_sb3_policy(
     return float(np.mean(returns))
 
 
+def evaluate_expert_policy(
+    expert: ExpertPolicy,
+    max_t: int,
+    setting: int,
+    horizon: int,
+    gamma: float,
+    rollouts: int,
+    seed: int,
+) -> float:
+    """Evaluate expert policy in true environment with fixed horizon."""
+    env = create_cancer_env(max_t=max_t, setting=setting)
+    returns: List[float] = []
+    
+    for ep in range(rollouts):
+        obs, info = env.reset(seed=seed + ep)
+        total = 0.0
+        discount = 1.0
+        
+        for t in range(horizon):
+            action = expert.get_action(obs, t)
+            next_obs, reward, terminated, truncated, info = env.step(action)
+            total += discount * reward
+            discount *= gamma
+            obs = next_obs
+            
+            if terminated or truncated:
+                break
+        
+        returns.append(total)
+    
+    env.close()
+    return float(np.mean(returns))
+
+
 def generate_cancer_test_transitions(
     max_t: int,
     setting: int,
@@ -644,13 +928,16 @@ def generate_cancer_test_transitions(
     n_transitions_per_policy: int = 200,
     seed: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Generate test transitions by rolling out policies."""
+    """Generate test transitions by rolling out policies (TorchPolicy interface)."""
     env = create_cancer_env(max_t=max_t, setting=setting)
     rng = np.random.default_rng(seed)
     all_states, all_actions, all_next_states = [], [], []
     
     for policy_name, policy in policies.items():
         obs, info = env.reset(seed=int(rng.integers(0, 1_000_000)))
+        # Reset time for time-dependent policies
+        if hasattr(policy, 'reset_time'):
+            policy.reset_time()
         for _ in range(n_transitions_per_policy):
             obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
             action_tensor = policy.sample_torch_actions(obs_tensor, deterministic=True)
@@ -660,8 +947,48 @@ def generate_cancer_test_transitions(
             all_actions.append(action.copy())
             all_next_states.append(next_obs.copy())
             obs = next_obs
+            # Step time for time-dependent policies
+            if hasattr(policy, 'step_time'):
+                policy.step_time()
             if terminated or truncated:
                 obs, info = env.reset(seed=int(rng.integers(0, 1_000_000)))
+                if hasattr(policy, 'reset_time'):
+                    policy.reset_time()
+    
+    env.close()
+    return (
+        np.asarray(all_states, dtype=np.float32),
+        np.asarray(all_actions, dtype=np.float32),
+        np.asarray(all_next_states, dtype=np.float32),
+    )
+
+
+def generate_expert_test_transitions(
+    max_t: int,
+    setting: int,
+    experts: List[ExpertPolicy],
+    n_transitions_per_policy: int = 200,
+    seed: int = 0,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Generate test transitions by rolling out expert policies directly."""
+    env = create_cancer_env(max_t=max_t, setting=setting)
+    rng = np.random.default_rng(seed)
+    all_states, all_actions, all_next_states = [], [], []
+    
+    for expert in experts:
+        obs, info = env.reset(seed=int(rng.integers(0, 1_000_000)))
+        time_step = 0
+        for _ in range(n_transitions_per_policy):
+            action = expert.get_action(obs, time_step)
+            next_obs, reward, terminated, truncated, info = env.step(action)
+            all_states.append(obs.copy())
+            all_actions.append(action.copy())
+            all_next_states.append(next_obs.copy())
+            obs = next_obs
+            time_step += 1
+            if terminated or truncated:
+                obs, info = env.reset(seed=int(rng.integers(0, 1_000_000)))
+                time_step = 0
     
     env.close()
     return (
@@ -694,11 +1021,13 @@ def calc_dynamics_mse(
 
 def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     """
-    Run the complete cancer treatment offline RL pipeline.
+    Run the complete cancer treatment offline RL pipeline with expert policies.
+    
+    This version uses predefined clinical expert policies instead of PPO-trained ones
+    for more interpretable experiments.
     """
     if args.results_only and (
-        args.force_policy_training
-        or args.force_dataset_collection
+        args.force_dataset_collection
         or args.force_q_training
         or args.force_dynamics_training
     ):
@@ -711,6 +1040,10 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     wandb_run = initialize_wandb(args)
 
+    # Get expert policies
+    expert_policies = get_clinical_policies()
+    expert_names = [e.name for e in expert_policies]
+
     # Log environment info
     wandb_log(wandb_run, {
         "env/name": "GhaffariCancerEnv",
@@ -718,60 +1051,25 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         "env/act_dim": ACT_DIM,
         "env/setting": args.setting,
         "env/max_t": args.max_t,
+        "policies/type": "expert",
+        "policies/names": expert_names,
     })
 
-    print(f"=== Cancer Treatment Pipeline ===")
+    print(f"=== Cancer Treatment Pipeline (Expert Policies) ===")
     print(f"Environment: GhaffariCancerEnv (Setting {args.setting})")
     print(f"Device: {device}")
     print(f"Output: {args.output_dir}")
+    print(f"Expert Policies: {expert_names}")
     print()
 
     # =========================================================================
-    # Step 1: Train or load PPO policies
+    # Step 1: Create expert policy adapters (no training needed!)
     # =========================================================================
-    policy_dir = args.output_dir / "policies"
-    snapshots_manifest = policy_dir / "snapshots.json"
-    policy_trained = False
-    policy_train_time: Optional[float] = None
-
-    if snapshots_manifest.exists() and not args.force_policy_training:
-        print("[Step 1] Using existing PPO checkpoints...")
-        snapshots = load_snapshots(snapshots_manifest)
-    else:
-        if args.results_only:
-            raise FileNotFoundError(f"No saved PPO checkpoints at {snapshots_manifest}.")
-        print("[Step 1] Training PPO policies with checkpoints...")
-        start_time = time.perf_counter()
-        snapshots = train_ppo_cancer(
-            max_t=args.max_t,
-            setting=args.setting,
-            total_steps=args.total_steps,
-            save_dir=policy_dir,
-            fractions=args.ppo_fractions,
-            seed=args.seed,
-            n_envs=args.n_envs,
-            n_steps=args.n_steps,
-            batch_size=args.batch_size,
-            learning_rate=args.learning_rate,
-            gamma=args.gamma,
-            gae_lambda=args.gae_lambda,
-            clip_range=args.clip_range,
-            ent_coef=args.ent_coef,
-            vf_coef=args.vf_coef,
-            device=device.type if device.type in {"cuda", "cpu"} else "cpu",
-            wandb_run=wandb_run,
-        )
-        save_snapshots(snapshots_manifest, snapshots)
-        policy_trained = True
-        policy_train_time = time.perf_counter() - start_time
-
-    print(f"Loaded {len(snapshots)} policy checkpoints.")
-    policy_log = {"policies/count": len(snapshots), "policies/trained": int(policy_trained)}
-    if policy_train_time is not None:
-        policy_log["timing/ppo_training_sec"] = policy_train_time
-    wandb_log(wandb_run, policy_log)
-
-    policy_models = load_policy_models(snapshots)
+    print("[Step 1] Creating expert policy adapters...")
+    torch_policies = make_expert_policy_adapters(expert_policies)
+    print(f"Created {len(torch_policies)} expert policy adapters.")
+    
+    wandb_log(wandb_run, {"policies/count": len(torch_policies)})
 
     # =========================================================================
     # Step 2: Collect or load offline dataset
@@ -779,16 +1077,16 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     dataset_path = args.output_dir / "offline_dataset.npz"
     dataset_loaded = False
 
-    if dataset_path.exists() and not args.force_policy_training and not args.force_dataset_collection:
+    if dataset_path.exists() and not args.force_dataset_collection:
         print("[Step 2] Loading existing offline dataset from disk...")
         dataset = load_offline_dataset(dataset_path)
         dataset_loaded = True
     else:
         if args.results_only:
             raise FileNotFoundError(f"No saved offline dataset at {dataset_path}.")
-        print("[Step 2] Collecting offline dataset...")
-        dataset = build_cancer_offline_dataset(
-            snapshots, policy_models, args.max_t, args.setting,
+        print("[Step 2] Collecting offline dataset from expert policies...")
+        dataset = build_expert_offline_dataset(
+            expert_policies, args.max_t, args.setting,
             args.rollout_steps, args.seed
         )
         np.savez_compressed(
@@ -811,7 +1109,6 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         },
     )
 
-    torch_policies = make_cancer_policy_adapters(policy_models)
     dyn_dataset = make_sequence_dataset(dataset, args.dyn_seq_len, args.dyn_seq_overlap)
 
     # =========================================================================
@@ -828,7 +1125,7 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     else:
         if args.results_only:
             raise FileNotFoundError(f"No saved Q networks at {q_manifest}.")
-        print("[Step 3] Training Q networks for each policy...")
+        print("[Step 3] Training Q networks for each expert policy...")
         start_time = time.perf_counter()
         q_models = train_q_networks(
             dataset,
@@ -896,22 +1193,21 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     # =========================================================================
     # Step 5-7: Evaluation
     # =========================================================================
-    print("[Step 5-7] Evaluating policies across true env, Q, and dynamics...")
+    print("[Step 5-7] Evaluating expert policies across true env, Q, and dynamics...")
     results = []
     initial_states = dataset.initial_states
 
     # Generate test/train transitions for MSE evaluation
-    test_states, test_actions, test_next_states = generate_cancer_test_transitions(
-        args.max_t, args.setting, torch_policies, n_transitions_per_policy=200, seed=args.seed + 999
+    test_states, test_actions, test_next_states = generate_expert_test_transitions(
+        args.max_t, args.setting, expert_policies, n_transitions_per_policy=200, seed=args.seed + 999
     )
     train_states, train_actions, train_next_states = sample_training_transitions(
         dyn_dataset, n_samples=1000, seed=args.seed + 123
     )
 
-    for snap in snapshots:
-        name = snap["name"]
+    for expert in expert_policies:
+        name = expert.name
         policy = torch_policies[name]
-        ppo_model = policy_models[name]
         q_net = q_models[name]
 
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
@@ -939,8 +1235,9 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
                 dyn_model, train_states, train_actions, train_next_states, device
             )
 
-        env_mc = evaluate_cancer_sb3_policy(
-            ppo_model, args.max_t, args.setting,
+        # Evaluate in true environment
+        env_mc = evaluate_expert_policy(
+            expert, args.max_t, args.setting,
             args.eval_horizon, args.gamma, args.eval_rollouts, args.seed
         )
 
@@ -960,12 +1257,11 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         for loss_name, val in dyn_rank_new_train_mse.items():
             wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_train_mse"] = val
 
-        wandb_log(wandb_run, wandb_payload, step=int(snap["timesteps"]))
+        wandb_log(wandb_run, wandb_payload)
 
         results.append({
             "name": name,
-            "checkpoint": snap["path"],
-            "timesteps": snap["timesteps"],
+            "policy_type": "expert",
             "q_estimate": q_est,
             "dynamics": {
                 "supervised": dyn_sup,
@@ -979,7 +1275,7 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         })
 
         print(f"  {name}: env_mc={env_mc:.2f}, q_est={q_est:.2f}, dyn_sup={dyn_sup:.2f}, "
-              f"dyn_sup_mse={dyn_sup_mse:.4f}, dyn_sup_train_mse={dyn_sup_train_mse:.4f}")
+              f"dyn_sup_mse={dyn_sup_mse:.4f}")
 
     # =========================================================================
     # Save summary
@@ -988,6 +1284,7 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     summary = {
         "config": config,
         "num_transitions": int(len(dataset.states)),
+        "expert_policies": expert_names,
         "q_model_paths": q_model_paths,
         "dynamics_paths": dynamics_paths,
         "results": results,
@@ -1002,6 +1299,7 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     if wandb_run is not None:
         wandb_run.summary.update({
             "num_transitions": int(len(dataset.states)),
+            "expert_policies": expert_names,
             "q_model_paths": q_model_paths,
             "dynamics_paths": dynamics_paths,
             "results": results,
@@ -1018,7 +1316,7 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Cancer treatment pipeline for OPE with ranking-aware dynamics"
+        description="Cancer treatment pipeline with expert clinical policies for OPE evaluation"
     )
     
     # Environment-specific arguments
@@ -1034,24 +1332,26 @@ def main() -> None:
     # Add common arguments from base pipeline
     add_common_args(parser)
     
-    # Override some defaults for cancer environment
+    # Override some defaults for cancer environment with expert policies
     parser.set_defaults(
-        total_steps=10_000,
+        # No PPO training needed, but set reasonable rollout defaults
+        total_steps=10_000,  # Not used for PPO, but kept for compatibility
         batch_size=512,
         gamma=0.99,
         q_epochs=500,
         q_batch=512,
         dyn_batch=512,
-        dyn_early_stop_patience=50,
+        dyn_early_stop_patience=20,
         dyn_min_epochs=0,
         eval_rollouts=200,
         eval_horizon=200,
-        wandb_project="DT2-cancer",
+        rollout_steps=1000,  # Steps per expert policy for dataset collection
+        wandb_project="DT2-cancer-expert",
     )
     
     args = parser.parse_args()
     
-    # Run the cancer-specific pipeline
+    # Run the cancer-specific pipeline with expert policies
     run_cancer_pipeline(args)
 
 

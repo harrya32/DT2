@@ -1,0 +1,217 @@
+{
+  "config": {
+    "max_t": 200,
+    "setting": 5,
+    "output_dir": "results/cancer_pipeline",
+    "total_steps": 10000,
+    "ppo_fractions": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "n_envs": 8,
+    "n_steps": 2048,
+    "batch_size": 512,
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "seed": 1000,
+    "rollout_steps": 1000,
+    "q_epochs": 500,
+    "q_batch": 512,
+    "q_lr": 0.0003,
+    "q_samples": 32,
+    "dyn_epochs": 2000,
+    "dyn_batch": 512,
+    "dyn_lr": 0.0003,
+    "dyn_hidden_dim": 64,
+    "dyn_val_fraction": 0.1,
+    "dyn_early_stop_patience": 20,
+    "dyn_min_epochs": 0,
+    "dynamics_loss": "nll",
+    "dynamics_models": [
+      "supervised",
+      "kendall"
+    ],
+    "lambda_td": 0.1,
+    "lambda_rank": 0.1,
+    "backbone": "mlp",
+    "dyn_seq_len": 1,
+    "dyn_seq_overlap": 0,
+    "eval_episodes": 20,
+    "eval_rollouts": 20,
+    "eval_horizon": 200,
+    "device": "auto",
+    "force_policy_training": false,
+    "force_dataset_collection": false,
+    "force_q_training": false,
+    "force_dynamics_training": true,
+    "results_only": false,
+    "wandb_entity": null,
+    "wandb_run_name": null,
+    "wandb_mode": "online",
+    "wandb_project": "DT2-cancer-expert"
+  },
+  "num_transitions": 5000,
+  "expert_policies": [
+    "NoTreatment",
+    "SFR_2Gy_5d",
+    "MetronomicChemo_2.0",
+    "AdaptiveTherapy",
+    "AggressiveMTD"
+  ],
+  "q_model_paths": {
+    "NoTreatment": "results/cancer_pipeline/q_models/NoTreatment.pt",
+    "SFR_2Gy_5d": "results/cancer_pipeline/q_models/SFR_2Gy_5d.pt",
+    "MetronomicChemo_2.0": "results/cancer_pipeline/q_models/MetronomicChemo_2.0.pt",
+    "AdaptiveTherapy": "results/cancer_pipeline/q_models/AdaptiveTherapy.pt",
+    "AggressiveMTD": "results/cancer_pipeline/q_models/AggressiveMTD.pt"
+  },
+  "dynamics_paths": {
+    "supervised": "results/cancer_pipeline/mlp/dynamics/dynamics_supervised.pt",
+    "ranking": "results/cancer_pipeline/mlp/dynamics/dynamics_ranking.pt",
+    "q_aware": {},
+    "ranking_new": {
+      "kendall": "results/cancer_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/cancer_pipeline/mlp/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/cancer_pipeline/mlp/dynamics/dynamics_ranking_new_listnet.pt"
+    }
+  },
+  "results": [
+    {
+      "name": "NoTreatment",
+      "policy_type": "expert",
+      "q_estimate": -64.85560607910156,
+      "dynamics": {
+        "supervised": -29.306671142578125,
+        "supervised_mse": 0.39930516481399536,
+        "supervised_train_mse": 0.3061197102069855,
+        "ranking_new": {
+          "kendall": 5.744300365447998,
+          "hinge": -23.186399459838867,
+          "listnet": -33.12477493286133
+        },
+        "ranking_new_mse": {
+          "kendall": 0.4340772032737732,
+          "hinge": 0.46484825015068054,
+          "listnet": 0.4496765732765198
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.32432740926742554,
+          "hinge": 0.34368667006492615,
+          "listnet": 0.33357661962509155
+        }
+      },
+      "env_mc": -22.95274353982358
+    },
+    {
+      "name": "SFR_2Gy_5d",
+      "policy_type": "expert",
+      "q_estimate": -64.3104019165039,
+      "dynamics": {
+        "supervised": 18.322324752807617,
+        "supervised_mse": 0.39930516481399536,
+        "supervised_train_mse": 0.3061197102069855,
+        "ranking_new": {
+          "kendall": -55.54299545288086,
+          "hinge": -37.3708610534668,
+          "listnet": -56.683021545410156
+        },
+        "ranking_new_mse": {
+          "kendall": 0.4340772032737732,
+          "hinge": 0.46484825015068054,
+          "listnet": 0.4496765732765198
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.32432740926742554,
+          "hinge": 0.34368667006492615,
+          "listnet": 0.33357661962509155
+        }
+      },
+      "env_mc": -37.88342089757313
+    },
+    {
+      "name": "MetronomicChemo_2.0",
+      "policy_type": "expert",
+      "q_estimate": -71.52339172363281,
+      "dynamics": {
+        "supervised": -19.3291015625,
+        "supervised_mse": 0.39930516481399536,
+        "supervised_train_mse": 0.3061197102069855,
+        "ranking_new": {
+          "kendall": 25.82808494567871,
+          "hinge": -29.481130599975586,
+          "listnet": -47.84912872314453
+        },
+        "ranking_new_mse": {
+          "kendall": 0.4340772032737732,
+          "hinge": 0.46484825015068054,
+          "listnet": 0.4496765732765198
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.32432740926742554,
+          "hinge": 0.34368667006492615,
+          "listnet": 0.33357661962509155
+        }
+      },
+      "env_mc": -22.950597057162497
+    },
+    {
+      "name": "AdaptiveTherapy",
+      "policy_type": "expert",
+      "q_estimate": -55.476715087890625,
+      "dynamics": {
+        "supervised": -29.966693878173828,
+        "supervised_mse": 0.39930516481399536,
+        "supervised_train_mse": 0.3061197102069855,
+        "ranking_new": {
+          "kendall": -5.318811893463135,
+          "hinge": -25.916418075561523,
+          "listnet": -37.52124786376953
+        },
+        "ranking_new_mse": {
+          "kendall": 0.4340772032737732,
+          "hinge": 0.46484825015068054,
+          "listnet": 0.4496765732765198
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.32432740926742554,
+          "hinge": 0.34368667006492615,
+          "listnet": 0.33357661962509155
+        }
+      },
+      "env_mc": 24.82501354816957
+    },
+    {
+      "name": "AggressiveMTD",
+      "policy_type": "expert",
+      "q_estimate": -58.63333511352539,
+      "dynamics": {
+        "supervised": -70.6371078491211,
+        "supervised_mse": 0.39930516481399536,
+        "supervised_train_mse": 0.3061197102069855,
+        "ranking_new": {
+          "kendall": -71.10986328125,
+          "hinge": -80.74452209472656,
+          "listnet": -55.46834182739258
+        },
+        "ranking_new_mse": {
+          "kendall": 0.4340772032737732,
+          "hinge": 0.46484825015068054,
+          "listnet": 0.4496765732765198
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.32432740926742554,
+          "hinge": 0.34368667006492615,
+          "listnet": 0.33357661962509155
+        }
+      },
+      "env_mc": -68.54711672879532
+    }
+  ]
+}

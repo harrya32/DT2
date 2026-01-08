@@ -1,8 +1,7 @@
 {
-  "ppo_frac_0": "results/cancer_pipeline/q_models/ppo_frac_0.pt",
-  "ppo_frac_20000": "results/cancer_pipeline/q_models/ppo_frac_20000.pt",
-  "ppo_frac_40000": "results/cancer_pipeline/q_models/ppo_frac_40000.pt",
-  "ppo_frac_60000": "results/cancer_pipeline/q_models/ppo_frac_60000.pt",
-  "ppo_frac_80000": "results/cancer_pipeline/q_models/ppo_frac_80000.pt",
-  "ppo_frac_100000": "results/cancer_pipeline/q_models/ppo_frac_100000.pt"
+  "NoTreatment": "results/cancer_pipeline/q_models/NoTreatment.pt",
+  "SFR_2Gy_5d": "results/cancer_pipeline/q_models/SFR_2Gy_5d.pt",
+  "MetronomicChemo_2.0": "results/cancer_pipeline/q_models/MetronomicChemo_2.0.pt",
+  "AdaptiveTherapy": "results/cancer_pipeline/q_models/AdaptiveTherapy.pt",
+  "AggressiveMTD": "results/cancer_pipeline/q_models/AggressiveMTD.pt"
 }

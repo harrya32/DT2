@@ -1,0 +1,204 @@
+{
+  "config": {
+    "env_id": "LunarLanderContinuous-v3",
+    "output_dir": "results/nll/lunarlander_pipeline",
+    "wandb_project": "DT2-lunarlander",
+    "total_steps": 1000000,
+    "ppo_fractions": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ],
+    "n_envs": 8,
+    "n_steps": 2048,
+    "batch_size": 1024,
+    "learning_rate": 0.0003,
+    "gamma": 0.97,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "seed": 1003,
+    "rollout_steps": 10000,
+    "q_epochs": 1000,
+    "q_batch": 1024,
+    "q_lr": 0.0003,
+    "q_samples": 32,
+    "dyn_epochs": 2000,
+    "dyn_batch": 1024,
+    "dyn_lr": 0.0003,
+    "dyn_hidden_dim": 64,
+    "dyn_val_fraction": 0.1,
+    "dyn_early_stop_patience": 20,
+    "dyn_min_epochs": 50,
+    "dynamics_loss": "mse",
+    "dynamics_models": [
+      "supervised",
+      "kendall"
+    ],
+    "lambda_td": 0.1,
+    "lambda_rank": 0.1,
+    "backbone": "mlp",
+    "dyn_seq_len": 1,
+    "dyn_seq_overlap": 0,
+    "eval_episodes": 20,
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
+    "device": "auto",
+    "force_policy_training": false,
+    "force_dataset_collection": false,
+    "force_q_training": false,
+    "force_dynamics_training": true,
+    "results_only": false,
+    "wandb_entity": null,
+    "wandb_run_name": null,
+    "wandb_mode": "online"
+  },
+  "num_transitions": 6000,
+  "q_model_paths": {
+    "ppo_frac_0": "results/nll/lunarlander_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_200000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_200000.pt",
+    "ppo_frac_400000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_400000.pt",
+    "ppo_frac_600000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_600000.pt",
+    "ppo_frac_800000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_800000.pt",
+    "ppo_frac_1000000": "results/nll/lunarlander_pipeline/q_models/ppo_frac_1000000.pt"
+  },
+  "dynamics_paths": {
+    "supervised": "results/nll/lunarlander_pipeline/mlp/dynamics/dynamics_supervised.pt",
+    "ranking": "results/nll/lunarlander_pipeline/mlp/dynamics/dynamics_ranking.pt",
+    "q_aware": {},
+    "ranking_new": {
+      "kendall": "results/nll/lunarlander_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_0",
+      "timesteps": 0,
+      "q_estimate": -31.481420516967773,
+      "dynamics": {
+        "supervised": -7354.5322265625,
+        "supervised_mse": 0.0021296911872923374,
+        "supervised_train_mse": 0.0014433235628530383,
+        "ranking_new": {
+          "kendall": -8260.173828125
+        },
+        "ranking_new_mse": {
+          "kendall": 0.003472898853942752
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.003231433220207691
+        }
+      },
+      "env_mc": -6469.978170482864
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_200000",
+      "timesteps": 200000,
+      "q_estimate": -1.8686151504516602,
+      "dynamics": {
+        "supervised": -6510.34375,
+        "supervised_mse": 0.0021296911872923374,
+        "supervised_train_mse": 0.0014433235628530383,
+        "ranking_new": {
+          "kendall": -7094.22021484375
+        },
+        "ranking_new_mse": {
+          "kendall": 0.003472898853942752
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.003231433220207691
+        }
+      },
+      "env_mc": -6487.617026578651
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_400000",
+      "timesteps": 400000,
+      "q_estimate": 14.861968994140625,
+      "dynamics": {
+        "supervised": -6258.85546875,
+        "supervised_mse": 0.0021296911872923374,
+        "supervised_train_mse": 0.0014433235628530383,
+        "ranking_new": {
+          "kendall": -6810.77099609375
+        },
+        "ranking_new_mse": {
+          "kendall": 0.003472898853942752
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.003231433220207691
+        }
+      },
+      "env_mc": -6191.4563066380015
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_600000",
+      "timesteps": 600000,
+      "q_estimate": 18.137176513671875,
+      "dynamics": {
+        "supervised": -6168.40966796875,
+        "supervised_mse": 0.0021296911872923374,
+        "supervised_train_mse": 0.0014433235628530383,
+        "ranking_new": {
+          "kendall": -6779.4736328125
+        },
+        "ranking_new_mse": {
+          "kendall": 0.003472898853942752
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.003231433220207691
+        }
+      },
+      "env_mc": -6120.432527177244
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_800000",
+      "timesteps": 800000,
+      "q_estimate": 16.81857681274414,
+      "dynamics": {
+        "supervised": -6170.6240234375,
+        "supervised_mse": 0.0021296911872923374,
+        "supervised_train_mse": 0.0014433235628530383,
+        "ranking_new": {
+          "kendall": -6731.7353515625
+        },
+        "ranking_new_mse": {
+          "kendall": 0.003472898853942752
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.003231433220207691
+        }
+      },
+      "env_mc": -6114.836459323391
+    },
+    {
+      "name": "ppo_frac_1000000",
+      "checkpoint": "results/nll/lunarlander_pipeline/policies/ppo_frac_1000000",
+      "timesteps": 1000000,
+      "q_estimate": 22.29837989807129,
+      "dynamics": {
+        "supervised": -6146.8984375,
+        "supervised_mse": 0.0021296911872923374,
+        "supervised_train_mse": 0.0014433235628530383,
+        "ranking_new": {
+          "kendall": -6648.546875
+        },
+        "ranking_new_mse": {
+          "kendall": 0.003472898853942752
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.003231433220207691
+        }
+      },
+      "env_mc": -6116.801382927098
+    }
+  ]
+}
