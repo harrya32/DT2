@@ -809,6 +809,227 @@ class DynamicsNet(nn.Module):
             self.load_state_dict(best_state)
 
         return losses
+
+    def train_value_aware_model(
+        self,
+        dataset: OfflineDataset | Mapping[str, np.ndarray],
+        policy_q_pairs: Sequence[Tuple[TorchPolicy | GaussianLinearPolicy, nn.Module]],
+        epochs: int = 200,
+        batch_size: int = 1024,
+        lr: float = 1e-3,
+        use_amp: bool = True,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+        device: Optional[torch.device] = None,
+        log_hook: Optional[Callable[..., None]] = None,
+        val_fraction: float = 0.1,
+        early_stop_patience: int = 50,
+        min_epochs: int = 50,
+        min_delta: float = 0.0,
+    ) -> List[float]:
+        """Train dynamics with value-aware weighting.
+        
+        Uses MSE loss weighted by the squared gradient norm of Q functions
+        at the true next state, averaged across all policy-Q pairs.
+        
+        Loss = E[ ||s'_pred - s'||^2 * (1/K) * sum_k ||grad_s' Q_k(s', pi_k(s'))||^2 ]
+        
+        Args:
+            dataset: Offline dataset with transitions.
+            policy_q_pairs: List of (policy, Q-function) tuples.
+            epochs: Number of training epochs.
+            batch_size: Batch size for training.
+            lr: Learning rate.
+            use_amp: Whether to use automatic mixed precision.
+            act_low: Lower bound for actions.
+            act_high: Upper bound for actions.
+            device: Device to train on.
+            log_hook: Optional logging callback.
+            val_fraction: Fraction of data to use for validation.
+            early_stop_patience: Patience for early stopping.
+            min_epochs: Minimum epochs before early stopping.
+            min_delta: Minimum improvement for early stopping.
+            
+        Returns:
+            List of training losses per epoch.
+        """
+        device = device or DEVICE
+        self.to(device)
+        
+        data = self._as_dict(dataset)
+        states = torch.tensor(data["s"], dtype=torch.float32, device=device)
+        actions = torch.tensor(data["a"], dtype=torch.float32, device=device)
+        next_states = torch.tensor(data["s_next"], dtype=torch.float32, device=device)
+        mask = torch.tensor(data["mask"], dtype=torch.float32, device=device) if "mask" in data else None
+        N = states.shape[0]
+
+        optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
+        use_amp = use_amp and device.type == "cuda"
+        scaler = torch.amp.GradScaler("cuda", enabled=use_amp) if use_amp else None
+        
+        train_idx, val_idx = self._split_train_val_indices(N, val_fraction, device)
+        train_states = states[train_idx]
+        train_actions = actions[train_idx]
+        train_next = next_states[train_idx]
+        train_mask = None if mask is None else mask[train_idx]
+        train_indices = torch.arange(train_states.shape[0], device=device)
+        
+        val_tensors = None
+        if val_idx is not None:
+            val_tensors = (
+                states[val_idx],
+                actions[val_idx],
+                next_states[val_idx],
+                None if mask is None else mask[val_idx],
+            )
+
+        # Fit normalizer on training data
+        if not self._normalizer_fitted:
+            self.fit_normalizer(train_states, train_actions, train_next, train_mask)
+
+        # Prepare Q functions (freeze parameters)
+        for policy, q in policy_q_pairs:
+            q.to(device)
+            for param in q.parameters():
+                param.requires_grad_(False)
+
+        def compute_value_weights(s_next_batch: torch.Tensor) -> torch.Tensor:
+            """Compute average squared gradient norm of Q at s_next across all policies."""
+            s_next_batch = s_next_batch.detach().requires_grad_(True)
+            
+            total_grad_sq_norm = torch.zeros(s_next_batch.shape[0], device=device)
+            
+            for policy, q in policy_q_pairs:
+                # Get policy action at next state
+                a_next = self._sample_policy_actions(
+                    policy, s_next_batch, 1, act_low, act_high, deterministic=True
+                )
+                
+                # Compute Q value
+                q_val = q(s_next_batch, a_next)
+                
+                # Compute gradient w.r.t. s_next
+                grad_s = torch.autograd.grad(
+                    outputs=q_val.sum(),
+                    inputs=s_next_batch,
+                    create_graph=False,
+                    retain_graph=True,
+                )[0]
+                
+                # Squared norm of gradient
+                grad_sq_norm = (grad_s ** 2).sum(dim=-1)
+                total_grad_sq_norm = total_grad_sq_norm + grad_sq_norm
+            
+            # Average across policies
+            weights = total_grad_sq_norm / len(policy_q_pairs)
+            return weights.detach()
+
+        def value_aware_mse(
+            s: torch.Tensor, a: torch.Tensor, s_next: torch.Tensor, mb: Optional[torch.Tensor]
+        ) -> torch.Tensor:
+            """Compute value-weighted MSE loss."""
+            mean, _ = self.forward(s, a)
+            diff = self._circular_diff(s_next, mean, s_next - mean)
+            mse_per_sample = (diff ** 2).mean(dim=-1)  # [B]
+            
+            # Compute value-aware weights
+            weights = compute_value_weights(s_next)  # [B]
+            
+            # Weighted MSE
+            weighted_mse = mse_per_sample * weights
+            
+            if mb is not None:
+                weighted_mse = self._apply_mask(weighted_mse, mb)
+            
+            return weighted_mse.mean()
+
+        losses: List[float] = []
+        best_state = copy.deepcopy(self.state_dict()) if val_tensors is not None else None
+        best_val = math.inf
+        epochs_without_improve = 0
+
+        for epoch in range(epochs):
+            epoch_loss = 0.0
+            num_batches = 0
+            perm = train_indices[torch.randperm(train_indices.size(0), device=device)]
+            
+            for start in range(0, perm.size(0), batch_size):
+                idx = perm[start : start + batch_size]
+                sb, ab, snb = train_states[idx], train_actions[idx], train_next[idx]
+                mb = None if train_mask is None else train_mask[idx]
+
+                optimizer.zero_grad(set_to_none=True)
+
+                with torch.amp.autocast("cuda", enabled=use_amp):
+                    loss = value_aware_mse(sb, ab, snb, mb)
+
+                if not torch.isfinite(loss):
+                    continue
+
+                if use_amp:
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                    optimizer.step()
+
+                epoch_loss += loss.item()
+                num_batches += 1
+
+            avg_loss = epoch_loss / max(1, num_batches)
+
+            # --- Validation ---
+            val_loss: Optional[float] = None
+            if val_tensors is not None:
+                vs, va, vn, val_mask = val_tensors
+                total_val = 0.0
+                batches = 0
+                for vstart in range(0, vs.size(0), batch_size):
+                    vsb = vs[vstart : vstart + batch_size]
+                    vab = va[vstart : vstart + batch_size]
+                    vnb = vn[vstart : vstart + batch_size]
+                    vmb = None if val_mask is None else val_mask[vstart : vstart + batch_size]
+                    # Compute value weights (requires grad)
+                    weights_val = compute_value_weights(vnb)
+                    # Forward pass without grad
+                    with torch.no_grad():
+                        mean, _ = self.forward(vsb, vab)
+                        diff = self._circular_diff(vnb, mean, vnb - mean)
+                        mse_val = (diff ** 2).mean(dim=-1)
+                        weighted_mse_val = mse_val * weights_val
+                        if vmb is not None:
+                            weighted_mse_val = self._apply_mask(weighted_mse_val, vmb)
+                        total_val += float(weighted_mse_val.mean().item())
+                        batches += 1
+                val_loss = total_val / max(1, batches)
+
+                if val_loss + min_delta < best_val:
+                    best_val = val_loss
+                    epochs_without_improve = 0
+                    best_state = copy.deepcopy(self.state_dict())
+                else:
+                    epochs_without_improve += 1
+
+            losses.append(avg_loss)
+            if log_hook is not None:
+                log_hook(epoch, avg_loss, val_loss)
+
+            if (
+                val_tensors is not None
+                and early_stop_patience > 0
+                and epoch + 1 >= min_epochs
+                and epochs_without_improve >= early_stop_patience
+            ):
+                break
+
+        if best_state is not None:
+            self.load_state_dict(best_state)
+
+        return losses
     
     def sample_next(self, s: torch.Tensor, a: torch.Tensor, deterministic: bool = False) -> torch.Tensor:
         """Sample next state from the dynamics model.

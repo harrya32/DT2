@@ -6,5 +6,6 @@
     "kendall": "results/cancer_pipeline/ode/dynamics/dynamics_ranking_new_kendall.pt",
     "hinge": "results/cancer_pipeline/ode/dynamics/dynamics_ranking_new_hinge.pt",
     "listnet": "results/cancer_pipeline/ode/dynamics/dynamics_ranking_new_listnet.pt"
-  }
+  },
+  "value_aware": null
 }

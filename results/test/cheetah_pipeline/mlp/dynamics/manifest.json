@@ -1,10 +1,7 @@
 {
-  "supervised": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_supervised.pt",
+  "supervised": null,
   "ranking": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt",
-    "hinge": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_ranking_new_hinge.pt",
-    "listnet": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_ranking_new_listnet.pt"
-  }
+  "ranking_new": {},
+  "value_aware": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_value_aware.pt"
 }

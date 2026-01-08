@@ -322,6 +322,7 @@ def save_dynamics_models(
     sup_model: Optional[DynamicsNet],
     ranking_new_models: Dict[str, DynamicsNet],
     directory: Path,
+    value_aware_model: Optional[DynamicsNet] = None,
 ) -> Dict[str, object]:
     """Save dynamics models and create a manifest."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -330,6 +331,7 @@ def save_dynamics_models(
         "ranking": (directory / "dynamics_ranking.pt").as_posix(),
         "q_aware": {},
         "ranking_new": {},
+        "value_aware": None,
     }
     if sup_model is not None:
         paths["supervised"] = (directory / "dynamics_supervised.pt").as_posix()
@@ -340,6 +342,10 @@ def save_dynamics_models(
         torch.save(copy.deepcopy(model).cpu(), path)
         paths["ranking_new"][loss_name] = path.as_posix()
 
+    if value_aware_model is not None:
+        paths["value_aware"] = (directory / "dynamics_value_aware.pt").as_posix()
+        torch.save(copy.deepcopy(value_aware_model).cpu(), paths["value_aware"])
+
     manifest = directory / "manifest.json"
     with open(manifest, "w", encoding="utf-8") as f:
         json.dump(paths, f, indent=2)
@@ -349,8 +355,12 @@ def save_dynamics_models(
 def load_dynamics_models(
     directory: Path,
     device: torch.device,
-) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet], Dict[str, object]]:
-    """Load dynamics models from a manifest."""
+) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet], Dict[str, object], Optional[DynamicsNet]]:
+    """Load dynamics models from a manifest.
+    
+    Returns:
+        Tuple of (supervised_model, ranking_new_models, paths, value_aware_model)
+    """
     manifest = directory / "manifest.json"
     with open(manifest, "r", encoding="utf-8") as f:
         paths = json.load(f)
@@ -366,7 +376,12 @@ def load_dynamics_models(
         model.to(device)
         ranking_new_models[loss_name] = model
 
-    return sup_model, ranking_new_models, paths
+    value_aware_model: Optional[DynamicsNet] = None
+    if paths.get("value_aware") is not None:
+        value_aware_model = torch.load(paths["value_aware"], map_location=device, weights_only=False)
+        value_aware_model.to(device)
+
+    return sup_model, ranking_new_models, paths, value_aware_model
 
 
 # =============================================================================
@@ -685,17 +700,54 @@ def train_dynamics_models(
     state_upper: Optional[torch.Tensor] = None,
     wrapped_dims: Optional[List[int]] = None,
     dynamics_models: Optional[List[str]] = None,
-) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet]]:
+    value_aware_only: bool = False,
+    act_low: float = -1.0,
+    act_high: float = 1.0,
+) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet], Optional[DynamicsNet]]:
     """Train supervised and ranking-aware dynamics models.
     
     Args:
         dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet'.
                         If None, trains all models.
+        value_aware_only: If True, only train the value-aware model (ignore dynamics_models).
+        act_low: Lower bound for actions (used by value-aware model).
+        act_high: Upper bound for actions (used by value-aware model).
+    
+    Returns:
+        Tuple of (supervised_model, ranking_new_models, value_aware_model)
     """
     if dynamics_models is None:
         dynamics_models = ["supervised", "kendall", "hinge", "listnet"]
     state_dim = dataset.states.shape[-1]
     act_dim = dataset.actions.shape[-1]
+
+    # If value_aware_only, skip supervised and ranking models entirely
+    policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
+    if value_aware_only:
+        value_aware_model = DynamicsNet(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            hidden=hidden_dim,
+            backbone=backbone,
+            state_low=state_low,
+            state_upper=state_upper,
+            wrapped_dims=wrapped_dims if wrapped_dims is not None else [],
+        ).to(device)
+        value_aware_model.train_value_aware_model(
+            dataset,
+            policy_q_pairs=policy_q_pairs,
+            epochs=dyn_epochs,
+            batch_size=dyn_batch,
+            lr=dyn_lr,
+            device=device,
+            log_hook=make_epoch_logger(wandb_run, "dynamics/value_aware"),
+            val_fraction=val_fraction,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
+            act_low=act_low,
+            act_high=act_high,
+        )
+        return None, {}, value_aware_model
 
     # Supervised model
     sup_model: Optional[DynamicsNet] = None
@@ -723,8 +775,9 @@ def train_dynamics_models(
         )
 
     # Ranking-aware models
-    policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
     ranking_new_models: Dict[str, DynamicsNet] = {}
+    value_aware_model: Optional[DynamicsNet] = None
+
     ranking_losses_to_train = [loss for loss in ("kendall", "hinge", "listnet") if loss in dynamics_models]
     for loss_name in ranking_losses_to_train:
         model = DynamicsNet(
@@ -755,7 +808,7 @@ def train_dynamics_models(
         )
         ranking_new_models[loss_name] = model
 
-    return sup_model, ranking_new_models
+    return sup_model, ranking_new_models, value_aware_model
 
 
 # =============================================================================
@@ -1086,6 +1139,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--backbone", type=str, default="mlp", choices=["mlp", "resnet", "ode", "transformer", "gru"])
     parser.add_argument("--dyn-seq-len", type=int, default=1)
     parser.add_argument("--dyn-seq-overlap", type=int, default=0)
+    parser.add_argument("--value-aware-only", action="store_true", help="Train only the value-aware dynamics model (no supervised or ranking models)")
     
     # Evaluation
     parser.add_argument("--eval-episodes", type=int, default=20)
@@ -1293,19 +1347,23 @@ def run_pipeline(
     dynamics_trained = False
     dynamics_train_time: Optional[float] = None
 
+    value_aware_only = getattr(args, "value_aware_only", False)
     if dynamics_manifest.exists() and not args.force_dynamics_training:
         print("[Step 4] Using existing dynamics models...")
-        sup_model, ranking_new_models, dynamics_paths = load_dynamics_models(dynamics_dir, device)
+        sup_model, ranking_new_models, dynamics_paths, value_aware_model = load_dynamics_models(dynamics_dir, device)
     else:
         if args.results_only:
             raise FileNotFoundError(
                 f"No saved dynamics models at {dynamics_manifest}. "
                 "Run training once without --results-only."
             )
-        print("[Step 4] Training dynamics models...")
-        print(f"  Models to train: {args.dynamics_models}")
+        if value_aware_only:
+            print("[Step 4] Training value-aware dynamics model only...")
+        else:
+            print("[Step 4] Training dynamics models...")
+            print(f"  Models to train: {args.dynamics_models}")
         start_time = time.perf_counter()
-        sup_model, ranking_new_models = train_dynamics_models(
+        sup_model, ranking_new_models, value_aware_model = train_dynamics_models(
             dyn_dataset,
             torch_policies,
             q_models,
@@ -1328,8 +1386,11 @@ def run_pipeline(
             state_upper=state_upper,
             wrapped_dims=wrapped_dims,
             dynamics_models=args.dynamics_models,
+            value_aware_only=value_aware_only,
+            act_low=act_low,
+            act_high=act_high,
         )
-        dynamics_paths = save_dynamics_models(sup_model, ranking_new_models, dynamics_dir)
+        dynamics_paths = save_dynamics_models(sup_model, ranking_new_models, dynamics_dir, value_aware_model)
         dynamics_trained = True
         dynamics_train_time = time.perf_counter() - start_time
 
@@ -1391,6 +1452,23 @@ def run_pipeline(
                 dyn_model, train_states, train_actions, train_next_states, device
             )
 
+        # Value-aware model evaluation
+        dyn_value_aware: Optional[float] = None
+        dyn_value_aware_mse: Optional[float] = None
+        dyn_value_aware_train_mse: Optional[float] = None
+        if value_aware_model is not None:
+            dyn_value_aware = evaluate_in_dynamics(
+                value_aware_model, policy, initial_states, args.eval_horizon,
+                args.gamma, device, args.eval_rollouts, reward_fn_torch,
+                termination_fn_torch=termination_fn_torch,
+            )
+            dyn_value_aware_mse = calc_dynamics_mse(
+                value_aware_model, test_states, test_actions, test_next_states, device
+            )
+            dyn_value_aware_train_mse = calc_dynamics_mse(
+                value_aware_model, train_states, train_actions, train_next_states, device
+            )
+
         fixed_env = evaluate_sb3_policy_fixed_horizon(
             ppo_model, env_id, args.eval_horizon, args.gamma,
             args.eval_rollouts, args.seed, reward_fn
@@ -1414,6 +1492,12 @@ def run_pipeline(
             wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_mse"] = val
         for loss_name, val in dyn_rank_new_train_mse.items():
             wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_train_mse"] = val
+        if dyn_value_aware is not None:
+            wandb_payload["eval/dynamics_value_aware"] = dyn_value_aware
+        if dyn_value_aware_mse is not None:
+            wandb_payload["eval/dynamics_value_aware_mse"] = dyn_value_aware_mse
+        if dyn_value_aware_train_mse is not None:
+            wandb_payload["eval/dynamics_value_aware_train_mse"] = dyn_value_aware_train_mse
 
         wandb_log(wandb_run, wandb_payload, step=int(snap["timesteps"]))
 
@@ -1429,6 +1513,9 @@ def run_pipeline(
                 "ranking_new": dyn_rank_new,
                 "ranking_new_mse": dyn_rank_new_mse,
                 "ranking_new_train_mse": dyn_rank_new_train_mse,
+                "value_aware": dyn_value_aware,
+                "value_aware_mse": dyn_value_aware_mse,
+                "value_aware_train_mse": dyn_value_aware_train_mse,
             },
             "env_mc": fixed_env,
         })
@@ -1445,7 +1532,10 @@ def run_pipeline(
         "results": results,
     }
 
-    summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
+    if value_aware_only:
+        summary_path = args.output_dir / args.backbone / f"summary_VAML_{args.seed}.json"
+    else:
+        summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
