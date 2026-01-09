@@ -1,8 +1,7 @@
 {
-  "supervised": "results/test/hopper_pipeline/resnet/dynamics/dynamics_supervised.pt",
+  "supervised": null,
   "ranking": "results/test/hopper_pipeline/resnet/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/test/hopper_pipeline/resnet/dynamics/dynamics_ranking_new_kendall.pt"
-  }
+  "ranking_new": {},
+  "value_aware": "results/test/hopper_pipeline/resnet/dynamics/dynamics_value_aware.pt"
 }
