@@ -34,16 +34,11 @@
     "dyn_early_stop_patience": 20,
     "dyn_min_epochs": 50,
     "dynamics_loss": "nll",
-    "dynamics_models": [
-      "supervised",
-      "kendall"
-    ],
     "lambda_td": 0.1,
     "lambda_rank": 0.1,
     "backbone": "mlp",
     "dyn_seq_len": 1,
     "dyn_seq_overlap": 0,
-    "value_aware_only": false,
     "eval_episodes": 20,
     "eval_rollouts": 20,
     "eval_horizon": 500,
@@ -71,32 +66,36 @@
     "ranking": "results/test/hopper_pipeline/mlp/dynamics/dynamics_ranking.pt",
     "q_aware": {},
     "ranking_new": {
-      "kendall": "results/test/hopper_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
-    },
-    "value_aware": null
+      "kendall": "results/test/hopper_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/test/hopper_pipeline/mlp/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/test/hopper_pipeline/mlp/dynamics/dynamics_ranking_new_listnet.pt"
+    }
   },
   "results": [
     {
       "name": "ppo_frac_0",
       "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": 57.72811508178711,
+      "q_estimate": 57.730892181396484,
       "dynamics": {
-        "supervised": 15.558692932128906,
-        "supervised_mse": 0.03669893369078636,
-        "supervised_train_mse": 0.04046677425503731,
+        "supervised": 13.954635620117188,
+        "supervised_mse": 0.03430500999093056,
+        "supervised_train_mse": 0.035875339061021805,
         "ranking_new": {
-          "kendall": 20.12578582763672
+          "kendall": 12.633918762207031,
+          "hinge": 20.300537109375,
+          "listnet": 13.746973037719727
         },
         "ranking_new_mse": {
-          "kendall": 0.05842049792408943
+          "kendall": 0.044729217886924744,
+          "hinge": 0.04621873423457146,
+          "listnet": 0.04874478280544281
         },
         "ranking_new_train_mse": {
-          "kendall": 0.05513548478484154
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
+          "kendall": 0.04331725090742111,
+          "hinge": 0.044426608830690384,
+          "listnet": 0.044178105890750885
+        }
       },
       "env_mc": 31.616477733240373
     },
@@ -104,23 +103,26 @@
       "name": "ppo_frac_200000",
       "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "q_estimate": 60.00596618652344,
+      "q_estimate": 60.00340270996094,
       "dynamics": {
-        "supervised": 68.28511810302734,
-        "supervised_mse": 0.03669893369078636,
-        "supervised_train_mse": 0.04046677425503731,
+        "supervised": 52.51949691772461,
+        "supervised_mse": 0.03430500999093056,
+        "supervised_train_mse": 0.035875339061021805,
         "ranking_new": {
-          "kendall": 53.559181213378906
+          "kendall": 64.89733123779297,
+          "hinge": 41.68825912475586,
+          "listnet": 49.01605224609375
         },
         "ranking_new_mse": {
-          "kendall": 0.05842049792408943
+          "kendall": 0.044729217886924744,
+          "hinge": 0.04621873423457146,
+          "listnet": 0.04874478280544281
         },
         "ranking_new_train_mse": {
-          "kendall": 0.05513548478484154
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
+          "kendall": 0.04331725090742111,
+          "hinge": 0.044426608830690384,
+          "listnet": 0.044178105890750885
+        }
       },
       "env_mc": 60.701317770808444
     },
@@ -128,23 +130,26 @@
       "name": "ppo_frac_400000",
       "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": 63.24440002441406,
+      "q_estimate": 63.24363327026367,
       "dynamics": {
-        "supervised": 69.2582015991211,
-        "supervised_mse": 0.03669893369078636,
-        "supervised_train_mse": 0.04046677425503731,
+        "supervised": 43.65111541748047,
+        "supervised_mse": 0.03430500999093056,
+        "supervised_train_mse": 0.035875339061021805,
         "ranking_new": {
-          "kendall": 41.84741973876953
+          "kendall": 61.1256103515625,
+          "hinge": 40.9041748046875,
+          "listnet": 61.36298751831055
         },
         "ranking_new_mse": {
-          "kendall": 0.05842049792408943
+          "kendall": 0.044729217886924744,
+          "hinge": 0.04621873423457146,
+          "listnet": 0.04874478280544281
         },
         "ranking_new_train_mse": {
-          "kendall": 0.05513548478484154
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
+          "kendall": 0.04331725090742111,
+          "hinge": 0.044426608830690384,
+          "listnet": 0.044178105890750885
+        }
       },
       "env_mc": 64.30742129012529
     },
@@ -152,23 +157,26 @@
       "name": "ppo_frac_600000",
       "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "q_estimate": 63.352088928222656,
+      "q_estimate": 63.35280227661133,
       "dynamics": {
-        "supervised": 70.11846160888672,
-        "supervised_mse": 0.03669893369078636,
-        "supervised_train_mse": 0.04046677425503731,
+        "supervised": 36.71918869018555,
+        "supervised_mse": 0.03430500999093056,
+        "supervised_train_mse": 0.035875339061021805,
         "ranking_new": {
-          "kendall": 42.048458099365234
+          "kendall": 52.82741928100586,
+          "hinge": 39.51688766479492,
+          "listnet": 46.91931915283203
         },
         "ranking_new_mse": {
-          "kendall": 0.05842049792408943
+          "kendall": 0.044729217886924744,
+          "hinge": 0.04621873423457146,
+          "listnet": 0.04874478280544281
         },
         "ranking_new_train_mse": {
-          "kendall": 0.05513548478484154
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
+          "kendall": 0.04331725090742111,
+          "hinge": 0.044426608830690384,
+          "listnet": 0.044178105890750885
+        }
       },
       "env_mc": 63.51731254783888
     },
@@ -176,23 +184,26 @@
       "name": "ppo_frac_800000",
       "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 63.93027114868164,
+      "q_estimate": 63.93031311035156,
       "dynamics": {
-        "supervised": 71.0357894897461,
-        "supervised_mse": 0.03669893369078636,
-        "supervised_train_mse": 0.04046677425503731,
+        "supervised": 28.31723403930664,
+        "supervised_mse": 0.03430500999093056,
+        "supervised_train_mse": 0.035875339061021805,
         "ranking_new": {
-          "kendall": 42.102630615234375
+          "kendall": 51.606117248535156,
+          "hinge": 39.40891647338867,
+          "listnet": 44.89689254760742
         },
         "ranking_new_mse": {
-          "kendall": 0.05842049792408943
+          "kendall": 0.044729217886924744,
+          "hinge": 0.04621873423457146,
+          "listnet": 0.04874478280544281
         },
         "ranking_new_train_mse": {
-          "kendall": 0.05513548478484154
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
+          "kendall": 0.04331725090742111,
+          "hinge": 0.044426608830690384,
+          "listnet": 0.044178105890750885
+        }
       },
       "env_mc": 64.17907763320535
     },
@@ -200,23 +211,26 @@
       "name": "ppo_frac_1000000",
       "checkpoint": "results/test/hopper_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "q_estimate": 64.13126373291016,
+      "q_estimate": 64.131103515625,
       "dynamics": {
-        "supervised": 66.9470443725586,
-        "supervised_mse": 0.03669893369078636,
-        "supervised_train_mse": 0.04046677425503731,
+        "supervised": 44.55419158935547,
+        "supervised_mse": 0.03430500999093056,
+        "supervised_train_mse": 0.035875339061021805,
         "ranking_new": {
-          "kendall": 42.03151321411133
+          "kendall": 51.92755889892578,
+          "hinge": 39.44818115234375,
+          "listnet": 47.122528076171875
         },
         "ranking_new_mse": {
-          "kendall": 0.05842049792408943
+          "kendall": 0.044729217886924744,
+          "hinge": 0.04621873423457146,
+          "listnet": 0.04874478280544281
         },
         "ranking_new_train_mse": {
-          "kendall": 0.05513548478484154
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
+          "kendall": 0.04331725090742111,
+          "hinge": 0.044426608830690384,
+          "listnet": 0.044178105890750885
+        }
       },
       "env_mc": 64.86967059979476
     }

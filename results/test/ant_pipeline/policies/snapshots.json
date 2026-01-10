@@ -1,0 +1,32 @@
+[
+  {
+    "name": "ppo_frac_0",
+    "path": "results/test/ant_pipeline/policies/ppo_frac_0",
+    "timesteps": 0
+  },
+  {
+    "name": "ppo_frac_400000",
+    "path": "results/test/ant_pipeline/policies/ppo_frac_400000",
+    "timesteps": 400000
+  },
+  {
+    "name": "ppo_frac_800000",
+    "path": "results/test/ant_pipeline/policies/ppo_frac_800000",
+    "timesteps": 800000
+  },
+  {
+    "name": "ppo_frac_1200000",
+    "path": "results/test/ant_pipeline/policies/ppo_frac_1200000",
+    "timesteps": 1200000
+  },
+  {
+    "name": "ppo_frac_1600000",
+    "path": "results/test/ant_pipeline/policies/ppo_frac_1600000",
+    "timesteps": 1600000
+  },
+  {
+    "name": "ppo_frac_2000000",
+    "path": "results/test/ant_pipeline/policies/ppo_frac_2000000",
+    "timesteps": 2000000
+  }
+]
