@@ -54,10 +54,10 @@ ANT_ACT_HIGH = 1.0
 # State bounds for Ant (approximate, based on typical ranges)
 # The observation space is technically unbounded, but we use inf
 ANT_STATE_LOW = torch.tensor(
-    [-np.inf] * 105, dtype=torch.float32
+    [-np.inf] * 27, dtype=torch.float32
 )
 ANT_STATE_HIGH = torch.tensor(
-    [np.inf] * 105, dtype=torch.float32
+    [np.inf] * 27, dtype=torch.float32
 )
 
 # Healthy state bounds for Ant (used in termination)
@@ -101,10 +101,10 @@ def ant_reward_fn(state: np.ndarray, action: np.ndarray) -> float:
     healthy_reward = 1.0  # Assuming healthy state
     
     # Contact cost: uses contact forces from indices 27-104
-    contact_forces = state[27:105]
-    contact_cost = 5e-4 * np.sum(np.square(np.clip(contact_forces, -1.0, 1.0)))
+    #contact_forces = state[27:105]
+    #contact_cost = 5e-4 * np.sum(np.square(np.clip(contact_forces, -1.0, 1.0)))
     
-    return float(forward_velocity + healthy_reward - ctrl_cost - contact_cost)
+    return float(forward_velocity + healthy_reward - ctrl_cost)# - contact_cost)
 
 
 def ant_reward_torch(states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
@@ -115,10 +115,10 @@ def ant_reward_torch(states: torch.Tensor, actions: torch.Tensor) -> torch.Tenso
     healthy_reward = 1.0  # Assuming healthy state
     
     # Contact cost: uses contact forces from indices 27-104
-    contact_forces = states[..., 27:105]
-    contact_cost = 5e-4 * torch.sum(torch.clamp(contact_forces, -1.0, 1.0) ** 2, dim=-1)
+    #contact_forces = states[..., 27:105]
+    #contact_cost = 5e-4 * torch.sum(torch.clamp(contact_forces, -1.0, 1.0) ** 2, dim=-1)
     
-    return forward_velocity + healthy_reward - ctrl_cost - contact_cost
+    return forward_velocity + healthy_reward - ctrl_cost # - contact_cost
 
 
 def ant_termination_torch(states: torch.Tensor) -> torch.Tensor:
@@ -180,6 +180,7 @@ def main() -> None:
         state_upper=ANT_STATE_HIGH,
         wrapped_dims=[],  # No wrapped dimensions in Ant
         termination_fn_torch=ant_termination_torch,
+        env_kwargs={"include_cfrc_ext_in_observation": False}
     )
 
 

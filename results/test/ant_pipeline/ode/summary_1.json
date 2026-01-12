@@ -31,7 +31,7 @@
     "dyn_lr": 0.0003,
     "dyn_hidden_dim": 64,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 100,
+    "dyn_early_stop_patience": 20,
     "dyn_min_epochs": 50,
     "dynamics_loss": "nll",
     "dynamics_models": [
@@ -39,7 +39,7 @@
       "kendall"
     ],
     "lambda_td": 0.1,
-    "lambda_rank": 1.0,
+    "lambda_rank": 0.1,
     "backbone": "ode",
     "dyn_seq_len": 1,
     "dyn_seq_overlap": 0,
@@ -55,16 +55,17 @@
     "results_only": false,
     "wandb_entity": null,
     "wandb_run_name": null,
-    "wandb_mode": "online"
+    "wandb_mode": "online",
+    "env_kwargs": {}
   },
   "num_transitions": 60000,
   "q_model_paths": {
     "ppo_frac_0": "results/test/ant_pipeline/q_models/ppo_frac_0.pt",
+    "ppo_frac_200000": "results/test/ant_pipeline/q_models/ppo_frac_200000.pt",
     "ppo_frac_400000": "results/test/ant_pipeline/q_models/ppo_frac_400000.pt",
+    "ppo_frac_600000": "results/test/ant_pipeline/q_models/ppo_frac_600000.pt",
     "ppo_frac_800000": "results/test/ant_pipeline/q_models/ppo_frac_800000.pt",
-    "ppo_frac_1200000": "results/test/ant_pipeline/q_models/ppo_frac_1200000.pt",
-    "ppo_frac_1600000": "results/test/ant_pipeline/q_models/ppo_frac_1600000.pt",
-    "ppo_frac_2000000": "results/test/ant_pipeline/q_models/ppo_frac_2000000.pt"
+    "ppo_frac_1000000": "results/test/ant_pipeline/q_models/ppo_frac_1000000.pt"
   },
   "dynamics_paths": {
     "supervised": "results/test/ant_pipeline/ode/dynamics/dynamics_supervised.pt",
@@ -80,145 +81,145 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": -22.28631591796875,
+      "q_estimate": -25.3027286529541,
       "dynamics": {
-        "supervised": 49.5162239074707,
-        "supervised_mse": 0.3413781523704529,
-        "supervised_train_mse": 0.5537633895874023,
+        "supervised": 36.455867767333984,
+        "supervised_mse": 0.23589083552360535,
+        "supervised_train_mse": 0.7594233155250549,
         "ranking_new": {
-          "kendall": -4.017272472381592
+          "kendall": 39.74282455444336
         },
         "ranking_new_mse": {
-          "kendall": 0.623359739780426
+          "kendall": 0.3246268033981323
         },
         "ranking_new_train_mse": {
-          "kendall": 1.644901990890503
+          "kendall": 1.4022976160049438
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null
       },
-      "env_mc": 33.41076982826486
+      "env_mc": 34.1813200295212
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_200000",
+      "timesteps": 200000,
+      "q_estimate": -19.407838821411133,
+      "dynamics": {
+        "supervised": 35.491729736328125,
+        "supervised_mse": 0.23589083552360535,
+        "supervised_train_mse": 0.7594233155250549,
+        "ranking_new": {
+          "kendall": 17.776103973388672
+        },
+        "ranking_new_mse": {
+          "kendall": 0.3246268033981323
+        },
+        "ranking_new_train_mse": {
+          "kendall": 1.4022976160049438
+        },
+        "value_aware": null,
+        "value_aware_mse": null,
+        "value_aware_train_mse": null
+      },
+      "env_mc": 41.56683297316289
     },
     {
       "name": "ppo_frac_400000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": -11.021596908569336,
+      "q_estimate": -14.902885437011719,
       "dynamics": {
-        "supervised": 45.135719299316406,
-        "supervised_mse": 0.3413781523704529,
-        "supervised_train_mse": 0.5537633895874023,
+        "supervised": 32.34686279296875,
+        "supervised_mse": 0.23589083552360535,
+        "supervised_train_mse": 0.7594233155250549,
         "ranking_new": {
-          "kendall": -5.17390775680542
+          "kendall": 17.80501365661621
         },
         "ranking_new_mse": {
-          "kendall": 0.623359739780426
+          "kendall": 0.3246268033981323
         },
         "ranking_new_train_mse": {
-          "kendall": 1.644901990890503
+          "kendall": 1.4022976160049438
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null
       },
-      "env_mc": 37.37859993416832
+      "env_mc": 39.18844050663789
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_600000",
+      "timesteps": 600000,
+      "q_estimate": -7.839943885803223,
+      "dynamics": {
+        "supervised": 31.49795913696289,
+        "supervised_mse": 0.23589083552360535,
+        "supervised_train_mse": 0.7594233155250549,
+        "ranking_new": {
+          "kendall": 17.580738067626953
+        },
+        "ranking_new_mse": {
+          "kendall": 0.3246268033981323
+        },
+        "ranking_new_train_mse": {
+          "kendall": 1.4022976160049438
+        },
+        "value_aware": null,
+        "value_aware_mse": null,
+        "value_aware_train_mse": null
+      },
+      "env_mc": 42.72757683638613
     },
     {
       "name": "ppo_frac_800000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 9.303964614868164,
+      "q_estimate": 2.321065902709961,
       "dynamics": {
-        "supervised": 46.63033676147461,
-        "supervised_mse": 0.3413781523704529,
-        "supervised_train_mse": 0.5537633895874023,
+        "supervised": 33.30718994140625,
+        "supervised_mse": 0.23589083552360535,
+        "supervised_train_mse": 0.7594233155250549,
         "ranking_new": {
-          "kendall": -4.437800884246826
+          "kendall": 18.7298641204834
         },
         "ranking_new_mse": {
-          "kendall": 0.623359739780426
+          "kendall": 0.3246268033981323
         },
         "ranking_new_train_mse": {
-          "kendall": 1.644901990890503
+          "kendall": 1.4022976160049438
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null
       },
-      "env_mc": 31.512913733043792
+      "env_mc": 46.81528318752342
     },
     {
-      "name": "ppo_frac_1200000",
-      "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_1200000",
-      "timesteps": 1200000,
-      "q_estimate": 24.463157653808594,
+      "name": "ppo_frac_1000000",
+      "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_1000000",
+      "timesteps": 1000000,
+      "q_estimate": 9.863592147827148,
       "dynamics": {
-        "supervised": 46.44540023803711,
-        "supervised_mse": 0.3413781523704529,
-        "supervised_train_mse": 0.5537633895874023,
+        "supervised": 34.233856201171875,
+        "supervised_mse": 0.23589083552360535,
+        "supervised_train_mse": 0.7594233155250549,
         "ranking_new": {
-          "kendall": -3.7014291286468506
+          "kendall": 24.175201416015625
         },
         "ranking_new_mse": {
-          "kendall": 0.623359739780426
+          "kendall": 0.3246268033981323
         },
         "ranking_new_train_mse": {
-          "kendall": 1.644901990890503
+          "kendall": 1.4022976160049438
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null
       },
-      "env_mc": 48.763899700342094
-    },
-    {
-      "name": "ppo_frac_1600000",
-      "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_1600000",
-      "timesteps": 1600000,
-      "q_estimate": 32.27987289428711,
-      "dynamics": {
-        "supervised": 47.385597229003906,
-        "supervised_mse": 0.3413781523704529,
-        "supervised_train_mse": 0.5537633895874023,
-        "ranking_new": {
-          "kendall": -2.478315830230713
-        },
-        "ranking_new_mse": {
-          "kendall": 0.623359739780426
-        },
-        "ranking_new_train_mse": {
-          "kendall": 1.644901990890503
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
-      },
-      "env_mc": 53.0885946512018
-    },
-    {
-      "name": "ppo_frac_2000000",
-      "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_2000000",
-      "timesteps": 2000000,
-      "q_estimate": 34.198753356933594,
-      "dynamics": {
-        "supervised": 48.06174850463867,
-        "supervised_mse": 0.3413781523704529,
-        "supervised_train_mse": 0.5537633895874023,
-        "ranking_new": {
-          "kendall": -2.738318920135498
-        },
-        "ranking_new_mse": {
-          "kendall": 0.623359739780426
-        },
-        "ranking_new_train_mse": {
-          "kendall": 1.644901990890503
-        },
-        "value_aware": null,
-        "value_aware_mse": null,
-        "value_aware_train_mse": null
-      },
-      "env_mc": 53.11635182531877
+      "env_mc": 49.97516960869186
     }
   ]
 }

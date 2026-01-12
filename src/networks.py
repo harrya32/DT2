@@ -621,25 +621,60 @@ class DynamicsNet(nn.Module):
             target_tensor = torch.tensor(target_vals, dtype=torch.float32, device=device)
 
         def rollout_return(pi: TorchPolicy | GaussianLinearPolicy, q: torch.nn.Module, deterministic: bool = True, bootstrapping: bool = True) -> torch.Tensor:
-            """Compute model-based return estimate with  value bootstrapping."""
+            """Compute model-based return estimate with value bootstrapping."""
             idx = torch.randint(0, s0.size(0), (rollout_episodes,), device=device)
-            s = s0[idx]
+            s = s0[idx].clone()
             total = torch.zeros(rollout_episodes, device=device)
             discount = 1.0
+            
+            # Track which episodes are still valid (no NaN)
+            valid_mask = torch.ones(rollout_episodes, dtype=torch.bool, device=device)
+            
             for _ in range(rollout_horizon):
+                # Replace NaN states with valid initial states to keep rollout going
+                nan_mask = torch.isnan(s).any(dim=-1)
+                if nan_mask.any():
+                    valid_mask = valid_mask & ~nan_mask
+                    # Replace NaN states with random valid initial states
+                    n_nan = nan_mask.sum().item()
+                    replacement_idx = torch.randint(0, s0.size(0), (n_nan,), device=device)
+                    s[nan_mask] = s0[replacement_idx]
+                
                 a = self._sample_policy_actions(pi, s, 1, act_low, act_high, deterministic=deterministic)
+                
+                # Handle NaN actions
+                nan_action_mask = torch.isnan(a).any(dim=-1)
+                if nan_action_mask.any():
+                    valid_mask = valid_mask & ~nan_action_mask
+                    a = torch.nan_to_num(a, nan=0.0)
+                
                 r = reward_fn(s, a)
+                r = torch.nan_to_num(r, nan=0.0)
                 total = total + discount * r
                 discount = discount * gamma
                 s = self.sample_next(s, a, deterministic=deterministic)
-            
 
             if bootstrapping:
+                # Final NaN check before bootstrap
+                nan_mask = torch.isnan(s).any(dim=-1)
+                if nan_mask.any():
+                    valid_mask = valid_mask & ~nan_mask
+                    n_nan = nan_mask.sum().item()
+                    replacement_idx = torch.randint(0, s0.size(0), (n_nan,), device=device)
+                    s[nan_mask] = s0[replacement_idx]
+                
                 a_final = self._sample_policy_actions(pi, s, 1, act_low, act_high, deterministic=deterministic)
+                a_final = torch.nan_to_num(a_final, nan=0.0)
                 v_final = q(s, a_final)
+                v_final = torch.nan_to_num(v_final, nan=0.0)
                 total = total + discount * v_final
 
-            return total.mean()
+            # Only average over valid episodes
+            if valid_mask.sum() > 0:
+                return total[valid_mask].mean()
+            else:
+                # Fallback: return mean with NaN replaced
+                return torch.nan_to_num(total, nan=0.0).mean()
 
         def compute_ranking_loss(model_vals: torch.Tensor, target_vals: torch.Tensor) -> torch.Tensor:
             """Compute ranking loss based on selected type."""
@@ -720,38 +755,41 @@ class DynamicsNet(nn.Module):
             if lambda_rank > 0.0:
                 optimizer.zero_grad(set_to_none=True)
 
-                with torch.amp.autocast("cuda", enabled=use_amp):
+                # Run rollouts in float32 for numerical stability (SB3 policies require float32)
+                with torch.amp.autocast("cuda", enabled=False):
                     model_vals = []
                     for pi, q in policy_q_pairs:
                         model_vals.append(rollout_return(pi, q, deterministic=True))
                     model_tensor = torch.stack(model_vals)
 
-                    if torch.isfinite(model_tensor).all():
+                if torch.isfinite(model_tensor).all():
+                    # Compute ranking loss (can use AMP for the loss computation)
+                    with torch.amp.autocast("cuda", enabled=use_amp):
                         rank_loss = lambda_rank * compute_ranking_loss(model_tensor, target_tensor)
-                        latest_rank_loss = float(rank_loss.item())
+                    latest_rank_loss = float(rank_loss.item())
 
-                        if use_amp:
-                            scaler.scale(rank_loss).backward()
-                            scaler.unscale_(optimizer)
-                            valid_grads = all(
-                                p.grad is None or torch.isfinite(p.grad).all()
-                                for p in self.parameters()
-                            )
-                            if valid_grads:
-                                torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                                scaler.step(optimizer)
-                            scaler.update()
-                        else:
-                            rank_loss.backward()
-                            valid_grads = all(
-                                p.grad is None or torch.isfinite(p.grad).all()
-                                for p in self.parameters()
-                            )
-                            if valid_grads:
-                                torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
-                                optimizer.step()
+                    if use_amp:
+                        scaler.scale(rank_loss).backward()
+                        scaler.unscale_(optimizer)
+                        valid_grads = all(
+                            p.grad is None or torch.isfinite(p.grad).all()
+                            for p in self.parameters()
+                        )
+                        if valid_grads:
+                            torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                            scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        rank_loss.backward()
+                        valid_grads = all(
+                            p.grad is None or torch.isfinite(p.grad).all()
+                            for p in self.parameters()
+                        )
+                        if valid_grads:
+                            torch.nn.utils.clip_grad_norm_(self.parameters(), 10.0)
+                            optimizer.step()
 
-                        epoch_loss += latest_rank_loss
+                    epoch_loss += latest_rank_loss
 
             avg_loss = epoch_loss / max(1, num_batches)
 
@@ -774,13 +812,14 @@ class DynamicsNet(nn.Module):
                         batches += 1
                     val_dyn_loss = total_dyn / max(1, batches)
 
-                    # Compute validation ranking loss (once)
+                    # Compute validation ranking loss (once) - use float32 for rollouts
                     val_rank_loss = 0.0
                     if lambda_rank > 0.0:
-                        model_vals = []
-                        for pi, q in policy_q_pairs:
-                            model_vals.append(rollout_return(pi, q, deterministic=True))
-                        model_tensor = torch.stack(model_vals)
+                        with torch.amp.autocast("cuda", enabled=False):
+                            model_vals = []
+                            for pi, q in policy_q_pairs:
+                                model_vals.append(rollout_return(pi, q, deterministic=True))
+                            model_tensor = torch.stack(model_vals)
                         if torch.isfinite(model_tensor).all():
                             val_rank_loss = float(compute_ranking_loss(model_tensor, target_tensor).item())
 
@@ -1047,10 +1086,17 @@ class DynamicsNet(nn.Module):
         """
         mean, logvar = self.forward(s, a)
         
+        # Handle NaN in predictions - replace with input state (no change)
+        nan_mask = torch.isnan(mean)
+        if nan_mask.any():
+            mean = torch.where(nan_mask, s, mean)
+            logvar = torch.where(nan_mask, torch.zeros_like(logvar), logvar)
+        
         if deterministic:
             s_next = mean
         else:
             std = torch.exp(0.5 * logvar)
+            std = torch.clamp(std, max=10.0)  # Prevent exploding variance
             eps = torch.randn_like(std)
             s_next = mean + std * eps
 

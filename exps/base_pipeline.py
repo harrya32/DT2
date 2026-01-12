@@ -407,6 +407,7 @@ def train_ppo_with_checkpoints(
     wandb_run: Optional[Any] = None,
     policy_type: str = "auto",
     env_factory: Optional[Callable[[], gym.Env]] = None,
+    env_kwargs: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, object]]:
     """Train PPO and save checkpoints at specified fractions of training.
     
@@ -414,20 +415,24 @@ def train_ppo_with_checkpoints(
         env_id: Environment ID (used if env_factory is None)
         env_factory: Optional callable that creates an environment instance.
                     If provided, this is used instead of env_id.
+        env_kwargs: Optional keyword arguments to pass to gym.make().
     """
     set_random_seed(seed)
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     save_dir.mkdir(parents=True, exist_ok=True)
 
+    if env_kwargs is None:
+        env_kwargs = {}
+
     if env_factory is not None:
         vec_env = make_vec_env(env_factory, n_envs=n_envs, seed=seed)
     else:
-        vec_env = make_vec_env(env_id, n_envs=n_envs, seed=seed)
+        vec_env = make_vec_env(env_id, n_envs=n_envs, seed=seed, env_kwargs=env_kwargs)
     vec_env = VecMonitor(vec_env)
 
     # Auto-detect policy type
     if policy_type == "auto":
-        probe_env = gym.make(env_id)
+        probe_env = gym.make(env_id, **env_kwargs)
         obs_space = probe_env.observation_space
         policy = "MlpPolicy"
         if hasattr(obs_space, "shape") and len(obs_space.shape or []) == 3:
@@ -476,9 +481,12 @@ def rollout_policy(
     total_steps: int,
     seed: int,
     reward_fn: Callable[[np.ndarray, np.ndarray], float],
+    env_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[np.ndarray], List[Tuple[np.ndarray, np.ndarray, float, np.ndarray, float]]]:
     """Collect transitions by rolling out a policy in an environment."""
-    env = gym.make(env_id)
+    if env_kwargs is None:
+        env_kwargs = {}
+    env = gym.make(env_id, **env_kwargs)
     rng = np.random.default_rng(seed)
     obs, _ = env.reset(seed=seed)
     initial_states: List[np.ndarray] = [obs.copy()]
@@ -507,6 +515,7 @@ def build_offline_dataset(
     steps_per_policy: int,
     seed: int,
     reward_fn: Callable[[np.ndarray, np.ndarray], float],
+    env_kwargs: Optional[Dict[str, Any]] = None,
 ) -> OfflineDataset:
     """Build an offline dataset by rolling out multiple policies."""
     all_states: List[np.ndarray] = []
@@ -519,7 +528,7 @@ def build_offline_dataset(
     for idx, snap in enumerate(policy_snapshots):
         model = policy_models[snap["name"]]
         init_states, transitions = rollout_policy(
-            model, env_id, steps_per_policy, seed + idx, reward_fn
+            model, env_id, steps_per_policy, seed + idx, reward_fn, env_kwargs
         )
         initial_states.extend(init_states)
         for s, a, r, sn, d in transitions:
@@ -688,6 +697,9 @@ def train_dynamics_models(
     gamma: float,
     lambda_td: float,
     lambda_rank: float,
+    rank_temperature: float,
+    rank_rollout_horizon: int,
+    rank_rollout_episodes: int,
     val_fraction: float,
     early_stop_patience: int,
     min_epochs: int,
@@ -794,6 +806,8 @@ def train_dynamics_models(
             policy_q_pairs=policy_q_pairs,
             gamma=gamma,
             lambda_rank=lambda_rank,
+            rollout_horizon=rank_rollout_horizon,
+            rollout_episodes=rank_rollout_episodes,
             epochs=dyn_epochs,
             batch_size=dyn_batch,
             lr=dyn_lr,
@@ -805,6 +819,7 @@ def train_dynamics_models(
             min_epochs=min_epochs,
             ranking_loss_type=loss_name,
             dynamics_loss=dynamics_loss,
+            rank_temperature=rank_temperature,
         )
         ranking_new_models[loss_name] = model
 
@@ -897,6 +912,8 @@ def evaluate_sb3_policy_fixed_horizon(
     seed: int,
     reward_fn: Callable[[np.ndarray, np.ndarray], float],
     respect_termination: bool = True,
+    termination_fn: Optional[Callable[[np.ndarray], bool]] = None,
+    env_kwargs: Optional[Dict[str, Any]] = None,
 ) -> float:
     """Roll out PPO in the true env for a fixed horizon.
     
@@ -910,8 +927,14 @@ def evaluate_sb3_policy_fixed_horizon(
         reward_fn: Reward function (state, action) -> float
         respect_termination: If True, stop accumulating rewards after termination.
             If False, reset and continue (legacy behavior).
+        termination_fn: Optional user-defined termination function (state) -> bool.
+            If provided, this is used instead of the environment's termination signal
+            to ensure consistency with dynamics-based evaluation.
+        env_kwargs: Optional keyword arguments to pass to gym.make().
     """
-    env = gym.make(env_id)
+    if env_kwargs is None:
+        env_kwargs = {}
+    env = gym.make(env_id, **env_kwargs)
     rng = np.random.default_rng(seed)
     returns: List[float] = []
     for ep in range(rollouts):
@@ -923,7 +946,12 @@ def evaluate_sb3_policy_fixed_horizon(
             total += discount * reward_fn(obs, action)
             discount = discount * gamma
             obs, _, terminated, truncated, _ = env.step(action)
-            if terminated or truncated:
+            # Use user-defined termination if provided, otherwise use env's signal
+            if termination_fn is not None:
+                should_terminate = termination_fn(obs)
+            else:
+                should_terminate = terminated or truncated
+            if should_terminate:
                 if respect_termination:
                     break  # Exit loop, episode is done
                 else:
@@ -988,9 +1016,12 @@ def generate_test_transitions(
     policies: Dict[str, TorchPolicy],
     n_transitions_per_policy: int = 200,
     seed: int = 0,
+    env_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Generate test transitions by rolling out policies."""
-    env = gym.make(env_id)
+    if env_kwargs is None:
+        env_kwargs = {}
+    env = gym.make(env_id, **env_kwargs)
     rng = np.random.default_rng(seed)
     all_states, all_actions, all_next_states = [], [], []
     
@@ -1060,6 +1091,9 @@ class BasePipelineConfig:
     dynamics_loss: str = "nll"
     lambda_td: float = 0.1
     lambda_rank: float = 0.1
+    rank_temperature: float = 1.0
+    rank_rollout_horizon: int = 10
+    rank_rollout_episodes: int = 128
     backbone: str = "mlp"
     dyn_seq_len: int = 1
     dyn_seq_overlap: int = 0
@@ -1090,6 +1124,9 @@ class BasePipelineConfig:
     # Action bounds (environment-specific)
     act_low: float = -1.0
     act_high: float = 1.0
+    
+    # Environment kwargs
+    env_kwargs: Dict[str, Any] = field(default_factory=dict)
 
 
 def add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -1136,6 +1173,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
+    parser.add_argument("--rank-temperature", type=float, default=1.0, help="Temperature for soft ranking losses (lower = sharper)")
+    parser.add_argument("--rank-rollout-horizon", type=int, default=10, help="Rollout horizon for ranking loss return estimation")
+    parser.add_argument("--rank-rollout-episodes", type=int, default=128, help="Number of rollout episodes for ranking loss")
     parser.add_argument("--backbone", type=str, default="mlp", choices=["mlp", "resnet", "ode", "transformer", "gru"])
     parser.add_argument("--dyn-seq-len", type=int, default=1)
     parser.add_argument("--dyn-seq-overlap", type=int, default=0)
@@ -1158,6 +1198,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--wandb-entity", type=str, default=None)
     parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument("--wandb-mode", type=str, default="online", choices=["online", "offline", "disabled"])
+    
+    # Environment
+    parser.add_argument("--env-kwargs", type=json.loads, default={}, help="JSON dict of kwargs to pass to gym.make()")
 
 
 # =============================================================================
@@ -1175,6 +1218,7 @@ def run_pipeline(
     state_upper: Optional[torch.Tensor] = None,
     wrapped_dims: Optional[List[int]] = None,
     termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+    env_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Run the complete offline RL pipeline.
@@ -1191,6 +1235,7 @@ def run_pipeline(
         wrapped_dims: Optional list of dimension indices that are wrapped (e.g., angles)
         termination_fn_torch: Optional termination function (states) -> bool tensor.
             Used for dynamics-based evaluation to check if episode should terminate.
+        env_kwargs: Optional keyword arguments to pass to gym.make().
     
     Returns:
         Summary dictionary with all results
@@ -1203,6 +1248,12 @@ def run_pipeline(
         or args.force_dynamics_training
     ):
         raise ValueError("--results-only cannot be combined with force-training flags.")
+
+    # Merge env_kwargs from args and function parameter
+    if env_kwargs is None:
+        env_kwargs = {}
+    if hasattr(args, "env_kwargs") and args.env_kwargs:
+        env_kwargs = {**env_kwargs, **args.env_kwargs}
 
     device = torch.device(args.device) if args.device != "auto" else default_device()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -1244,6 +1295,7 @@ def run_pipeline(
             vf_coef=args.vf_coef,
             device=device.type if device.type in {"cuda", "cpu"} else "cpu",
             wandb_run=wandb_run,
+            env_kwargs=env_kwargs,
         )
         save_snapshots(snapshots_manifest, snapshots)
         policy_trained = True
@@ -1275,7 +1327,7 @@ def run_pipeline(
             )
         print("[Step 2] Collecting offline dataset...")
         dataset = build_offline_dataset(
-            snapshots, policy_models, env_id, args.rollout_steps, args.seed, reward_fn
+            snapshots, policy_models, env_id, args.rollout_steps, args.seed, reward_fn, env_kwargs
         )
         np.savez_compressed(
             dataset_path,
@@ -1374,6 +1426,9 @@ def run_pipeline(
             gamma=args.gamma,
             lambda_td=args.lambda_td,
             lambda_rank=args.lambda_rank,
+            rank_temperature=args.rank_temperature,
+            rank_rollout_horizon=args.rank_rollout_horizon,
+            rank_rollout_episodes=args.rank_rollout_episodes,
             val_fraction=args.dyn_val_fraction,
             early_stop_patience=args.dyn_early_stop_patience,
             min_epochs=args.dyn_min_epochs,
@@ -1408,10 +1463,10 @@ def run_pipeline(
 
     # Generate test/train transitions for MSE evaluation
     test_states, test_actions, test_next_states = generate_test_transitions(
-        env_id, torch_policies, n_transitions_per_policy=200, seed=args.seed + 999
+        env_id, torch_policies, n_transitions_per_policy=200, seed=args.seed, env_kwargs=env_kwargs
     )
     train_states, train_actions, train_next_states = sample_training_transitions(
-        dyn_dataset, n_samples=1000, seed=args.seed + 123
+        dyn_dataset, n_samples=1000, seed=args.seed
     )
 
     for snap in snapshots:
@@ -1469,9 +1524,19 @@ def run_pipeline(
                 value_aware_model, train_states, train_actions, train_next_states, device
             )
 
+        # Create numpy wrapper for termination function if provided
+        termination_fn_np: Optional[Callable[[np.ndarray], bool]] = None
+        if termination_fn_torch is not None:
+            def termination_fn_np(state: np.ndarray) -> bool:
+                with torch.no_grad():
+                    state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+                    return bool(termination_fn_torch(state_t).item())
+        
         fixed_env = evaluate_sb3_policy_fixed_horizon(
             ppo_model, env_id, args.eval_horizon, args.gamma,
-            args.eval_rollouts, args.seed, reward_fn
+            args.eval_rollouts, args.seed, reward_fn,
+            termination_fn=termination_fn_np,
+            env_kwargs=env_kwargs,
         )
 
         # Log to W&B

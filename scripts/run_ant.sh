@@ -31,15 +31,15 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[ant_pipeline] Running seed ${seed}..."
-    python exps/ant_runner.py --backbone "transformer" --lambda-rank 0.9999 --dynamics-models supervised kendall --q-epochs 500 --total-steps 2000000 --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" 
+    python exps/ant_runner.py --backbone "mlp" --lambda-rank 0.99 --rank-rollout-horizon 50 --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
 
-    python exps/ant_runner.py --backbone "gru" --lambda-rank 0.9999 --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed"
+    python exps/ant_runner.py --backbone "transformer" --lambda-rank 0.99 --rank-rollout-horizon 50 --dynamics-models kendall --q-epochs 200 --total-steps 1000000 --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" 
 
-    python exps/ant_runner.py --backbone "mlp" --lambda-rank 0.9999 --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed"
+    python exps/ant_runner.py --backbone "gru" --lambda-rank 0.99 --rank-rollout-horizon 50 --dynamics-models kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
+    
+    python exps/ant_runner.py --backbone "ode" --lambda-rank 0.99 --rank-rollout-horizon 50 --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
 
-    python exps/ant_runner.py --backbone "ode" --lambda-rank 0.9999 --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed"
-
-    python exps/ant_runner.py --backbone "resnet" --lambda-rank 0.9999 --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed"
+    python exps/ant_runner.py --backbone "resnet" --lambda-rank 0.99 --rank-rollout-horizon 50 --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
 
     echo "[ant_pipeline] Completed seed ${seed}"
     echo
