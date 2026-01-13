@@ -20,7 +20,6 @@ Ant-v5 details:
     - Index 15: z_velocity
     - Index 16-18: angular velocities (3)
     - Index 19-26: joint angular velocities (8)
-    - Index 27-104: contact forces (78)
     
 - Action dimension: 8 (torques applied to hip and ankle joints)
 - Reward: forward_velocity + healthy_reward - ctrl_cost - contact_cost
@@ -28,7 +27,6 @@ Ant-v5 details:
     - forward_velocity = x_velocity (index 13)
     - healthy_reward = 1.0 (default, when ant is healthy)
     - ctrl_cost = 0.5 * sum(action^2)
-    - contact_cost = 5e-4 * sum(clip(contact_forces, -1, 1)^2)
 - Termination: z_position not in [0.2, 1.0] or state has NaN/Inf
 """
 
@@ -74,7 +72,7 @@ def ant_reward_fn(state: np.ndarray, action: np.ndarray) -> float:
     Compute the Ant reward from state and action.
     
     The reward in Ant-v5 is:
-        reward = forward_velocity + healthy_reward - ctrl_cost - contact_cost
+        reward = forward_velocity + healthy_reward - ctrl_cost
     
     Observation indices (105 dims):
         0: z_position (height of torso)
@@ -85,7 +83,6 @@ def ant_reward_fn(state: np.ndarray, action: np.ndarray) -> float:
         15: z_velocity
         16-18: angular velocities of torso
         19-26: joint angular velocities
-        27-104: contact forces (13 bodies * 6 force/torque components)
     
     Default parameters:
         - ctrl_cost_weight = 0.5

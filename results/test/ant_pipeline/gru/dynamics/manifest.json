@@ -1,5 +1,5 @@
 {
-  "supervised": null,
+  "supervised": "results/test/ant_pipeline/gru/dynamics/dynamics_supervised.pt",
   "ranking": "results/test/ant_pipeline/gru/dynamics/dynamics_ranking.pt",
   "q_aware": {},
   "ranking_new": {

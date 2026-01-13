@@ -39,7 +39,10 @@
       "kendall"
     ],
     "lambda_td": 0.1,
-    "lambda_rank": 0.1,
+    "lambda_rank": 0.99,
+    "rank_temperature": 1.0,
+    "rank_rollout_horizon": 50,
+    "rank_rollout_episodes": 128,
     "backbone": "transformer",
     "dyn_seq_len": 8,
     "dyn_seq_overlap": 0,
@@ -81,19 +84,19 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": -25.288867950439453,
+      "q_estimate": -25.262182235717773,
       "dynamics": {
-        "supervised": 3.2641103267669678,
-        "supervised_mse": 6.105046272277832,
-        "supervised_train_mse": 9.2874174118042,
+        "supervised": -2.833919048309326,
+        "supervised_mse": 4.42033576965332,
+        "supervised_train_mse": 6.471756935119629,
         "ranking_new": {
-          "kendall": 17.84783363342285
+          "kendall": 20.749414443969727
         },
         "ranking_new_mse": {
-          "kendall": 4.091908931732178
+          "kendall": 4.009516716003418
         },
         "ranking_new_train_mse": {
-          "kendall": 5.749276638031006
+          "kendall": 6.006434917449951
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -105,19 +108,19 @@
       "name": "ppo_frac_200000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "q_estimate": -19.41704559326172,
+      "q_estimate": -19.401729583740234,
       "dynamics": {
-        "supervised": 3.0367867946624756,
-        "supervised_mse": 6.294670581817627,
-        "supervised_train_mse": 9.177448272705078,
+        "supervised": -2.070452928543091,
+        "supervised_mse": 4.368281364440918,
+        "supervised_train_mse": 6.472804069519043,
         "ranking_new": {
-          "kendall": 12.839652061462402
+          "kendall": 17.360586166381836
         },
         "ranking_new_mse": {
-          "kendall": 4.0145134925842285
+          "kendall": 4.016385555267334
         },
         "ranking_new_train_mse": {
-          "kendall": 5.568936347961426
+          "kendall": 6.0366716384887695
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -129,19 +132,19 @@
       "name": "ppo_frac_400000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": -14.903060913085938,
+      "q_estimate": -14.888655662536621,
       "dynamics": {
-        "supervised": 2.901803970336914,
-        "supervised_mse": 6.2098188400268555,
-        "supervised_train_mse": 9.308992385864258,
+        "supervised": -3.6775338649749756,
+        "supervised_mse": 4.370105266571045,
+        "supervised_train_mse": 6.582570552825928,
         "ranking_new": {
-          "kendall": 17.106616973876953
+          "kendall": 15.827203750610352
         },
         "ranking_new_mse": {
-          "kendall": 4.120321273803711
+          "kendall": 4.04372501373291
         },
         "ranking_new_train_mse": {
-          "kendall": 5.619267463684082
+          "kendall": 6.167479038238525
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -153,19 +156,19 @@
       "name": "ppo_frac_600000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "q_estimate": -7.829550266265869,
+      "q_estimate": -7.832425117492676,
       "dynamics": {
-        "supervised": 2.4488892555236816,
-        "supervised_mse": 6.308207035064697,
-        "supervised_train_mse": 9.185532569885254,
+        "supervised": -2.87641978263855,
+        "supervised_mse": 4.446521759033203,
+        "supervised_train_mse": 6.4879913330078125,
         "ranking_new": {
-          "kendall": 9.245661735534668
+          "kendall": 21.496139526367188
         },
         "ranking_new_mse": {
-          "kendall": 4.169677734375
+          "kendall": 4.007163047790527
         },
         "ranking_new_train_mse": {
-          "kendall": 5.7193922996521
+          "kendall": 6.130795001983643
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -177,19 +180,19 @@
       "name": "ppo_frac_800000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 2.3044350147247314,
+      "q_estimate": 2.3143980503082275,
       "dynamics": {
-        "supervised": 2.912280797958374,
-        "supervised_mse": 6.267550945281982,
-        "supervised_train_mse": 9.227442741394043,
+        "supervised": -3.9294559955596924,
+        "supervised_mse": 4.346601963043213,
+        "supervised_train_mse": 6.4698100090026855,
         "ranking_new": {
-          "kendall": 9.355536460876465
+          "kendall": 19.486223220825195
         },
         "ranking_new_mse": {
-          "kendall": 4.0498223304748535
+          "kendall": 4.02351188659668
         },
         "ranking_new_train_mse": {
-          "kendall": 5.650174617767334
+          "kendall": 6.123083114624023
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -201,19 +204,19 @@
       "name": "ppo_frac_1000000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "q_estimate": 9.861550331115723,
+      "q_estimate": 9.832249641418457,
       "dynamics": {
-        "supervised": 2.561688184738159,
-        "supervised_mse": 6.201660633087158,
-        "supervised_train_mse": 9.183650016784668,
+        "supervised": -2.2061517238616943,
+        "supervised_mse": 4.4633612632751465,
+        "supervised_train_mse": 6.633710861206055,
         "ranking_new": {
-          "kendall": 13.520270347595215
+          "kendall": 18.955129623413086
         },
         "ranking_new_mse": {
-          "kendall": 4.112578868865967
+          "kendall": 3.9742414951324463
         },
         "ranking_new_train_mse": {
-          "kendall": 5.786766052246094
+          "kendall": 6.164558410644531
         },
         "value_aware": null,
         "value_aware_mse": null,
