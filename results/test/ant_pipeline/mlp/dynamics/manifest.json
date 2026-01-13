@@ -1,7 +1,11 @@
 {
-  "supervised": null,
+  "supervised": "results/test/ant_pipeline/mlp/dynamics/dynamics_supervised.pt",
   "ranking": "results/test/ant_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {},
-  "value_aware": "results/test/ant_pipeline/mlp/dynamics/dynamics_value_aware.pt"
+  "ranking_new": {
+    "kendall": "results/test/ant_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt",
+    "hinge": "results/test/ant_pipeline/mlp/dynamics/dynamics_ranking_new_hinge.pt",
+    "listnet": "results/test/ant_pipeline/mlp/dynamics/dynamics_ranking_new_listnet.pt"
+  },
+  "value_aware": null
 }
