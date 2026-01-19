@@ -1,7 +1,9 @@
 {
-  "supervised": null,
-  "ranking": "results/nll/lunarlander_pipeline/ode/dynamics/dynamics_ranking.pt",
+  "supervised": "results/test/lunarlander_pipeline/ode/dynamics/dynamics_supervised.pt",
+  "ranking": "results/test/lunarlander_pipeline/ode/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {},
-  "value_aware": "results/nll/lunarlander_pipeline/ode/dynamics/dynamics_value_aware.pt"
+  "ranking_new": {
+    "kendall": "results/test/lunarlander_pipeline/ode/dynamics/dynamics_ranking_new_kendall.pt"
+  },
+  "value_aware": null
 }

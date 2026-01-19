@@ -1173,6 +1173,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
+    parser.add_argument("--record-lambda-val", action="store_true", help="Include lambda-rank value in summary filename for sweeps")
     parser.add_argument("--rank-temperature", type=float, default=1.0, help="Temperature for soft ranking losses (lower = sharper)")
     parser.add_argument("--rank-rollout-horizon", type=int, default=10, help="Rollout horizon for ranking loss return estimation")
     parser.add_argument("--rank-rollout-episodes", type=int, default=128, help="Number of rollout episodes for ranking loss")
@@ -1599,6 +1600,10 @@ def run_pipeline(
 
     if value_aware_only:
         summary_path = args.output_dir / args.backbone / f"summary_VAML_{args.seed}.json"
+    elif args.dynamics_loss == "mse":
+        summary_path = args.output_dir / args.backbone / f"summary_MSE_{args.seed}.json"
+    elif args.record_lambda_val:
+        summary_path = args.output_dir / args.backbone / f"summary_{args.lambda_rank}_{args.seed}.json"
     else:
         summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)

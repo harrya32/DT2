@@ -2,6 +2,8 @@
   "supervised": null,
   "ranking": "results/test/pendulum_pipeline/resnet/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {},
-  "value_aware": "results/test/pendulum_pipeline/resnet/dynamics/dynamics_value_aware.pt"
+  "ranking_new": {
+    "kendall": "results/test/pendulum_pipeline/resnet/dynamics/dynamics_ranking_new_kendall.pt"
+  },
+  "value_aware": null
 }

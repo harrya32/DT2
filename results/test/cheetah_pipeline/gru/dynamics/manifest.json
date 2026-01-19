@@ -3,8 +3,7 @@
   "ranking": "results/test/cheetah_pipeline/gru/dynamics/dynamics_ranking.pt",
   "q_aware": {},
   "ranking_new": {
-    "kendall": "results/test/cheetah_pipeline/gru/dynamics/dynamics_ranking_new_kendall.pt",
-    "hinge": "results/test/cheetah_pipeline/gru/dynamics/dynamics_ranking_new_hinge.pt",
-    "listnet": "results/test/cheetah_pipeline/gru/dynamics/dynamics_ranking_new_listnet.pt"
-  }
+    "kendall": "results/test/cheetah_pipeline/gru/dynamics/dynamics_ranking_new_kendall.pt"
+  },
+  "value_aware": null
 }

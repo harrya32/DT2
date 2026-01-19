@@ -101,7 +101,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("results/nll/lunarlander_pipeline"),
+        default=Path("results/test/lunarlander_pipeline"),
     )
     parser.add_argument("--wandb-project", type=str, default="DT2-lunarlander")
     

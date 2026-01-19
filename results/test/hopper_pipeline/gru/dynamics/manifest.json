@@ -4,5 +4,6 @@
   "q_aware": {},
   "ranking_new": {
     "kendall": "results/test/hopper_pipeline/gru/dynamics/dynamics_ranking_new_kendall.pt"
-  }
+  },
+  "value_aware": null
 }

@@ -1,7 +1,9 @@
 {
-  "supervised": null,
+  "supervised": "results/test/walker_pipeline/ode/dynamics/dynamics_supervised.pt",
   "ranking": "results/test/walker_pipeline/ode/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {},
-  "value_aware": "results/test/walker_pipeline/ode/dynamics/dynamics_value_aware.pt"
+  "ranking_new": {
+    "kendall": "results/test/walker_pipeline/ode/dynamics/dynamics_ranking_new_kendall.pt"
+  },
+  "value_aware": null
 }

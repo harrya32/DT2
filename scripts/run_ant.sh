@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(0 1 2 3 4)
+DEFAULT_SEEDS=(3 4 2)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 
 while [[ $# -gt 0 ]]; do

@@ -36,10 +36,12 @@
     "dynamics_loss": "nll",
     "dynamics_models": [
       "supervised",
-      "kendall"
+      "kendall",
+      "hinge",
+      "listnet"
     ],
     "lambda_td": 0.1,
-    "lambda_rank": 0.99,
+    "lambda_rank": 0.1,
     "rank_temperature": 1.0,
     "rank_rollout_horizon": 50,
     "rank_rollout_episodes": 128,
@@ -75,7 +77,9 @@
     "ranking": "results/test/ant_pipeline/ode/dynamics/dynamics_ranking.pt",
     "q_aware": {},
     "ranking_new": {
-      "kendall": "results/test/ant_pipeline/ode/dynamics/dynamics_ranking_new_kendall.pt"
+      "kendall": "results/test/ant_pipeline/ode/dynamics/dynamics_ranking_new_kendall.pt",
+      "hinge": "results/test/ant_pipeline/ode/dynamics/dynamics_ranking_new_hinge.pt",
+      "listnet": "results/test/ant_pipeline/ode/dynamics/dynamics_ranking_new_listnet.pt"
     },
     "value_aware": null
   },
@@ -84,19 +88,25 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": -25.26826286315918,
+      "q_estimate": -25.30105209350586,
       "dynamics": {
-        "supervised": 38.158321380615234,
-        "supervised_mse": 0.5186103582382202,
-        "supervised_train_mse": 2.0349788665771484,
+        "supervised": 37.69015121459961,
+        "supervised_mse": 0.2578466236591339,
+        "supervised_train_mse": 0.7658755779266357,
         "ranking_new": {
-          "kendall": 34.72776412963867
+          "kendall": 32.440677642822266,
+          "hinge": 33.6709098815918,
+          "listnet": 38.045501708984375
         },
         "ranking_new_mse": {
-          "kendall": 0.48205330967903137
+          "kendall": 0.2440197616815567,
+          "hinge": 0.24653534591197968,
+          "listnet": 0.21329544484615326
         },
         "ranking_new_train_mse": {
-          "kendall": 1.3891327381134033
+          "kendall": 0.6348230242729187,
+          "hinge": 0.6937814354896545,
+          "listnet": 0.585191547870636
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -108,19 +118,25 @@
       "name": "ppo_frac_200000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "q_estimate": -19.420093536376953,
+      "q_estimate": -19.416044235229492,
       "dynamics": {
-        "supervised": 28.549436569213867,
-        "supervised_mse": 0.5186103582382202,
-        "supervised_train_mse": 2.0349788665771484,
+        "supervised": 35.14740753173828,
+        "supervised_mse": 0.2578466236591339,
+        "supervised_train_mse": 0.7658755779266357,
         "ranking_new": {
-          "kendall": 36.545654296875
+          "kendall": 34.28459930419922,
+          "hinge": 33.54777908325195,
+          "listnet": 35.36475372314453
         },
         "ranking_new_mse": {
-          "kendall": 0.48205330967903137
+          "kendall": 0.2440197616815567,
+          "hinge": 0.24653534591197968,
+          "listnet": 0.21329544484615326
         },
         "ranking_new_train_mse": {
-          "kendall": 1.3891327381134033
+          "kendall": 0.6348230242729187,
+          "hinge": 0.6937814354896545,
+          "listnet": 0.585191547870636
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -132,19 +148,25 @@
       "name": "ppo_frac_400000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": -14.91163444519043,
+      "q_estimate": -14.914286613464355,
       "dynamics": {
-        "supervised": -1.571051001548767,
-        "supervised_mse": 0.5186103582382202,
-        "supervised_train_mse": 2.0349788665771484,
+        "supervised": 32.90821838378906,
+        "supervised_mse": 0.2578466236591339,
+        "supervised_train_mse": 0.7658755779266357,
         "ranking_new": {
-          "kendall": 37.44752502441406
+          "kendall": 32.97297286987305,
+          "hinge": 31.694381713867188,
+          "listnet": 32.64918899536133
         },
         "ranking_new_mse": {
-          "kendall": 0.48205330967903137
+          "kendall": 0.2440197616815567,
+          "hinge": 0.24653534591197968,
+          "listnet": 0.21329544484615326
         },
         "ranking_new_train_mse": {
-          "kendall": 1.3891327381134033
+          "kendall": 0.6348230242729187,
+          "hinge": 0.6937814354896545,
+          "listnet": 0.585191547870636
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -156,19 +178,25 @@
       "name": "ppo_frac_600000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "q_estimate": -7.831761360168457,
+      "q_estimate": -7.832742691040039,
       "dynamics": {
-        "supervised": -12.489371299743652,
-        "supervised_mse": 0.5186103582382202,
-        "supervised_train_mse": 2.0349788665771484,
+        "supervised": 31.608051300048828,
+        "supervised_mse": 0.2578466236591339,
+        "supervised_train_mse": 0.7658755779266357,
         "ranking_new": {
-          "kendall": 36.9889030456543
+          "kendall": 31.654422760009766,
+          "hinge": 31.06326675415039,
+          "listnet": 32.23037338256836
         },
         "ranking_new_mse": {
-          "kendall": 0.48205330967903137
+          "kendall": 0.2440197616815567,
+          "hinge": 0.24653534591197968,
+          "listnet": 0.21329544484615326
         },
         "ranking_new_train_mse": {
-          "kendall": 1.3891327381134033
+          "kendall": 0.6348230242729187,
+          "hinge": 0.6937814354896545,
+          "listnet": 0.585191547870636
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -180,19 +208,25 @@
       "name": "ppo_frac_800000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 2.315772533416748,
+      "q_estimate": 2.337825059890747,
       "dynamics": {
-        "supervised": -2.986502170562744,
-        "supervised_mse": 0.5186103582382202,
-        "supervised_train_mse": 2.0349788665771484,
+        "supervised": 33.56522750854492,
+        "supervised_mse": 0.2578466236591339,
+        "supervised_train_mse": 0.7658755779266357,
         "ranking_new": {
-          "kendall": 39.01914596557617
+          "kendall": 33.85549545288086,
+          "hinge": 33.08020782470703,
+          "listnet": 34.61429977416992
         },
         "ranking_new_mse": {
-          "kendall": 0.48205330967903137
+          "kendall": 0.2440197616815567,
+          "hinge": 0.24653534591197968,
+          "listnet": 0.21329544484615326
         },
         "ranking_new_train_mse": {
-          "kendall": 1.3891327381134033
+          "kendall": 0.6348230242729187,
+          "hinge": 0.6937814354896545,
+          "listnet": 0.585191547870636
         },
         "value_aware": null,
         "value_aware_mse": null,
@@ -204,19 +238,25 @@
       "name": "ppo_frac_1000000",
       "checkpoint": "results/test/ant_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "q_estimate": 9.84853458404541,
+      "q_estimate": 9.862969398498535,
       "dynamics": {
-        "supervised": -7.096482753753662,
-        "supervised_mse": 0.5186103582382202,
-        "supervised_train_mse": 2.0349788665771484,
+        "supervised": 34.188514709472656,
+        "supervised_mse": 0.2578466236591339,
+        "supervised_train_mse": 0.7658755779266357,
         "ranking_new": {
-          "kendall": 39.24502182006836
+          "kendall": 34.27663040161133,
+          "hinge": 33.921932220458984,
+          "listnet": 35.382747650146484
         },
         "ranking_new_mse": {
-          "kendall": 0.48205330967903137
+          "kendall": 0.2440197616815567,
+          "hinge": 0.24653534591197968,
+          "listnet": 0.21329544484615326
         },
         "ranking_new_train_mse": {
-          "kendall": 1.3891327381134033
+          "kendall": 0.6348230242729187,
+          "hinge": 0.6937814354896545,
+          "listnet": 0.585191547870636
         },
         "value_aware": null,
         "value_aware_mse": null,

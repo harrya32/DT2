@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(1000 1001 1002 1003 1004 1005 1006 1007 1008 1009)
+DEFAULT_SEEDS=(2 3 4 5 6 7 8 9)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -37,24 +37,37 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "Running seed ${seed}..."
-    python exps/lunarlander_runner.py --dynamics-loss "mse" --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
-    python exps/lunarlander_runner.py --dynamics-loss "mse" --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
-    python exps/lunarlander_runner.py --dynamics-loss "mse" --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed"
-    python exps/lunarlander_runner.py --dynamics-loss "mse" --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/lunarlander_runner.py --dynamics-loss "mse" --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
 
-    python exps/pendulum_runner.py --dynamics-loss "mse" --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_runner.py --dynamics-loss "mse" --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_runner.py --dynamics-loss "mse" --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_runner.py --dynamics-loss "mse" --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_runner.py --dynamics-loss "mse" --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed"
+    python exps/lunarlander_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed"
+    python exps/lunarlander_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed"
+    python exps/lunarlander_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
 
-    python exps/hopper_runner.py --dynamics-loss "mse" --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py --dynamics-loss "mse" --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py --dynamics-loss "mse" --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py --dynamics-loss "mse" --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py --dynamics-loss "mse" --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
 
+    python exps/hopper_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+
+    python exps/walker_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+
+    python exps/cheetah_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "gru" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cheetah_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "mlp" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cheetah_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "resnet" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cheetah_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "transformer" --dynamics-models supervised kendall --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cheetah_runner.py --dynamics-loss "mse" --lambda-rank 0.001 --backbone "ode" --dynamics-models supervised kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 100 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    
     echo "Completed seed ${seed}"
     echo
 done
