@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(4)
+DEFAULT_SEEDS=(0 1 2 3 4)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -35,14 +35,19 @@ if [[ ${#SEEDS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-LAMBDA_VALS=(0.5)
+LAMBDA_VALS=(0.999)
 
 for lambda in "${LAMBDA_VALS[@]}"; do
   for seed in "${SEEDS[@]}"; do
     echo "Running lambda=${lambda}, seed=${seed}..."
+    
+    python exps/lunarlander_runner.py --lambda-rank "$lambda" --record-lambda-val --backbone "resnet" --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --lambda-rank "$lambda" --record-lambda-val --backbone "resnet" --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --lambda-rank "$lambda" --record-lambda-val --backbone "resnet" --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cheetah_runner.py --lambda-rank "$lambda" --record-lambda-val --backbone "resnet" --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
 
     #python exps/pendulum_runner.py --lambda-rank "$lambda" --record-lambda-val --backbone "resnet" --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/ant_runner.py --lambda-rank "$lambda" --record-lambda-val --backbone "resnet" --rank-rollout-horizon 50 --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    #python exps/ant_runner.py --lambda-rank "$lambda" --record-lambda-val --backbone "resnet" --rank-rollout-horizon 50 --dynamics-models kendall --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
 
     echo "Completed lambda=${lambda}, seed=${seed}"
     echo
