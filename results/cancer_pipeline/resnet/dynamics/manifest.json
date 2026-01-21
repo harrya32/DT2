@@ -3,8 +3,7 @@
   "ranking": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking.pt",
   "q_aware": {},
   "ranking_new": {
-    "kendall": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_kendall.pt",
-    "hinge": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_hinge.pt",
-    "listnet": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_listnet.pt"
-  }
+    "kendall": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_kendall.pt"
+  },
+  "value_aware": null
 }

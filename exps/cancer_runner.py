@@ -35,6 +35,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 import gymnasium as gym
 import numpy as np
 import torch
+from scipy import stats
 from stable_baselines3 import PPO
 from stable_baselines3.common.utils import set_random_seed
 
@@ -71,14 +72,8 @@ from src.datasets import OfflineDataset
 from src.fqe import estimate_V_from_Q_on_s0
 from src.networks import DynamicsNet, QNet
 from src.policies import TorchPolicy
-
-# Try to import DTRGym
-try:
-    import DTRGym  # This registers the environments with gym
-    DTRGYM_AVAILABLE = True
-except ImportError:
-    DTRGYM_AVAILABLE = False
-    print("Warning: DTRGym not installed. Install with: pip install DTRGym")
+import DTRGym  
+DTRGYM_AVAILABLE = True
 
 
 # =============================================================================
@@ -734,40 +729,54 @@ def train_cancer_dynamics_models(
     dynamics_loss: str = "nll",
     hidden_dim: int = 256,
     backbone: str = "mlp",
+    dynamics_models: Optional[List[str]] = None,
     wandb_run: Optional[Any] = None,
-) -> Tuple[DynamicsNet, Dict[str, DynamicsNet]]:
-    """Train supervised and ranking-aware dynamics models for cancer."""
+) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet]]:
+    """Train supervised and ranking-aware dynamics models for cancer.
+    
+    Args:
+        dynamics_models: List of models to train. Options: 'supervised', 'kendall', 'hinge', 'listnet'.
+                        If None, trains all models.
+    """
+    if dynamics_models is None:
+        dynamics_models = ["supervised", "kendall", "hinge", "listnet"]
+    
     state_dim = dataset.states.shape[-1]
     act_dim = dataset.actions.shape[-1]
 
     # Supervised dynamics
-    sup_model = DynamicsNet(
-        state_dim=state_dim,
-        act_dim=act_dim,
-        state_low=CANCER_OBS_LOW,
-        state_upper=CANCER_OBS_HIGH,
-        wrapped_dims=[],
-        hidden=hidden_dim,
-        backbone=backbone,
-    ).to(device)
-    sup_model.train(
-        dataset,
-        epochs=dyn_epochs,
-        batch_size=dyn_batch,
-        lr=dyn_lr,
-        device=device,
-        log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
-        val_fraction=val_fraction,
-        early_stop_patience=early_stop_patience,
-        min_epochs=min_epochs,
-        dynamics_loss=dynamics_loss,
-    )
+    sup_model: Optional[DynamicsNet] = None
+    if "supervised" in dynamics_models:
+        print(f"  Training supervised dynamics model...")
+        sup_model = DynamicsNet(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            state_low=CANCER_OBS_LOW,
+            state_upper=CANCER_OBS_HIGH,
+            wrapped_dims=[],
+            hidden=hidden_dim,
+            backbone=backbone,
+        ).to(device)
+        sup_model.train(
+            dataset,
+            epochs=dyn_epochs,
+            batch_size=dyn_batch,
+            lr=dyn_lr,
+            device=device,
+            log_hook=make_epoch_logger(wandb_run, "dynamics/supervised"),
+            val_fraction=val_fraction,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
+            dynamics_loss=dynamics_loss,
+        )
 
     # Ranking-aware dynamics with different loss types
     policy_q_pairs = [(policies[name], q_models[name]) for name in policies]
     ranking_new_models: Dict[str, DynamicsNet] = {}
     
-    for loss_name in ("kendall", "hinge", "listnet"):
+    ranking_losses_to_train = [l for l in ("kendall", "hinge", "listnet") if l in dynamics_models]
+    for loss_name in ranking_losses_to_train:
+        print(f"  Training ranking-aware dynamics model ({loss_name})...")
         model = DynamicsNet(
             state_dim=state_dim,
             act_dim=act_dim,
@@ -1016,6 +1025,275 @@ def calc_dynamics_mse(
 
 
 # =============================================================================
+# OOD Policy Evaluation (PPO checkpoints not used in training)
+# =============================================================================
+
+def train_ood_ppo_policies(
+    max_t: int,
+    setting: int,
+    total_steps: int,
+    save_dir: Path,
+    n_checkpoints: int,
+    seed: int,
+    n_envs: int = 8,
+    n_steps: int = 2048,
+    batch_size: int = 256,
+    learning_rate: float = 3e-4,
+    gamma: float = 0.99,
+    gae_lambda: float = 0.95,
+    clip_range: float = 0.2,
+    ent_coef: float = 0.01,
+    vf_coef: float = 0.5,
+    device: str = "auto",
+    wandb_run: Optional[Any] = None,
+) -> List[Dict[str, object]]:
+    """
+    Train PPO on cancer environment and save checkpoints at regular intervals.
+    
+    These checkpoints will be used as OOD policies for evaluation - their Q-functions
+    are NOT used during dynamics model training.
+    
+    Args:
+        max_t: Maximum timesteps per episode
+        setting: Noise setting (1-5)
+        total_steps: Total training steps
+        save_dir: Directory to save checkpoints
+        n_checkpoints: Number of checkpoints to save (evenly spaced)
+        seed: Random seed
+        Other args: PPO hyperparameters
+    
+    Returns:
+        List of snapshot dictionaries with name, path, timesteps
+    """
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.vec_env import VecMonitor
+    
+    set_random_seed(seed)
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    def env_fn():
+        return create_cancer_env(max_t=max_t, setting=setting)
+    
+    vec_env = make_vec_env(env_fn, n_envs=n_envs, seed=seed)
+    vec_env = VecMonitor(vec_env)
+    
+    model = PPO(
+        policy="MlpPolicy",
+        env=vec_env,
+        n_steps=n_steps,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        gamma=gamma,
+        gae_lambda=gae_lambda,
+        clip_range=clip_range,
+        ent_coef=ent_coef,
+        vf_coef=vf_coef,
+        device=device,
+        verbose=0,
+    )
+    
+    # Calculate checkpoint intervals (evenly spaced)
+    # Step 0 counts as the first checkpoint, so we save (n_checkpoints - 1) more during training
+    checkpoint_fractions = [(i + 1) / (n_checkpoints - 1) for i in range(n_checkpoints - 1)]
+    milestone_steps = [int(total_steps * f) for f in checkpoint_fractions]
+    
+    snapshots: List[Dict[str, object]] = []
+    
+    # Save initial (untrained) policy - this is checkpoint 1 of n_checkpoints
+    init_path = save_dir / "ood_ppo_step_0"
+    model.save(init_path.as_posix())
+    snapshots.append({"name": init_path.name, "path": init_path.as_posix(), "timesteps": 0})
+    
+    checkpoint_cb = FractionCheckpointCallback(
+        milestone_steps, save_dir, prefix="ood_ppo_step", verbose=1
+    )
+    callbacks = [checkpoint_cb]
+    if wandb_run is not None:
+        callbacks.append(WandbMetricsCallback(wandb_run, prefix="ood_ppo"))
+    
+    print(f"Training OOD PPO policy for {total_steps} steps with {n_checkpoints} checkpoints...")
+    model.learn(total_timesteps=total_steps, callback=callbacks, progress_bar=True)
+    
+    vec_env.close()
+    snapshots.extend(checkpoint_cb.saved)
+    
+    # Save manifest
+    manifest_path = save_dir / "ood_manifest.json"
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(snapshots, f, indent=2)
+    
+    print(f"Saved {len(snapshots)} OOD policy checkpoints to {save_dir}")
+    return snapshots
+
+
+def load_ood_ppo_policies(
+    save_dir: Path,
+) -> Tuple[List[Dict[str, object]], Dict[str, PPO]]:
+    """Load OOD PPO policy checkpoints from disk."""
+    manifest_path = save_dir / "ood_manifest.json"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        snapshots = json.load(f)
+    
+    models: Dict[str, PPO] = {}
+    for snap in snapshots:
+        models[snap["name"]] = PPO.load(snap["path"])
+    
+    return snapshots, models
+
+
+def evaluate_ood_policies(
+    ood_snapshots: List[Dict[str, object]],
+    ood_models: Dict[str, PPO],
+    sup_model: DynamicsNet,
+    ranking_new_models: Dict[str, DynamicsNet],
+    initial_states: np.ndarray,
+    max_t: int,
+    setting: int,
+    eval_horizon: int,
+    gamma: float,
+    eval_rollouts: int,
+    device: torch.device,
+    seed: int,
+    wandb_run: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate OOD policies using dynamics models and true environment.
+    
+    OOD policies are PPO checkpoints whose Q-functions were NOT used during
+    dynamics model training. This tests how well the dynamics models generalize
+    to unseen policies.
+    
+    Returns:
+        Dictionary with:
+        - ood_results: List of per-policy evaluation results
+        - ranking_metrics: Spearman correlation and Regret@1 for each model
+    """
+    print("\n[OOD Evaluation] Evaluating OOD policies...")
+    
+    ood_results = []
+    true_values = []  # Ground truth values from true environment
+    sup_values = []   # Supervised dynamics model estimates (if available)
+    ranking_values = {loss_name: [] for loss_name in ranking_new_models.keys()}
+    
+    for snap in ood_snapshots:
+        name = snap["name"]
+        timesteps = snap["timesteps"]
+        model = ood_models[name]
+        
+        # Create policy adapter
+        policy = CancerPolicyAdapter(name, model)
+        
+        # Evaluate in true environment
+        env_mc = evaluate_cancer_sb3_policy(
+            model, max_t, setting, eval_horizon, gamma, eval_rollouts, seed
+        )
+        true_values.append(env_mc)
+        
+        # Evaluate with supervised dynamics (if available)
+        dyn_sup = None
+        if sup_model is not None:
+            dyn_sup = evaluate_cancer_in_dynamics(
+                sup_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            sup_values.append(dyn_sup)
+        
+        # Evaluate with ranking-aware dynamics
+        dyn_rank_results = {}
+        for loss_name, dyn_model in ranking_new_models.items():
+            dyn_val = evaluate_cancer_in_dynamics(
+                dyn_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            dyn_rank_results[loss_name] = dyn_val
+            ranking_values[loss_name].append(dyn_val)
+        
+        result = {
+            "name": name,
+            "timesteps": timesteps,
+            "env_mc": env_mc,
+            "dynamics_supervised": dyn_sup,
+            "dynamics_ranking_new": dyn_rank_results,
+        }
+        ood_results.append(result)
+        
+        sup_str = f"dyn_sup={dyn_sup:.2f}" if dyn_sup is not None else "dyn_sup=N/A"
+        print(f"  {name} (step {timesteps}): env_mc={env_mc:.2f}, {sup_str}")
+        
+        # Log to W&B
+        if wandb_run is not None:
+            payload = {
+                "ood_eval/policy_name": name,
+                "ood_eval/timesteps": timesteps,
+                "ood_eval/env_mc": env_mc,
+            }
+            if dyn_sup is not None:
+                payload["ood_eval/dynamics_supervised"] = dyn_sup
+            for loss_name, val in dyn_rank_results.items():
+                payload[f"ood_eval/dynamics_ranking_new_{loss_name}"] = val
+            wandb_log(wandb_run, payload)
+    
+    # Compute ranking metrics
+    true_values = np.array(true_values)
+    
+    # Best true value (oracle)
+    best_true_value = float(np.max(true_values))
+    
+    # Regret@1: difference between best true value and true value of model's top pick
+    def compute_regret_at_1(model_values: np.ndarray) -> float:
+        """Compute regret@1: true_value(best) - true_value(model's pick)."""
+        model_best_idx = int(np.argmax(model_values))
+        return best_true_value - float(true_values[model_best_idx])
+    
+    ranking_metrics = {}
+    
+    # Supervised metrics (if model was trained)
+    if len(sup_values) > 0:
+        sup_values_arr = np.array(sup_values)
+        ranking_metrics["supervised"] = {
+            "spearman": float(stats.spearmanr(true_values, sup_values_arr).statistic),
+            "regret_at_1": compute_regret_at_1(sup_values_arr),
+        }
+    
+    for loss_name, values in ranking_values.items():
+        values = np.array(values)
+        ranking_metrics[f"ranking_new_{loss_name}"] = {
+            "spearman": float(stats.spearmanr(true_values, values).statistic),
+            "regret_at_1": compute_regret_at_1(values),
+        }
+    
+    # Print ranking metrics summary
+    print("\n[OOD Evaluation] Ranking Metrics (True vs Model-based):")
+    print(f"  Best true value: {best_true_value:.3f}")
+    if "supervised" in ranking_metrics:
+        print(f"  Supervised:     Spearman={ranking_metrics['supervised']['spearman']:.3f}, "
+              f"Regret@1={ranking_metrics['supervised']['regret_at_1']:.3f}")
+    for loss_name in ranking_new_models.keys():
+        m = ranking_metrics[f"ranking_new_{loss_name}"]
+        print(f"  Ranking ({loss_name}): Spearman={m['spearman']:.3f}, "
+              f"Regret@1={m['regret_at_1']:.3f}")
+    
+    # Log ranking metrics to W&B
+    if wandb_run is not None:
+        wandb_log(wandb_run, {"ood_ranking/best_true_value": best_true_value})
+        for model_name, metrics in ranking_metrics.items():
+            wandb_log(wandb_run, {
+                f"ood_ranking/{model_name}_spearman": metrics["spearman"],
+                f"ood_ranking/{model_name}_regret_at_1": metrics["regret_at_1"],
+            })
+    
+    return {
+        "ood_results": ood_results,
+        "ranking_metrics": ranking_metrics,
+        "best_true_value": best_true_value,
+        "true_values": true_values.tolist(),
+        "sup_values": sup_values,
+        "ranking_values": {k: v for k, v in ranking_values.items()},
+    }
+
+
+# =============================================================================
 # Main Pipeline
 # =============================================================================
 
@@ -1157,11 +1435,11 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
 
     if dynamics_manifest.exists() and not args.force_dynamics_training:
         print("[Step 4] Using existing dynamics models...")
-        sup_model, ranking_new_models, dynamics_paths = load_dynamics_models(dynamics_dir, device)
+        sup_model, ranking_new_models, dynamics_paths, _ = load_dynamics_models(dynamics_dir, device)
     else:
         if args.results_only:
             raise FileNotFoundError(f"No saved dynamics models at {dynamics_manifest}.")
-        print("[Step 4] Training dynamics models...")
+        print(f"[Step 4] Training dynamics models: {args.dynamics_models}...")
         start_time = time.perf_counter()
         sup_model, ranking_new_models = train_cancer_dynamics_models(
             dyn_dataset,
@@ -1179,6 +1457,7 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
             dynamics_loss=args.dynamics_loss,
             hidden_dim=args.dyn_hidden_dim,
             backbone=args.backbone,
+            dynamics_models=args.dynamics_models,
             wandb_run=wandb_run,
         )
         dynamics_paths = save_dynamics_models(sup_model, ranking_new_models, dynamics_dir)
@@ -1211,14 +1490,18 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         q_net = q_models[name]
 
         q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
-        dyn_sup = evaluate_cancer_in_dynamics(
-            sup_model, policy, initial_states, args.eval_horizon,
-            args.gamma, device, args.eval_rollouts
-        )
-
-        # MSE evaluation
-        dyn_sup_mse = calc_dynamics_mse(sup_model, test_states, test_actions, test_next_states, device)
-        dyn_sup_train_mse = calc_dynamics_mse(sup_model, train_states, train_actions, train_next_states, device)
+        
+        # Evaluate supervised dynamics (if trained)
+        dyn_sup = None
+        dyn_sup_mse = None
+        dyn_sup_train_mse = None
+        if sup_model is not None:
+            dyn_sup = evaluate_cancer_in_dynamics(
+                sup_model, policy, initial_states, args.eval_horizon,
+                args.gamma, device, args.eval_rollouts
+            )
+            dyn_sup_mse = calc_dynamics_mse(sup_model, test_states, test_actions, test_next_states, device)
+            dyn_sup_train_mse = calc_dynamics_mse(sup_model, train_states, train_actions, train_next_states, device)
 
         dyn_rank_new: Dict[str, float] = {}
         dyn_rank_new_mse: Dict[str, float] = {}
@@ -1245,11 +1528,12 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         wandb_payload = {
             "eval/policy_name": name,
             "eval/q_estimate": q_est,
-            "eval/dynamics_supervised": dyn_sup,
-            "eval/dynamics_supervised_mse": dyn_sup_mse,
-            "eval/dynamics_supervised_train_mse": dyn_sup_train_mse,
             "eval/env_mc": env_mc,
         }
+        if dyn_sup is not None:
+            wandb_payload["eval/dynamics_supervised"] = dyn_sup
+            wandb_payload["eval/dynamics_supervised_mse"] = dyn_sup_mse
+            wandb_payload["eval/dynamics_supervised_train_mse"] = dyn_sup_train_mse
         for loss_name, val in dyn_rank_new.items():
             wandb_payload[f"eval/dynamics_ranking_new_{loss_name}"] = val
         for loss_name, val in dyn_rank_new_mse.items():
@@ -1274,8 +1558,60 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
             "env_mc": env_mc,
         })
 
-        print(f"  {name}: env_mc={env_mc:.2f}, q_est={q_est:.2f}, dyn_sup={dyn_sup:.2f}, "
-              f"dyn_sup_mse={dyn_sup_mse:.4f}")
+        # Print summary for this policy
+        sup_str = f"dyn_sup={dyn_sup:.2f}" if dyn_sup is not None else "dyn_sup=N/A"
+        print(f"  {name}: env_mc={env_mc:.2f}, q_est={q_est:.2f}, {sup_str}")
+
+    # =========================================================================
+    # Step 8: OOD Policy Evaluation (optional)
+    # =========================================================================
+    ood_evaluation_results = None
+    
+    if args.ood_eval:
+        print("\n[Step 8] OOD Policy Evaluation...")
+        ood_dir = args.output_dir / "ood_policies"
+        ood_manifest = ood_dir / "ood_manifest.json"
+        
+        # Train or load OOD PPO policies
+        if ood_manifest.exists() and not args.force_ood_training:
+            print("  Loading existing OOD PPO policies...")
+            ood_snapshots, ood_models = load_ood_ppo_policies(ood_dir)
+        else:
+            if args.results_only:
+                raise FileNotFoundError(f"No saved OOD policies at {ood_manifest}.")
+            print(f"  Training OOD PPO policies ({args.ood_total_steps} steps, {args.ood_n_checkpoints} checkpoints)...")
+            ood_snapshots = train_ood_ppo_policies(
+                max_t=args.max_t,
+                setting=args.setting,
+                total_steps=args.ood_total_steps,
+                save_dir=ood_dir,
+                n_checkpoints=args.ood_n_checkpoints,
+                seed=args.seed + 5000,  # Different seed from main pipeline
+                device=args.device,
+                gamma=args.gamma,
+                wandb_run=wandb_run,
+            )
+            ood_snapshots, ood_models = load_ood_ppo_policies(ood_dir)
+        
+        print(f"  Loaded {len(ood_snapshots)} OOD policy checkpoints")
+        wandb_log(wandb_run, {"ood/n_policies": len(ood_snapshots)})
+        
+        # Evaluate OOD policies
+        ood_evaluation_results = evaluate_ood_policies(
+            ood_snapshots=ood_snapshots,
+            ood_models=ood_models,
+            sup_model=sup_model,
+            ranking_new_models=ranking_new_models,
+            initial_states=initial_states,
+            max_t=args.max_t,
+            setting=args.setting,
+            eval_horizon=args.eval_horizon,
+            gamma=args.gamma,
+            eval_rollouts=args.eval_rollouts,
+            device=device,
+            seed=args.seed,
+            wandb_run=wandb_run,
+        )
 
     # =========================================================================
     # Save summary
@@ -1289,6 +1625,9 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         "dynamics_paths": dynamics_paths,
         "results": results,
     }
+    
+    if ood_evaluation_results is not None:
+        summary["ood_evaluation"] = ood_evaluation_results
 
     summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1297,13 +1636,16 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     print(f"\nSaved summary to {summary_path}")
 
     if wandb_run is not None:
-        wandb_run.summary.update({
+        summary_update = {
             "num_transitions": int(len(dataset.states)),
             "expert_policies": expert_names,
             "q_model_paths": q_model_paths,
             "dynamics_paths": dynamics_paths,
             "results": results,
-        })
+        }
+        if ood_evaluation_results is not None:
+            summary_update["ood_ranking_metrics"] = ood_evaluation_results["ranking_metrics"]
+        wandb_run.summary.update(summary_update)
         wandb_run.finish()
 
     print("\n=== Pipeline Complete ===")
@@ -1332,9 +1674,18 @@ def main() -> None:
     # Add common arguments from base pipeline
     add_common_args(parser)
     
+    # OOD evaluation arguments
+    parser.add_argument("--ood-eval", action="store_true",
+                        help="Enable OOD policy evaluation (train PPO checkpoints not used in dynamics training)")
+    parser.add_argument("--ood-total-steps", type=int, default=200_000,
+                        help="Total PPO training steps for OOD policies")
+    parser.add_argument("--ood-n-checkpoints", type=int, default=6,
+                        help="Number of OOD policy checkpoints to save")
+    parser.add_argument("--force-ood-training", action="store_true",
+                        help="Force retraining of OOD PPO policies even if they exist")
+    
     # Override some defaults for cancer environment with expert policies
     parser.set_defaults(
-        # No PPO training needed, but set reasonable rollout defaults
         total_steps=10_000,  # Not used for PPO, but kept for compatibility
         batch_size=512,
         gamma=0.99,
