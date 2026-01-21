@@ -1,5 +1,5 @@
 {
-  "supervised": null,
+  "supervised": "results/test/pendulum_pipeline/ode/dynamics/dynamics_supervised.pt",
   "ranking": "results/test/pendulum_pipeline/ode/dynamics/dynamics_ranking.pt",
   "q_aware": {},
   "ranking_new": {

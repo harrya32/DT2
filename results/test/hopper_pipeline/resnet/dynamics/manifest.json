@@ -1,5 +1,5 @@
 {
-  "supervised": null,
+  "supervised": "results/test/hopper_pipeline/resnet/dynamics/dynamics_supervised.pt",
   "ranking": "results/test/hopper_pipeline/resnet/dynamics/dynamics_ranking.pt",
   "q_aware": {},
   "ranking_new": {
