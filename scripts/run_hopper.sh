@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(0 1 2 3 4 5 6 7 8 9)
+DEFAULT_SEEDS=(100 101 102 103 104)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -37,11 +37,11 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[hopper_pipeline] Running seed ${seed}..."
-    #python exps/hopper_runner.py --backbone "gru" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py --backbone "mlp" --dyn-hidden-dim 64 --dynamics-models supervised kendall --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/hopper_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/hopper_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/hopper_runner.py --backbone "ode" --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --backbone "gru" --dyn-seq-len 8 --dynamics-models hinge listnet --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --backbone "mlp" --dyn-hidden-dim 64 --dynamics-models hinge listnet --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --backbone "resnet" --dyn-hidden-dim 64 --dynamics-models hinge listnet --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --dynamics-models hinge listnet --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --backbone "ode" --dyn-hidden-dim 64 --dynamics-models hinge listnet --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
 
     echo "[hopper_pipeline] Completed seed ${seed}"
     echo

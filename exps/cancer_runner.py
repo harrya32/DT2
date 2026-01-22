@@ -191,6 +191,116 @@ OBS_DIM = 7
 ACT_DIM = 2
 
 
+
+# =============================================================================
+# OOD EXPERT POLICIES TO EVAL ONLY
+# =============================================================================
+
+class PulsedChemotherapy(ExpertPolicy):
+    """
+    Classic Cycle Chemo: A single high dose (MTD) given once every cycle_length days.
+    Allows for recovery between doses.
+    """
+    def __init__(self, cycle_length: int = 21, dose: float = 5.0):
+        super().__init__(f"PulsedChemo_{cycle_length}d")
+        self.cycle_length = cycle_length
+        self.dose = dose
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        # Give dose only on the first day of the cycle
+        if time_step % self.cycle_length == 0:
+            return np.array([0.0, self.dose], dtype=np.float32)
+        else:
+            return np.array([0.0, 0.0], dtype=np.float32)
+
+
+class HypofractionatedRT(ExpertPolicy):
+    """
+    SBRT-style: High radiation dose (e.g. 8Gy) given less frequently 
+    (e.g., every 3 days).
+    """
+    def __init__(self, dose: float = 8.0, interval: int = 3):
+        super().__init__("HypofractionatedRT")
+        self.dose = dose
+        self.interval = interval
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        if time_step % self.interval == 0:
+            return np.array([self.dose, 0.0], dtype=np.float32)
+        else:
+            return np.array([0.0, 0.0], dtype=np.float32)
+
+
+class InductionMaintenance(ExpertPolicy):
+    """
+    Regime Switch: Aggressive treatment for 'induction_time' days, 
+    then switch to low-dose maintenance.
+    """
+    def __init__(self, induction_time: int = 30):
+        super().__init__("InductionMaintenance")
+        self.induction_time = induction_time
+        
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        if time_step < self.induction_time:
+            # Induction: Aggressive Combination
+            return np.array([2.0, 4.0], dtype=np.float32)
+        else:
+            # Maintenance: Metronomic Chemo only
+            return np.array([0.0, 1.5], dtype=np.float32)
+
+
+class AlternatingModality(ExpertPolicy):
+    """
+    Ping-Pong: Week 1 Radiation, Week 2 Chemo. 
+    Prevents simultaneous toxicity (conceptually).
+    """
+    def __init__(self):
+        super().__init__("AlternatingModality")
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        # 14 day cycle
+        day_in_cycle = time_step % 14
+        
+        if day_in_cycle < 7:
+            # Week 1: Radiation only (daily)
+            return np.array([2.0, 0.0], dtype=np.float32)
+        else:
+            # Week 2: Chemo only (continuous)
+            return np.array([0.0, 3.0], dtype=np.float32)
+
+
+class DoseEscalation(ExpertPolicy):
+    """
+    Ramp up: Starts at 0, linearly increases to max over 100 days, then holds.
+    Tests the model's ability to interpolate dose responses.
+    """
+    def __init__(self, max_radio: float = 3.0, max_chemo: float = 5.0, ramp_days: int = 100):
+        super().__init__("DoseEscalation")
+        self.max_radio = max_radio
+        self.max_chemo = max_chemo
+        self.ramp_days = float(ramp_days)
+    
+    def get_action(self, obs: np.ndarray, time_step: int) -> np.ndarray:
+        # Calculate fraction of max dose
+        fraction = min(time_step / self.ramp_days, 1.0)
+        
+        r_dose = self.max_radio * fraction
+        c_dose = self.max_chemo * fraction
+        
+        return np.array([r_dose, c_dose], dtype=np.float32)
+
+
+def get_ood_expert_policies() -> List[ExpertPolicy]:
+    """Get OOD expert policies for evaluation only (not used in training)."""
+    return [
+        PulsedChemotherapy(),
+        HypofractionatedRT(),
+        InductionMaintenance(),
+        AlternatingModality(),
+        DoseEscalation(),
+    ]
+
+
 # =============================================================================
 # Environment Factory
 # =============================================================================
@@ -1293,6 +1403,153 @@ def evaluate_ood_policies(
     }
 
 
+def evaluate_ood_expert_policies(
+    ood_experts: List[ExpertPolicy],
+    sup_model: Optional[DynamicsNet],
+    ranking_new_models: Dict[str, DynamicsNet],
+    initial_states: np.ndarray,
+    max_t: int,
+    setting: int,
+    eval_horizon: int,
+    gamma: float,
+    eval_rollouts: int,
+    device: torch.device,
+    seed: int,
+    wandb_run: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate OOD expert policies using dynamics models and true environment.
+    
+    OOD expert policies are hand-designed policies that were NOT used during
+    dynamics model training. This tests how well the dynamics models generalize
+    to novel treatment strategies.
+    
+    Returns:
+        Dictionary with:
+        - ood_results: List of per-policy evaluation results
+        - ranking_metrics: Spearman correlation and Regret@1 for each model
+    """
+    print("\n[OOD Expert Evaluation] Evaluating OOD expert policies...")
+    
+    ood_results = []
+    true_values = []  # Ground truth values from true environment
+    sup_values = []   # Supervised dynamics model estimates (if available)
+    ranking_values = {loss_name: [] for loss_name in ranking_new_models.keys()}
+    
+    for expert in ood_experts:
+        name = expert.name
+        
+        # Create policy adapter
+        policy = ExpertPolicyAdapter(expert)
+        
+        # Evaluate in true environment
+        env_mc = evaluate_expert_policy(
+            expert, max_t, setting, eval_horizon, gamma, eval_rollouts, seed
+        )
+        true_values.append(env_mc)
+        
+        # Evaluate with supervised dynamics (if available)
+        dyn_sup = None
+        if sup_model is not None:
+            dyn_sup = evaluate_cancer_in_dynamics(
+                sup_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            sup_values.append(dyn_sup)
+        
+        # Evaluate with ranking-aware dynamics
+        dyn_rank_results = {}
+        for loss_name, dyn_model in ranking_new_models.items():
+            dyn_val = evaluate_cancer_in_dynamics(
+                dyn_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            dyn_rank_results[loss_name] = dyn_val
+            ranking_values[loss_name].append(dyn_val)
+        
+        result = {
+            "name": name,
+            "policy_type": "ood_expert",
+            "env_mc": env_mc,
+            "dynamics_supervised": dyn_sup,
+            "dynamics_ranking_new": dyn_rank_results,
+        }
+        ood_results.append(result)
+        
+        sup_str = f"dyn_sup={dyn_sup:.2f}" if dyn_sup is not None else "dyn_sup=N/A"
+        print(f"  {name}: env_mc={env_mc:.2f}, {sup_str}")
+        
+        # Log to W&B
+        if wandb_run is not None:
+            payload = {
+                "ood_expert_eval/policy_name": name,
+                "ood_expert_eval/env_mc": env_mc,
+            }
+            if dyn_sup is not None:
+                payload["ood_expert_eval/dynamics_supervised"] = dyn_sup
+            for loss_name, val in dyn_rank_results.items():
+                payload[f"ood_expert_eval/dynamics_ranking_new_{loss_name}"] = val
+            wandb_log(wandb_run, payload)
+    
+    # Compute ranking metrics
+    true_values = np.array(true_values)
+    
+    # Best true value (oracle)
+    best_true_value = float(np.max(true_values))
+    
+    # Regret@1: difference between best true value and true value of model's top pick
+    def compute_regret_at_1(model_values: np.ndarray) -> float:
+        """Compute regret@1: true_value(best) - true_value(model's pick)."""
+        model_best_idx = int(np.argmax(model_values))
+        return best_true_value - float(true_values[model_best_idx])
+    
+    ranking_metrics = {}
+    
+    # Supervised metrics (if model was trained)
+    if len(sup_values) > 0:
+        sup_values_arr = np.array(sup_values)
+        ranking_metrics["supervised"] = {
+            "spearman": float(stats.spearmanr(true_values, sup_values_arr).statistic),
+            "regret_at_1": compute_regret_at_1(sup_values_arr),
+        }
+    
+    for loss_name, values in ranking_values.items():
+        values = np.array(values)
+        ranking_metrics[f"ranking_new_{loss_name}"] = {
+            "spearman": float(stats.spearmanr(true_values, values).statistic),
+            "regret_at_1": compute_regret_at_1(values),
+        }
+    
+    # Print ranking metrics summary
+    print("\n[OOD Expert Evaluation] Ranking Metrics (True vs Model-based):")
+    print(f"  Best true value: {best_true_value:.3f}")
+    if "supervised" in ranking_metrics:
+        print(f"  Supervised:     Spearman={ranking_metrics['supervised']['spearman']:.3f}, "
+              f"Regret@1={ranking_metrics['supervised']['regret_at_1']:.3f}")
+    for loss_name in ranking_new_models.keys():
+        m = ranking_metrics[f"ranking_new_{loss_name}"]
+        print(f"  Ranking ({loss_name}): Spearman={m['spearman']:.3f}, "
+              f"Regret@1={m['regret_at_1']:.3f}")
+    
+    # Log ranking metrics to W&B
+    if wandb_run is not None:
+        wandb_log(wandb_run, {"ood_expert_ranking/best_true_value": best_true_value})
+        for model_name, metrics in ranking_metrics.items():
+            wandb_log(wandb_run, {
+                f"ood_expert_ranking/{model_name}_spearman": metrics["spearman"],
+                f"ood_expert_ranking/{model_name}_regret_at_1": metrics["regret_at_1"],
+            })
+    
+    return {
+        "ood_results": ood_results,
+        "ranking_metrics": ranking_metrics,
+        "best_true_value": best_true_value,
+        "true_values": true_values.tolist(),
+        "sup_values": sup_values,
+        "ranking_values": {k: v for k, v in ranking_values.items()},
+    }
+
+
 # =============================================================================
 # Main Pipeline
 # =============================================================================
@@ -1470,105 +1727,110 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     wandb_log(wandb_run, dyn_log)
 
     # =========================================================================
-    # Step 5-7: Evaluation
+    # Step 5-7: Evaluation (skip if only doing OOD evaluation)
     # =========================================================================
-    print("[Step 5-7] Evaluating expert policies across true env, Q, and dynamics...")
     results = []
     initial_states = dataset.initial_states
+    
+    if not args.ood_eval and not args.ood_expert_eval:
+        print("[Step 5-7] Evaluating expert policies across true env, Q, and dynamics...")
 
-    # Generate test/train transitions for MSE evaluation
-    test_states, test_actions, test_next_states = generate_expert_test_transitions(
-        args.max_t, args.setting, expert_policies, n_transitions_per_policy=200, seed=args.seed + 999
-    )
-    train_states, train_actions, train_next_states = sample_training_transitions(
-        dyn_dataset, n_samples=1000, seed=args.seed + 123
-    )
-
-    for expert in expert_policies:
-        name = expert.name
-        policy = torch_policies[name]
-        q_net = q_models[name]
-
-        q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
-        
-        # Evaluate supervised dynamics (if trained)
-        dyn_sup = None
-        dyn_sup_mse = None
-        dyn_sup_train_mse = None
-        if sup_model is not None:
-            dyn_sup = evaluate_cancer_in_dynamics(
-                sup_model, policy, initial_states, args.eval_horizon,
-                args.gamma, device, args.eval_rollouts
-            )
-            dyn_sup_mse = calc_dynamics_mse(sup_model, test_states, test_actions, test_next_states, device)
-            dyn_sup_train_mse = calc_dynamics_mse(sup_model, train_states, train_actions, train_next_states, device)
-
-        dyn_rank_new: Dict[str, float] = {}
-        dyn_rank_new_mse: Dict[str, float] = {}
-        dyn_rank_new_train_mse: Dict[str, float] = {}
-        for loss_name, dyn_model in ranking_new_models.items():
-            dyn_rank_new[loss_name] = evaluate_cancer_in_dynamics(
-                dyn_model, policy, initial_states, args.eval_horizon,
-                args.gamma, device, args.eval_rollouts
-            )
-            dyn_rank_new_mse[loss_name] = calc_dynamics_mse(
-                dyn_model, test_states, test_actions, test_next_states, device
-            )
-            dyn_rank_new_train_mse[loss_name] = calc_dynamics_mse(
-                dyn_model, train_states, train_actions, train_next_states, device
-            )
-
-        # Evaluate in true environment
-        env_mc = evaluate_expert_policy(
-            expert, args.max_t, args.setting,
-            args.eval_horizon, args.gamma, args.eval_rollouts, args.seed
+        # Generate test/train transitions for MSE evaluation
+        test_states, test_actions, test_next_states = generate_expert_test_transitions(
+            args.max_t, args.setting, expert_policies, n_transitions_per_policy=200, seed=args.seed + 999
+        )
+        train_states, train_actions, train_next_states = sample_training_transitions(
+            dyn_dataset, n_samples=1000, seed=args.seed + 123
         )
 
-        # Log to W&B
-        wandb_payload = {
-            "eval/policy_name": name,
-            "eval/q_estimate": q_est,
-            "eval/env_mc": env_mc,
-        }
-        if dyn_sup is not None:
-            wandb_payload["eval/dynamics_supervised"] = dyn_sup
-            wandb_payload["eval/dynamics_supervised_mse"] = dyn_sup_mse
-            wandb_payload["eval/dynamics_supervised_train_mse"] = dyn_sup_train_mse
-        for loss_name, val in dyn_rank_new.items():
-            wandb_payload[f"eval/dynamics_ranking_new_{loss_name}"] = val
-        for loss_name, val in dyn_rank_new_mse.items():
-            wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_mse"] = val
-        for loss_name, val in dyn_rank_new_train_mse.items():
-            wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_train_mse"] = val
+        for expert in expert_policies:
+            name = expert.name
+            policy = torch_policies[name]
+            q_net = q_models[name]
 
-        wandb_log(wandb_run, wandb_payload)
+            q_est = evaluate_q_estimate(q_net, policy, initial_states, args.eval_rollouts)
+            
+            # Evaluate supervised dynamics (if trained)
+            dyn_sup = None
+            dyn_sup_mse = None
+            dyn_sup_train_mse = None
+            if sup_model is not None:
+                dyn_sup = evaluate_cancer_in_dynamics(
+                    sup_model, policy, initial_states, args.eval_horizon,
+                    args.gamma, device, args.eval_rollouts
+                )
+                dyn_sup_mse = calc_dynamics_mse(sup_model, test_states, test_actions, test_next_states, device)
+                dyn_sup_train_mse = calc_dynamics_mse(sup_model, train_states, train_actions, train_next_states, device)
 
-        results.append({
-            "name": name,
-            "policy_type": "expert",
-            "q_estimate": q_est,
-            "dynamics": {
-                "supervised": dyn_sup,
-                "supervised_mse": dyn_sup_mse,
-                "supervised_train_mse": dyn_sup_train_mse,
-                "ranking_new": dyn_rank_new,
-                "ranking_new_mse": dyn_rank_new_mse,
-                "ranking_new_train_mse": dyn_rank_new_train_mse,
-            },
-            "env_mc": env_mc,
-        })
+            dyn_rank_new: Dict[str, float] = {}
+            dyn_rank_new_mse: Dict[str, float] = {}
+            dyn_rank_new_train_mse: Dict[str, float] = {}
+            for loss_name, dyn_model in ranking_new_models.items():
+                dyn_rank_new[loss_name] = evaluate_cancer_in_dynamics(
+                    dyn_model, policy, initial_states, args.eval_horizon,
+                    args.gamma, device, args.eval_rollouts
+                )
+                dyn_rank_new_mse[loss_name] = calc_dynamics_mse(
+                    dyn_model, test_states, test_actions, test_next_states, device
+                )
+                dyn_rank_new_train_mse[loss_name] = calc_dynamics_mse(
+                    dyn_model, train_states, train_actions, train_next_states, device
+                )
 
-        # Print summary for this policy
-        sup_str = f"dyn_sup={dyn_sup:.2f}" if dyn_sup is not None else "dyn_sup=N/A"
-        print(f"  {name}: env_mc={env_mc:.2f}, q_est={q_est:.2f}, {sup_str}")
+            # Evaluate in true environment
+            env_mc = evaluate_expert_policy(
+                expert, args.max_t, args.setting,
+                args.eval_horizon, args.gamma, args.eval_rollouts, args.seed
+            )
+
+            # Log to W&B
+            wandb_payload = {
+                "eval/policy_name": name,
+                "eval/q_estimate": q_est,
+                "eval/env_mc": env_mc,
+            }
+            if dyn_sup is not None:
+                wandb_payload["eval/dynamics_supervised"] = dyn_sup
+                wandb_payload["eval/dynamics_supervised_mse"] = dyn_sup_mse
+                wandb_payload["eval/dynamics_supervised_train_mse"] = dyn_sup_train_mse
+            for loss_name, val in dyn_rank_new.items():
+                wandb_payload[f"eval/dynamics_ranking_new_{loss_name}"] = val
+            for loss_name, val in dyn_rank_new_mse.items():
+                wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_mse"] = val
+            for loss_name, val in dyn_rank_new_train_mse.items():
+                wandb_payload[f"eval/dynamics_ranking_new_{loss_name}_train_mse"] = val
+
+            wandb_log(wandb_run, wandb_payload)
+
+            results.append({
+                "name": name,
+                "policy_type": "expert",
+                "q_estimate": q_est,
+                "dynamics": {
+                    "supervised": dyn_sup,
+                    "supervised_mse": dyn_sup_mse,
+                    "supervised_train_mse": dyn_sup_train_mse,
+                    "ranking_new": dyn_rank_new,
+                    "ranking_new_mse": dyn_rank_new_mse,
+                    "ranking_new_train_mse": dyn_rank_new_train_mse,
+                },
+                "env_mc": env_mc,
+            })
+
+            # Print summary for this policy
+            sup_str = f"dyn_sup={dyn_sup:.2f}" if dyn_sup is not None else "dyn_sup=N/A"
+            print(f"  {name}: env_mc={env_mc:.2f}, q_est={q_est:.2f}, {sup_str}")
+    else:
+        print("[Step 5-7] Skipping expert policy evaluation (OOD evaluation mode)")
 
     # =========================================================================
     # Step 8: OOD Policy Evaluation (optional)
     # =========================================================================
     ood_evaluation_results = None
+    ood_expert_evaluation_results = None
     
     if args.ood_eval:
-        print("\n[Step 8] OOD Policy Evaluation...")
+        print("\n[Step 8] OOD PPO Policy Evaluation...")
         ood_dir = args.output_dir / "ood_policies"
         ood_manifest = ood_dir / "ood_manifest.json"
         
@@ -1612,6 +1874,27 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
             seed=args.seed,
             wandb_run=wandb_run,
         )
+    
+    if args.ood_expert_eval:
+        print("\n[Step 9] OOD Expert Policy Evaluation...")
+        ood_experts = get_ood_expert_policies()
+        print(f"  Evaluating {len(ood_experts)} OOD expert policies: {[e.name for e in ood_experts]}")
+        
+        # Evaluate OOD expert policies
+        ood_expert_evaluation_results = evaluate_ood_expert_policies(
+            ood_experts=ood_experts,
+            sup_model=sup_model,
+            ranking_new_models=ranking_new_models,
+            initial_states=initial_states,
+            max_t=args.max_t,
+            setting=args.setting,
+            eval_horizon=args.eval_horizon,
+            gamma=args.gamma,
+            eval_rollouts=args.eval_rollouts,
+            device=device,
+            seed=args.seed,
+            wandb_run=wandb_run,
+        )
 
     # =========================================================================
     # Save summary
@@ -1628,6 +1911,9 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     
     if ood_evaluation_results is not None:
         summary["ood_evaluation"] = ood_evaluation_results
+    
+    if ood_expert_evaluation_results is not None:
+        summary["ood_expert_evaluation"] = ood_expert_evaluation_results
 
     summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1645,6 +1931,8 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
         }
         if ood_evaluation_results is not None:
             summary_update["ood_ranking_metrics"] = ood_evaluation_results["ranking_metrics"]
+        if ood_expert_evaluation_results is not None:
+            summary_update["ood_expert_ranking_metrics"] = ood_expert_evaluation_results["ranking_metrics"]
         wandb_run.summary.update(summary_update)
         wandb_run.finish()
 
@@ -1683,6 +1971,8 @@ def main() -> None:
                         help="Number of OOD policy checkpoints to save")
     parser.add_argument("--force-ood-training", action="store_true",
                         help="Force retraining of OOD PPO policies even if they exist")
+    parser.add_argument("--ood-expert-eval", action="store_true",
+                        help="Enable OOD expert policy evaluation (evaluate hand-designed policies not used in training)")
     
     # Override some defaults for cancer environment with expert policies
     parser.set_defaults(

@@ -35,10 +35,8 @@
     "dyn_min_epochs": 0,
     "dynamics_loss": "nll",
     "dynamics_models": [
-      "supervised",
       "kendall",
-      "hinge",
-      "listnet"
+      "supervised"
     ],
     "lambda_td": 0.1,
     "lambda_rank": 0.1,
@@ -51,7 +49,7 @@
     "dyn_seq_overlap": 0,
     "value_aware_only": false,
     "eval_episodes": 20,
-    "eval_rollouts": 1,
+    "eval_rollouts": 20,
     "eval_horizon": 200,
     "device": "auto",
     "force_policy_training": false,
@@ -63,10 +61,11 @@
     "wandb_run_name": null,
     "wandb_mode": "online",
     "env_kwargs": {},
-    "ood_eval": true,
+    "ood_eval": false,
     "ood_total_steps": 200000,
     "ood_n_checkpoints": 6,
     "force_ood_training": false,
+    "ood_expert_eval": true,
     "wandb_project": "DT2-cancer-expert"
   },
   "num_transitions": 5000,
@@ -89,272 +88,91 @@
     "ranking": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking.pt",
     "q_aware": {},
     "ranking_new": {
-      "kendall": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_kendall.pt",
-      "hinge": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_hinge.pt",
-      "listnet": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_listnet.pt"
+      "kendall": "results/cancer_pipeline/resnet/dynamics/dynamics_ranking_new_kendall.pt"
     },
     "value_aware": null
   },
-  "results": [
-    {
-      "name": "NoTreatment",
-      "policy_type": "expert",
-      "q_estimate": -64.85559844970703,
-      "dynamics": {
-        "supervised": -87.5928726196289,
-        "supervised_mse": 0.2894769310951233,
-        "supervised_train_mse": 0.2972029149532318,
-        "ranking_new": {
-          "kendall": 8.911813735961914,
-          "hinge": -26.284828186035156,
-          "listnet": -67.33953857421875
-        },
-        "ranking_new_mse": {
-          "kendall": 0.32035505771636963,
-          "hinge": 0.30815213918685913,
-          "listnet": 0.30933499336242676
-        },
-        "ranking_new_train_mse": {
-          "kendall": 0.31528323888778687,
-          "hinge": 0.32642605900764465,
-          "listnet": 0.3225213885307312
-        }
-      },
-      "env_mc": -24.417910863582748
-    },
-    {
-      "name": "SFR_2Gy_5d",
-      "policy_type": "expert",
-      "q_estimate": -64.3104019165039,
-      "dynamics": {
-        "supervised": -37.44554901123047,
-        "supervised_mse": 0.29197850823402405,
-        "supervised_train_mse": 0.2991613447666168,
-        "ranking_new": {
-          "kendall": -43.23423385620117,
-          "hinge": -37.79710388183594,
-          "listnet": -56.52954864501953
-        },
-        "ranking_new_mse": {
-          "kendall": 0.3122941553592682,
-          "hinge": 0.3176535964012146,
-          "listnet": 0.302127867937088
-        },
-        "ranking_new_train_mse": {
-          "kendall": 0.3139481544494629,
-          "hinge": 0.3278964161872864,
-          "listnet": 0.31740379333496094
-        }
-      },
-      "env_mc": -35.02117582451727
-    },
-    {
-      "name": "MetronomicChemo_2.0",
-      "policy_type": "expert",
-      "q_estimate": -71.52338409423828,
-      "dynamics": {
-        "supervised": -115.79816436767578,
-        "supervised_mse": 0.29526257514953613,
-        "supervised_train_mse": 0.29663071036338806,
-        "ranking_new": {
-          "kendall": -18.076595306396484,
-          "hinge": -50.62980270385742,
-          "listnet": -38.914398193359375
-        },
-        "ranking_new_mse": {
-          "kendall": 0.31624677777290344,
-          "hinge": 0.3147359788417816,
-          "listnet": 0.313255250453949
-        },
-        "ranking_new_train_mse": {
-          "kendall": 0.3155093491077423,
-          "hinge": 0.33196839690208435,
-          "listnet": 0.3127742409706116
-        }
-      },
-      "env_mc": -24.416542020393685
-    },
-    {
-      "name": "AdaptiveTherapy",
-      "policy_type": "expert",
-      "q_estimate": -55.47671127319336,
-      "dynamics": {
-        "supervised": -78.57453155517578,
-        "supervised_mse": 0.29030218720436096,
-        "supervised_train_mse": 0.29580938816070557,
-        "ranking_new": {
-          "kendall": 6.399557113647461,
-          "hinge": -18.940828323364258,
-          "listnet": 3.5060431957244873
-        },
-        "ranking_new_mse": {
-          "kendall": 0.3079300820827484,
-          "hinge": 0.31579747796058655,
-          "listnet": 0.31323036551475525
-        },
-        "ranking_new_train_mse": {
-          "kendall": 0.3183748126029968,
-          "hinge": 0.3228173851966858,
-          "listnet": 0.3245472311973572
-        }
-      },
-      "env_mc": 8.222845224567827
-    },
-    {
-      "name": "AggressiveMTD",
-      "policy_type": "expert",
-      "q_estimate": -58.63333511352539,
-      "dynamics": {
-        "supervised": -71.99740600585938,
-        "supervised_mse": 0.2901909351348877,
-        "supervised_train_mse": 0.29930514097213745,
-        "ranking_new": {
-          "kendall": -73.55464935302734,
-          "hinge": -58.53813934326172,
-          "listnet": -70.53722381591797
-        },
-        "ranking_new_mse": {
-          "kendall": 0.31669336557388306,
-          "hinge": 0.3167608678340912,
-          "listnet": 0.3071885406970978
-        },
-        "ranking_new_train_mse": {
-          "kendall": 0.31874245405197144,
-          "hinge": 0.3207210898399353,
-          "listnet": 0.318369060754776
-        }
-      },
-      "env_mc": -70.27436379428505
-    }
-  ],
-  "ood_evaluation": {
+  "results": [],
+  "ood_expert_evaluation": {
     "ood_results": [
       {
-        "name": "ood_ppo_step_0",
-        "timesteps": 0,
-        "env_mc": -24.394108795671762,
-        "dynamics_supervised": -91.89518737792969,
+        "name": "PulsedChemo_21d",
+        "policy_type": "ood_expert",
+        "env_mc": -23.381023221071246,
+        "dynamics_supervised": -69.91409301757812,
         "dynamics_ranking_new": {
-          "kendall": 7.442110061645508,
-          "hinge": -23.330211639404297,
-          "listnet": -69.60867309570312
+          "kendall": -61.71137619018555
         }
       },
       {
-        "name": "ood_ppo_step_40000",
-        "timesteps": 40000,
-        "env_mc": -16.822863699926444,
-        "dynamics_supervised": -78.9061050415039,
+        "name": "HypofractionatedRT",
+        "policy_type": "ood_expert",
+        "env_mc": -56.720549129633675,
+        "dynamics_supervised": -75.70562744140625,
         "dynamics_ranking_new": {
-          "kendall": 8.531707763671875,
-          "hinge": -24.324308395385742,
-          "listnet": -67.65010070800781
+          "kendall": 35.48623275756836
         }
       },
       {
-        "name": "ood_ppo_step_80000",
-        "timesteps": 80000,
-        "env_mc": 7.667114699505117,
-        "dynamics_supervised": -59.92316818237305,
+        "name": "InductionMaintenance",
+        "policy_type": "ood_expert",
+        "env_mc": 77.82787371551254,
+        "dynamics_supervised": -49.517417907714844,
         "dynamics_ranking_new": {
-          "kendall": -6.479997634887695,
-          "hinge": -16.152923583984375,
-          "listnet": -59.948482513427734
+          "kendall": -63.61094284057617
         }
       },
       {
-        "name": "ood_ppo_step_120000",
-        "timesteps": 120000,
-        "env_mc": 51.58380958126174,
-        "dynamics_supervised": -54.65205001831055,
+        "name": "AlternatingModality",
+        "policy_type": "ood_expert",
+        "env_mc": 57.96875403453828,
+        "dynamics_supervised": -10.208183288574219,
         "dynamics_ranking_new": {
-          "kendall": -19.079435348510742,
-          "hinge": -23.06955909729004,
-          "listnet": -42.63545227050781
+          "kendall": -37.81914520263672
         }
       },
       {
-        "name": "ood_ppo_step_160000",
-        "timesteps": 160000,
-        "env_mc": 76.56662717752297,
-        "dynamics_supervised": -39.56570053100586,
+        "name": "DoseEscalation",
+        "policy_type": "ood_expert",
+        "env_mc": -11.434562616441237,
+        "dynamics_supervised": -70.28241729736328,
         "dynamics_ranking_new": {
-          "kendall": -18.638017654418945,
-          "hinge": -31.20629119873047,
-          "listnet": -61.431922912597656
-        }
-      },
-      {
-        "name": "ood_ppo_step_200000",
-        "timesteps": 200000,
-        "env_mc": 77.34409631646227,
-        "dynamics_supervised": -42.10022735595703,
-        "dynamics_ranking_new": {
-          "kendall": -25.16478729248047,
-          "hinge": -34.37668991088867,
-          "listnet": -58.57997512817383
+          "kendall": -10.271824836730957
         }
       }
     ],
     "ranking_metrics": {
       "supervised": {
-        "spearman": 0.942857142857143,
-        "regret_at_1": 0.7774691389392956
+        "spearman": 0.7999999999999999,
+        "regret_at_1": 19.85911968097426
       },
       "ranking_new_kendall": {
-        "spearman": -0.8857142857142858,
-        "regret_at_1": 94.16696001638871
-      },
-      "ranking_new_hinge": {
-        "spearman": -0.5428571428571429,
-        "regret_at_1": 69.67698161695715
-      },
-      "ranking_new_listnet": {
-        "spearman": 0.7142857142857143,
-        "regret_at_1": 25.76028673520053
+        "spearman": -0.7,
+        "regret_at_1": 134.5484228451462
       }
     },
-    "best_true_value": 77.34409631646227,
+    "best_true_value": 77.82787371551254,
     "true_values": [
-      -24.394108795671762,
-      -16.822863699926444,
-      7.667114699505117,
-      51.58380958126174,
-      76.56662717752297,
-      77.34409631646227
+      -23.381023221071246,
+      -56.720549129633675,
+      77.82787371551254,
+      57.96875403453828,
+      -11.434562616441237
     ],
     "sup_values": [
-      -91.89518737792969,
-      -78.9061050415039,
-      -59.92316818237305,
-      -54.65205001831055,
-      -39.56570053100586,
-      -42.10022735595703
+      -69.91409301757812,
+      -75.70562744140625,
+      -49.517417907714844,
+      -10.208183288574219,
+      -70.28241729736328
     ],
     "ranking_values": {
       "kendall": [
-        7.442110061645508,
-        8.531707763671875,
-        -6.479997634887695,
-        -19.079435348510742,
-        -18.638017654418945,
-        -25.16478729248047
-      ],
-      "hinge": [
-        -23.330211639404297,
-        -24.324308395385742,
-        -16.152923583984375,
-        -23.06955909729004,
-        -31.20629119873047,
-        -34.37668991088867
-      ],
-      "listnet": [
-        -69.60867309570312,
-        -67.65010070800781,
-        -59.948482513427734,
-        -42.63545227050781,
-        -61.431922912597656,
-        -58.57997512817383
+        -61.71137619018555,
+        35.48623275756836,
+        -63.61094284057617,
+        -37.81914520263672,
+        -10.271824836730957
       ]
     }
   }
