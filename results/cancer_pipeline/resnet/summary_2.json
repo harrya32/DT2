@@ -65,7 +65,8 @@
     "ood_total_steps": 200000,
     "ood_n_checkpoints": 6,
     "force_ood_training": false,
-    "ood_expert_eval": true,
+    "ood_expert_eval": false,
+    "ood_eval_ppo_and_expert": true,
     "wandb_project": "DT2-cancer-expert"
   },
   "num_transitions": 5000,
@@ -92,87 +93,266 @@
     },
     "value_aware": null
   },
-  "results": [],
-  "ood_expert_evaluation": {
+  "results": [
+    {
+      "name": "NoTreatment",
+      "policy_type": "expert",
+      "q_estimate": -64.85560607910156,
+      "dynamics": {
+        "supervised": -33.55752182006836,
+        "supervised_mse": 0.30775174498558044,
+        "supervised_train_mse": 0.3138296604156494,
+        "ranking_new": {
+          "kendall": 12.627395629882812
+        },
+        "ranking_new_mse": {
+          "kendall": 0.3206344246864319
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.3284159302711487
+        }
+      },
+      "env_mc": -23.38159728710614
+    },
+    {
+      "name": "SFR_2Gy_5d",
+      "policy_type": "expert",
+      "q_estimate": -64.3104019165039,
+      "dynamics": {
+        "supervised": 43.1612663269043,
+        "supervised_mse": 0.3047928810119629,
+        "supervised_train_mse": 0.31723856925964355,
+        "ranking_new": {
+          "kendall": 81.45021057128906
+        },
+        "ranking_new_mse": {
+          "kendall": 0.3238024115562439
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.3207855224609375
+        }
+      },
+      "env_mc": -35.418283827750955
+    },
+    {
+      "name": "MetronomicChemo_2.0",
+      "policy_type": "expert",
+      "q_estimate": -71.52339172363281,
+      "dynamics": {
+        "supervised": -28.247028350830078,
+        "supervised_mse": 0.305250346660614,
+        "supervised_train_mse": 0.3120169937610626,
+        "ranking_new": {
+          "kendall": -39.457557678222656
+        },
+        "ranking_new_mse": {
+          "kendall": 0.32531747221946716
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.32336196303367615
+        }
+      },
+      "env_mc": -23.38045994067478
+    },
+    {
+      "name": "AdaptiveTherapy",
+      "policy_type": "expert",
+      "q_estimate": -55.476715087890625,
+      "dynamics": {
+        "supervised": -17.32729148864746,
+        "supervised_mse": 0.3041372299194336,
+        "supervised_train_mse": 0.3153478503227234,
+        "ranking_new": {
+          "kendall": 10.031684875488281
+        },
+        "ranking_new_mse": {
+          "kendall": 0.3258306384086609
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.32429268956184387
+        }
+      },
+      "env_mc": 25.3809472746234
+    },
+    {
+      "name": "AggressiveMTD",
+      "policy_type": "expert",
+      "q_estimate": -58.63333511352539,
+      "dynamics": {
+        "supervised": 48.595149993896484,
+        "supervised_mse": 0.3086702525615692,
+        "supervised_train_mse": 0.31020501255989075,
+        "ranking_new": {
+          "kendall": 62.46350860595703
+        },
+        "ranking_new_mse": {
+          "kendall": 0.32619643211364746
+        },
+        "ranking_new_train_mse": {
+          "kendall": 0.3232540786266327
+        }
+      },
+      "env_mc": -69.7004852933709
+    }
+  ],
+  "combined_ood_evaluation": {
     "ood_results": [
+      {
+        "name": "ood_ppo_step_0",
+        "policy_type": "ood_ppo",
+        "timesteps": 0,
+        "env_mc": -22.669037306497398,
+        "dynamics_supervised": -34.4947395324707,
+        "dynamics_ranking_new": {
+          "kendall": 11.388516426086426
+        }
+      },
+      {
+        "name": "ood_ppo_step_40000",
+        "policy_type": "ood_ppo",
+        "timesteps": 40000,
+        "env_mc": -15.939727458637629,
+        "dynamics_supervised": -23.052982330322266,
+        "dynamics_ranking_new": {
+          "kendall": 14.12158203125
+        }
+      },
+      {
+        "name": "ood_ppo_step_80000",
+        "policy_type": "ood_ppo",
+        "timesteps": 80000,
+        "env_mc": 23.63207715109477,
+        "dynamics_supervised": -15.186393737792969,
+        "dynamics_ranking_new": {
+          "kendall": 17.04747772216797
+        }
+      },
+      {
+        "name": "ood_ppo_step_120000",
+        "policy_type": "ood_ppo",
+        "timesteps": 120000,
+        "env_mc": 56.584414091725556,
+        "dynamics_supervised": -13.468207359313965,
+        "dynamics_ranking_new": {
+          "kendall": 17.80240821838379
+        }
+      },
+      {
+        "name": "ood_ppo_step_160000",
+        "policy_type": "ood_ppo",
+        "timesteps": 160000,
+        "env_mc": 72.9247893355074,
+        "dynamics_supervised": -11.174128532409668,
+        "dynamics_ranking_new": {
+          "kendall": 18.812013626098633
+        }
+      },
+      {
+        "name": "ood_ppo_step_200000",
+        "policy_type": "ood_ppo",
+        "timesteps": 200000,
+        "env_mc": 73.72897388841153,
+        "dynamics_supervised": -6.310845851898193,
+        "dynamics_ranking_new": {
+          "kendall": 24.06450080871582
+        }
+      },
       {
         "name": "PulsedChemo_21d",
         "policy_type": "ood_expert",
-        "env_mc": -23.381023221071246,
-        "dynamics_supervised": -69.91409301757812,
+        "env_mc": -22.69180020371363,
+        "dynamics_supervised": 4.373532295227051,
         "dynamics_ranking_new": {
-          "kendall": -61.71137619018555
+          "kendall": 54.85006332397461
         }
       },
       {
         "name": "HypofractionatedRT",
         "policy_type": "ood_expert",
-        "env_mc": -56.720549129633675,
-        "dynamics_supervised": -75.70562744140625,
+        "env_mc": -55.08497347522898,
+        "dynamics_supervised": 21.952543258666992,
         "dynamics_ranking_new": {
-          "kendall": 35.48623275756836
+          "kendall": 92.69994354248047
         }
       },
       {
         "name": "InductionMaintenance",
         "policy_type": "ood_expert",
-        "env_mc": 77.82787371551254,
-        "dynamics_supervised": -49.517417907714844,
+        "env_mc": 77.83254311816148,
+        "dynamics_supervised": 54.07084274291992,
         "dynamics_ranking_new": {
-          "kendall": -63.61094284057617
+          "kendall": 62.4288444519043
         }
       },
       {
         "name": "AlternatingModality",
         "policy_type": "ood_expert",
-        "env_mc": 57.96875403453828,
-        "dynamics_supervised": -10.208183288574219,
+        "env_mc": 71.3978856638366,
+        "dynamics_supervised": 47.529109954833984,
         "dynamics_ranking_new": {
-          "kendall": -37.81914520263672
+          "kendall": 80.85456848144531
         }
       },
       {
         "name": "DoseEscalation",
         "policy_type": "ood_expert",
-        "env_mc": -11.434562616441237,
-        "dynamics_supervised": -70.28241729736328,
+        "env_mc": -23.48593280273001,
+        "dynamics_supervised": -33.57795333862305,
         "dynamics_ranking_new": {
-          "kendall": -10.271824836730957
+          "kendall": 11.155710220336914
         }
       }
     ],
     "ranking_metrics": {
       "supervised": {
-        "spearman": 0.7999999999999999,
-        "regret_at_1": 19.85911968097426
+        "spearman": 0.4000000000000001,
+        "regret_at_1": 0.0
       },
       "ranking_new_kendall": {
-        "spearman": -0.7,
-        "regret_at_1": 134.5484228451462
+        "spearman": 0.23636363636363636,
+        "regret_at_1": 132.91751659339047
       }
     },
-    "best_true_value": 77.82787371551254,
+    "best_true_value": 77.83254311816148,
     "true_values": [
-      -23.381023221071246,
-      -56.720549129633675,
-      77.82787371551254,
-      57.96875403453828,
-      -11.434562616441237
+      -22.669037306497398,
+      -15.939727458637629,
+      23.63207715109477,
+      56.584414091725556,
+      72.9247893355074,
+      73.72897388841153,
+      -22.69180020371363,
+      -55.08497347522898,
+      77.83254311816148,
+      71.3978856638366,
+      -23.48593280273001
     ],
     "sup_values": [
-      -69.91409301757812,
-      -75.70562744140625,
-      -49.517417907714844,
-      -10.208183288574219,
-      -70.28241729736328
+      -34.4947395324707,
+      -23.052982330322266,
+      -15.186393737792969,
+      -13.468207359313965,
+      -11.174128532409668,
+      -6.310845851898193,
+      4.373532295227051,
+      21.952543258666992,
+      54.07084274291992,
+      47.529109954833984,
+      -33.57795333862305
     ],
     "ranking_values": {
       "kendall": [
-        -61.71137619018555,
-        35.48623275756836,
-        -63.61094284057617,
-        -37.81914520263672,
-        -10.271824836730957
+        11.388516426086426,
+        14.12158203125,
+        17.04747772216797,
+        17.80240821838379,
+        18.812013626098633,
+        24.06450080871582,
+        54.85006332397461,
+        92.69994354248047,
+        62.4288444519043,
+        80.85456848144531,
+        11.155710220336914
       ]
     }
   }

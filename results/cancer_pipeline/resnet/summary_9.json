@@ -65,7 +65,8 @@
     "ood_total_steps": 200000,
     "ood_n_checkpoints": 6,
     "force_ood_training": false,
-    "ood_expert_eval": true,
+    "ood_expert_eval": false,
+    "ood_eval_ppo_and_expert": true,
     "wandb_project": "DT2-cancer-expert"
   },
   "num_transitions": 5000,
@@ -93,86 +94,164 @@
     "value_aware": null
   },
   "results": [],
-  "ood_expert_evaluation": {
+  "combined_ood_evaluation": {
     "ood_results": [
+      {
+        "name": "ood_ppo_step_0",
+        "policy_type": "ood_ppo",
+        "timesteps": 0,
+        "env_mc": -22.550346642600907,
+        "dynamics_supervised": -44.059898376464844,
+        "dynamics_ranking_new": {
+          "kendall": 40.67905807495117
+        }
+      },
+      {
+        "name": "ood_ppo_step_40000",
+        "policy_type": "ood_ppo",
+        "timesteps": 40000,
+        "env_mc": -15.828669484677246,
+        "dynamics_supervised": -37.486019134521484,
+        "dynamics_ranking_new": {
+          "kendall": 47.22877883911133
+        }
+      },
+      {
+        "name": "ood_ppo_step_80000",
+        "policy_type": "ood_ppo",
+        "timesteps": 80000,
+        "env_mc": 23.987174243714566,
+        "dynamics_supervised": -33.39682388305664,
+        "dynamics_ranking_new": {
+          "kendall": 54.4908561706543
+        }
+      },
+      {
+        "name": "ood_ppo_step_120000",
+        "policy_type": "ood_ppo",
+        "timesteps": 120000,
+        "env_mc": 54.1379034234546,
+        "dynamics_supervised": -32.29984664916992,
+        "dynamics_ranking_new": {
+          "kendall": 58.04619216918945
+        }
+      },
+      {
+        "name": "ood_ppo_step_160000",
+        "policy_type": "ood_ppo",
+        "timesteps": 160000,
+        "env_mc": 69.38777878427351,
+        "dynamics_supervised": -28.419952392578125,
+        "dynamics_ranking_new": {
+          "kendall": 58.38600540161133
+        }
+      },
+      {
+        "name": "ood_ppo_step_200000",
+        "policy_type": "ood_ppo",
+        "timesteps": 200000,
+        "env_mc": 70.16950026909322,
+        "dynamics_supervised": -21.88322639465332,
+        "dynamics_ranking_new": {
+          "kendall": 60.11444854736328
+        }
+      },
       {
         "name": "PulsedChemo_21d",
         "policy_type": "ood_expert",
-        "env_mc": -23.134229297723397,
-        "dynamics_supervised": -91.5410385131836,
+        "env_mc": -22.57317321949617,
+        "dynamics_supervised": -11.52818489074707,
         "dynamics_ranking_new": {
-          "kendall": -59.140472412109375
+          "kendall": 76.41078186035156
         }
       },
       {
         "name": "HypofractionatedRT",
         "policy_type": "ood_expert",
-        "env_mc": -57.365979574525376,
-        "dynamics_supervised": -74.9621810913086,
+        "env_mc": -55.49344393214627,
+        "dynamics_supervised": 87.88218688964844,
         "dynamics_ranking_new": {
-          "kendall": -66.9992446899414
+          "kendall": 11.418612480163574
         }
       },
       {
         "name": "InductionMaintenance",
         "policy_type": "ood_expert",
-        "env_mc": 77.72921136737328,
-        "dynamics_supervised": -68.68905639648438,
+        "env_mc": 77.50669481137659,
+        "dynamics_supervised": 42.64554977416992,
         "dynamics_ranking_new": {
-          "kendall": -54.5139045715332
+          "kendall": 78.65205383300781
         }
       },
       {
         "name": "AlternatingModality",
         "policy_type": "ood_expert",
-        "env_mc": 52.213010397369544,
-        "dynamics_supervised": 14.793410301208496,
+        "env_mc": 60.57885620244234,
+        "dynamics_supervised": 59.196754455566406,
         "dynamics_ranking_new": {
-          "kendall": -31.622608184814453
+          "kendall": 74.59908294677734
         }
       },
       {
         "name": "DoseEscalation",
         "policy_type": "ood_expert",
-        "env_mc": -15.675652211269854,
-        "dynamics_supervised": -93.76798248291016,
+        "env_mc": -23.676167029518858,
+        "dynamics_supervised": -44.073482513427734,
         "dynamics_ranking_new": {
-          "kendall": -35.48191833496094
+          "kendall": 42.66444778442383
         }
       }
     ],
     "ranking_metrics": {
       "supervised": {
-        "spearman": 0.49999999999999994,
-        "regret_at_1": 25.516200970003737
+        "spearman": 0.23636363636363636,
+        "regret_at_1": 133.00013874352285
       },
       "ranking_new_kendall": {
-        "spearman": 0.7,
-        "regret_at_1": 25.516200970003737
+        "spearman": 0.7000000000000001,
+        "regret_at_1": 0.0
       }
     },
-    "best_true_value": 77.72921136737328,
+    "best_true_value": 77.50669481137659,
     "true_values": [
-      -23.134229297723397,
-      -57.365979574525376,
-      77.72921136737328,
-      52.213010397369544,
-      -15.675652211269854
+      -22.550346642600907,
+      -15.828669484677246,
+      23.987174243714566,
+      54.1379034234546,
+      69.38777878427351,
+      70.16950026909322,
+      -22.57317321949617,
+      -55.49344393214627,
+      77.50669481137659,
+      60.57885620244234,
+      -23.676167029518858
     ],
     "sup_values": [
-      -91.5410385131836,
-      -74.9621810913086,
-      -68.68905639648438,
-      14.793410301208496,
-      -93.76798248291016
+      -44.059898376464844,
+      -37.486019134521484,
+      -33.39682388305664,
+      -32.29984664916992,
+      -28.419952392578125,
+      -21.88322639465332,
+      -11.52818489074707,
+      87.88218688964844,
+      42.64554977416992,
+      59.196754455566406,
+      -44.073482513427734
     ],
     "ranking_values": {
       "kendall": [
-        -59.140472412109375,
-        -66.9992446899414,
-        -54.5139045715332,
-        -31.622608184814453,
-        -35.48191833496094
+        40.67905807495117,
+        47.22877883911133,
+        54.4908561706543,
+        58.04619216918945,
+        58.38600540161133,
+        60.11444854736328,
+        76.41078186035156,
+        11.418612480163574,
+        78.65205383300781,
+        74.59908294677734,
+        42.66444778442383
       ]
     }
   }

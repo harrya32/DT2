@@ -272,7 +272,6 @@ class AlternatingModality(ExpertPolicy):
 class DoseEscalation(ExpertPolicy):
     """
     Ramp up: Starts at 0, linearly increases to max over 100 days, then holds.
-    Tests the model's ability to interpolate dose responses.
     """
     def __init__(self, max_radio: float = 3.0, max_chemo: float = 5.0, ramp_days: int = 100):
         super().__init__("DoseEscalation")
@@ -951,6 +950,13 @@ def evaluate_cancer_in_dynamics(
     active = torch.ones(states.size(0), dtype=torch.bool, device=device)
     
     obs_high = CANCER_OBS_HIGH.to(device)
+
+    safety_margin = 0.15
+    
+    # Create safe bounds
+    obs_low = CANCER_OBS_LOW.to(device)
+    obs_high = CANCER_OBS_HIGH.to(device)
+    safe_high = obs_high - safety_margin
     
     for _ in range(horizon):
         if not active.any():
@@ -966,6 +972,9 @@ def evaluate_cancer_in_dynamics(
         discount *= gamma
         
         next_states = dynamics.sample_next(states, actions, deterministic=True)
+
+        next_states = torch.clamp(next_states, min=obs_low, max=safe_high)
+
         active = active & ~done
         states = next_states
     
@@ -1403,6 +1412,222 @@ def evaluate_ood_policies(
     }
 
 
+def evaluate_combined_ood_policies(
+    ood_snapshots: List[Dict[str, object]],
+    ood_models: Dict[str, PPO],
+    ood_experts: List[ExpertPolicy],
+    sup_model: Optional[DynamicsNet],
+    ranking_new_models: Dict[str, DynamicsNet],
+    initial_states: np.ndarray,
+    max_t: int,
+    setting: int,
+    eval_horizon: int,
+    gamma: float,
+    eval_rollouts: int,
+    device: torch.device,
+    seed: int,
+    wandb_run: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate both OOD PPO policies and OOD expert policies together,
+    computing ranking metrics across the combined set.
+    
+    Returns:
+        Dictionary with:
+        - ood_results: List of per-policy evaluation results (PPO + expert)
+        - ranking_metrics: Spearman correlation and Regret@1 for each model
+        - best_true_value: Best true value across all OOD policies
+    """
+    print("\n[Combined OOD Evaluation] Evaluating OOD PPO + Expert policies...")
+    
+    ood_results = []
+    true_values = []  # Ground truth values from true environment
+    sup_values = []   # Supervised dynamics model estimates (if available)
+    ranking_values = {loss_name: [] for loss_name in ranking_new_models.keys()}
+    
+    # Evaluate OOD PPO policies
+    print("  Evaluating OOD PPO policies...")
+    for snap in ood_snapshots:
+        name = snap["name"]
+        timesteps = snap["timesteps"]
+        model = ood_models[name]
+        
+        # Create policy adapter
+        policy = CancerPolicyAdapter(name, model)
+        
+        # Evaluate in true environment
+        env_mc = evaluate_cancer_sb3_policy(
+            model, max_t, setting, eval_horizon, gamma, eval_rollouts, seed
+        )
+        true_values.append(env_mc)
+        
+        # Evaluate with supervised dynamics (if available)
+        dyn_sup = None
+        if sup_model is not None:
+            dyn_sup = evaluate_cancer_in_dynamics(
+                sup_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            sup_values.append(dyn_sup)
+        
+        # Evaluate with ranking-aware dynamics
+        dyn_rank_results = {}
+        for loss_name, dyn_model in ranking_new_models.items():
+            dyn_val = evaluate_cancer_in_dynamics(
+                dyn_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            dyn_rank_results[loss_name] = dyn_val
+            ranking_values[loss_name].append(dyn_val)
+        
+        result = {
+            "name": name,
+            "policy_type": "ood_ppo",
+            "timesteps": timesteps,
+            "env_mc": env_mc,
+            "dynamics_supervised": dyn_sup,
+            "dynamics_ranking_new": dyn_rank_results,
+        }
+        ood_results.append(result)
+        
+        sup_str = f"dyn_sup={dyn_sup:.2f}" if dyn_sup is not None else "dyn_sup=N/A"
+        print(f"    {name} (step {timesteps}): env_mc={env_mc:.2f}, {sup_str}")
+        
+        # Log to W&B
+        if wandb_run is not None:
+            payload = {
+                "combined_ood_eval/policy_name": name,
+                "combined_ood_eval/policy_type": "ood_ppo",
+                "combined_ood_eval/timesteps": timesteps,
+                "combined_ood_eval/env_mc": env_mc,
+            }
+            if dyn_sup is not None:
+                payload["combined_ood_eval/dynamics_supervised"] = dyn_sup
+            for loss_name, val in dyn_rank_results.items():
+                payload[f"combined_ood_eval/dynamics_ranking_new_{loss_name}"] = val
+            wandb_log(wandb_run, payload)
+    
+    # Evaluate OOD Expert policies
+    print("  Evaluating OOD Expert policies...")
+    for expert in ood_experts:
+        name = expert.name
+        
+        # Create policy adapter
+        policy = ExpertPolicyAdapter(expert)
+        
+        # Evaluate in true environment
+        env_mc = evaluate_expert_policy(
+            expert, max_t, setting, eval_horizon, gamma, eval_rollouts, seed
+        )
+        true_values.append(env_mc)
+        
+        # Evaluate with supervised dynamics (if available)
+        dyn_sup = None
+        if sup_model is not None:
+            dyn_sup = evaluate_cancer_in_dynamics(
+                sup_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            sup_values.append(dyn_sup)
+        
+        # Evaluate with ranking-aware dynamics
+        dyn_rank_results = {}
+        for loss_name, dyn_model in ranking_new_models.items():
+            dyn_val = evaluate_cancer_in_dynamics(
+                dyn_model, policy, initial_states, eval_horizon,
+                gamma, device, eval_rollouts
+            )
+            dyn_rank_results[loss_name] = dyn_val
+            ranking_values[loss_name].append(dyn_val)
+        
+        result = {
+            "name": name,
+            "policy_type": "ood_expert",
+            "env_mc": env_mc,
+            "dynamics_supervised": dyn_sup,
+            "dynamics_ranking_new": dyn_rank_results,
+        }
+        ood_results.append(result)
+        
+        sup_str = f"dyn_sup={dyn_sup:.2f}" if dyn_sup is not None else "dyn_sup=N/A"
+        print(f"    {name}: env_mc={env_mc:.2f}, {sup_str}")
+        
+        # Log to W&B
+        if wandb_run is not None:
+            payload = {
+                "combined_ood_eval/policy_name": name,
+                "combined_ood_eval/policy_type": "ood_expert",
+                "combined_ood_eval/env_mc": env_mc,
+            }
+            if dyn_sup is not None:
+                payload["combined_ood_eval/dynamics_supervised"] = dyn_sup
+            for loss_name, val in dyn_rank_results.items():
+                payload[f"combined_ood_eval/dynamics_ranking_new_{loss_name}"] = val
+            wandb_log(wandb_run, payload)
+    
+    # Compute ranking metrics across ALL OOD policies (PPO + Expert)
+    true_values = np.array(true_values)
+    
+    # Best true value (oracle)
+    best_true_value = float(np.max(true_values))
+    
+    # Regret@1: difference between best true value and true value of model's top pick
+    def compute_regret_at_1(model_values: np.ndarray) -> float:
+        """Compute regret@1: true_value(best) - true_value(model's pick)."""
+        model_best_idx = int(np.argmax(model_values))
+        return best_true_value - float(true_values[model_best_idx])
+    
+    ranking_metrics = {}
+    
+    # Supervised metrics (if model was trained)
+    if len(sup_values) > 0:
+        sup_values_arr = np.array(sup_values)
+        ranking_metrics["supervised"] = {
+            "spearman": float(stats.spearmanr(true_values, sup_values_arr).statistic),
+            "regret_at_1": compute_regret_at_1(sup_values_arr),
+        }
+    
+    for loss_name, values in ranking_values.items():
+        values = np.array(values)
+        ranking_metrics[f"ranking_new_{loss_name}"] = {
+            "spearman": float(stats.spearmanr(true_values, values).statistic),
+            "regret_at_1": compute_regret_at_1(values),
+        }
+    
+    # Print ranking metrics summary
+    print("\n[Combined OOD Evaluation] Ranking Metrics (True vs Model-based):")
+    print(f"  Total OOD policies evaluated: {len(true_values)}")
+    print(f"  Best true value: {best_true_value:.3f}")
+    if "supervised" in ranking_metrics:
+        print(f"  Supervised:     Spearman={ranking_metrics['supervised']['spearman']:.3f}, "
+              f"Regret@1={ranking_metrics['supervised']['regret_at_1']:.3f}")
+    for loss_name in ranking_new_models.keys():
+        m = ranking_metrics[f"ranking_new_{loss_name}"]
+        print(f"  Ranking ({loss_name}): Spearman={m['spearman']:.3f}, "
+              f"Regret@1={m['regret_at_1']:.3f}")
+    
+    # Log ranking metrics to W&B
+    if wandb_run is not None:
+        wandb_log(wandb_run, {
+            "combined_ood_ranking/total_policies": len(true_values),
+            "combined_ood_ranking/best_true_value": best_true_value,
+        })
+        for model_name, metrics in ranking_metrics.items():
+            wandb_log(wandb_run, {
+                f"combined_ood_ranking/{model_name}_spearman": metrics["spearman"],
+                f"combined_ood_ranking/{model_name}_regret_at_1": metrics["regret_at_1"],
+            })
+    
+    return {
+        "ood_results": ood_results,
+        "ranking_metrics": ranking_metrics,
+        "best_true_value": best_true_value,
+        "true_values": true_values.tolist(),
+        "sup_values": sup_values,
+        "ranking_values": {k: v for k, v in ranking_values.items()},
+    }
+
+
 def evaluate_ood_expert_policies(
     ood_experts: List[ExpertPolicy],
     sup_model: Optional[DynamicsNet],
@@ -1732,7 +1957,7 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     results = []
     initial_states = dataset.initial_states
     
-    if not args.ood_eval and not args.ood_expert_eval:
+    if not args.ood_eval and not args.ood_expert_eval and not args.ood_eval_ppo_and_expert:
         print("[Step 5-7] Evaluating expert policies across true env, Q, and dynamics...")
 
         # Generate test/train transitions for MSE evaluation
@@ -1828,8 +2053,53 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     # =========================================================================
     ood_evaluation_results = None
     ood_expert_evaluation_results = None
+    combined_ood_evaluation_results = None
     
-    if args.ood_eval:
+    if args.ood_eval_ppo_and_expert:
+        print("\n[Step 8] Combined OOD Evaluation (PPO + Expert)...")
+        ood_dir = args.output_dir / "ood_policies"
+        ood_manifest = ood_dir / "ood_manifest.json"
+        
+        # Train or load OOD PPO policies
+        if ood_manifest.exists() and not args.force_ood_training:
+            print("  Loading existing OOD PPO policies...")
+            ood_snapshots, ood_models = load_ood_ppo_policies(ood_dir)
+        else:
+            print("  Training new OOD PPO policies...")
+            ood_snapshots = train_ood_ppo_policies(
+                max_t=args.max_t,
+                setting=args.setting,
+                total_steps=args.ood_total_steps,
+                save_dir=ood_dir,
+                n_checkpoints=args.ood_n_checkpoints,
+                seed=args.seed + 5000,
+                device=device.type,
+                wandb_run=wandb_run,
+            )
+            _, ood_models = load_ood_ppo_policies(ood_dir)
+        
+        # Get OOD expert policies
+        ood_experts = get_ood_expert_policies()
+        
+        # Combined evaluation
+        combined_ood_evaluation_results = evaluate_combined_ood_policies(
+            ood_snapshots=ood_snapshots,
+            ood_models=ood_models,
+            ood_experts=ood_experts,
+            sup_model=sup_model,
+            ranking_new_models=ranking_new_models,
+            initial_states=initial_states,
+            max_t=args.max_t,
+            setting=args.setting,
+            eval_horizon=args.eval_horizon,
+            gamma=args.gamma,
+            eval_rollouts=args.eval_rollouts,
+            device=device,
+            seed=args.seed + 7000,
+            wandb_run=wandb_run,
+        )
+    
+    elif args.ood_eval:
         print("\n[Step 8] OOD PPO Policy Evaluation...")
         ood_dir = args.output_dir / "ood_policies"
         ood_manifest = ood_dir / "ood_manifest.json"
@@ -1914,6 +2184,9 @@ def run_cancer_pipeline(args: argparse.Namespace) -> Dict[str, Any]:
     
     if ood_expert_evaluation_results is not None:
         summary["ood_expert_evaluation"] = ood_expert_evaluation_results
+    
+    if combined_ood_evaluation_results is not None:
+        summary["combined_ood_evaluation"] = combined_ood_evaluation_results
 
     summary_path = args.output_dir / args.backbone / f"summary_{args.seed}.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1973,6 +2246,8 @@ def main() -> None:
                         help="Force retraining of OOD PPO policies even if they exist")
     parser.add_argument("--ood-expert-eval", action="store_true",
                         help="Enable OOD expert policy evaluation (evaluate hand-designed policies not used in training)")
+    parser.add_argument("--ood-eval-ppo-and-expert", action="store_true",
+                        help="Enable combined OOD evaluation (both PPO checkpoints AND expert policies)")
     
     # Override some defaults for cancer environment with expert policies
     parser.set_defaults(
