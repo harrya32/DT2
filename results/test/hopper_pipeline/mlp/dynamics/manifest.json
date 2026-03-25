@@ -1,9 +1,30 @@
 {
-  "supervised": "results/test/hopper_pipeline/mlp/dynamics/dynamics_supervised.pt",
+  "supervised": null,
   "ranking": "results/test/hopper_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/test/hopper_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
-  },
-  "value_aware": null
+  "ranking_new": {},
+  "value_aware": null,
+  "morel": "results/test/hopper_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 0.26788339018821716,
+    "disagreement_std": 0.1774314045906067,
+    "disagreement_max": 2.919421911239624,
+    "threshold": 1.1550404131412506,
+    "beta_effective": 5.0,
+    "halt_reward": -50.98538714647293,
+    "reward_min": -0.9853871464729309,
+    "reward_offset": 50.0,
+    "member_final_losses": [
+      0.014380157429804193,
+      0.015374401128514016,
+      0.014170442501756739,
+      0.013343994644411068
+    ],
+    "member_epochs": [
+      300,
+      300,
+      300,
+      300
+    ]
+  }
 }

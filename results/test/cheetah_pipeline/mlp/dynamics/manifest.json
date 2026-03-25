@@ -1,9 +1,30 @@
 {
-  "supervised": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_supervised.pt",
+  "supervised": null,
   "ranking": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
-  },
-  "value_aware": null
+  "ranking_new": {},
+  "value_aware": null,
+  "morel": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 3.1875884532928467,
+    "disagreement_std": 1.1633880138397217,
+    "disagreement_max": 13.658273696899414,
+    "threshold": 9.004528522491455,
+    "beta_effective": 5.0,
+    "halt_reward": -203.85147619247437,
+    "reward_min": -3.8514761924743652,
+    "reward_offset": 200.0,
+    "member_final_losses": [
+      0.05350602944480612,
+      0.049035441146252,
+      0.043140172736441836,
+      0.04251834028895865
+    ],
+    "member_epochs": [
+      300,
+      300,
+      300,
+      300
+    ]
+  }
 }

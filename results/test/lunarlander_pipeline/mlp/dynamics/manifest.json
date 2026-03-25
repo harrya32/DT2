@@ -1,9 +1,30 @@
 {
-  "supervised": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_supervised.pt",
+  "supervised": null,
   "ranking": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
-  },
-  "value_aware": null
+  "ranking_new": {},
+  "value_aware": null,
+  "morel": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 0.04904702305793762,
+    "disagreement_std": 0.1415618658065796,
+    "disagreement_max": 3.657071590423584,
+    "threshold": 0.7568563520908356,
+    "beta_effective": 5.0,
+    "halt_reward": -150.0,
+    "reward_min": -100.0,
+    "reward_offset": 50.0,
+    "member_final_losses": [
+      0.15574157579491535,
+      0.1585222533904016,
+      0.17734662412355343,
+      0.18494846656297645
+    ],
+    "member_epochs": [
+      300,
+      300,
+      300,
+      300
+    ]
+  }
 }

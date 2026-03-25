@@ -1,9 +1,30 @@
 {
-  "supervised": "results/test/pendulum_pipeline/mlp/dynamics/dynamics_supervised.pt",
+  "supervised": null,
   "ranking": "results/test/pendulum_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/test/pendulum_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
-  },
-  "value_aware": null
+  "ranking_new": {},
+  "value_aware": null,
+  "morel": "results/test/pendulum_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 0.0040887873619794846,
+    "disagreement_std": 0.0049494607374072075,
+    "disagreement_max": 0.11463847011327744,
+    "threshold": 0.028836091049015522,
+    "beta_effective": 5.0,
+    "halt_reward": -66.17110443115234,
+    "reward_min": -16.171104431152344,
+    "reward_offset": 50.0,
+    "member_final_losses": [
+      0.0002237967852063051,
+      0.00021738962730801254,
+      0.00018329765697348255,
+      0.00016810867881281025
+    ],
+    "member_epochs": [
+      300,
+      300,
+      300,
+      300
+    ]
+  }
 }
