@@ -866,7 +866,7 @@ class DynamicsNet(nn.Module):
         min_epochs: int = 50,
         min_delta: float = 0.0,
     ) -> List[float]:
-        """Train dynamics with value-aware weighting.
+        """Train dynamics with value-aware weighting (adapted VaGraM method).
         
         Uses MSE loss weighted by the squared gradient norm of Q functions
         at the true next state, averaged across all policy-Q pairs.

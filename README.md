@@ -1,21 +1,18 @@
-# DT2: Offline Policy Evaluation (OPE) Research
+# DT2: Decision-Targeted Digital Twins
 
 Code for ICML submission.
 
 ## Overview
 
-This repository implements various **Offline Policy Evaluation (OPE)** methods for reinforcement learning. The primary goal is to estimate the expected return of a target policy using only offline (pre-collected) data, without requiring additional environment interaction.
+This repository implements various **Offline Policy Evaluation (OPE)** methods for reinforcement learning. The primary goal is to estimate the expected return of a target policy using only offline (pre-collected) data, without requiring additional environment interaction, such that candidate policies can be ranked.
 
 ### Key Features
 
 - **Model-based Monte Carlo estimation** — Train a dynamics model and perform rollouts
 - **Fitted Q Evaluation (FQE)** — Learn Q-functions via temporal difference methods
-- **Value Function Evaluation** — Direct state-value function learning with importance sampling
-- **Value-Aware Model Learning** — Train dynamics models with value-function-aware objectives
-- **Q-Aware Model Learning** — Dynamics models optimized for Q-function consistency
 - **Ranking-Aware Model Learning** — Models that preserve policy ranking relationships
 
-The codebase supports continuous action spaces and is primarily tested on the **LunarLanderContinuous-v3** environment, with additional experiments on healthcare domains (Sepsis treatment).
+The codebase supports continuous action spaces and is primarily tested on the **Mujoco** continuous control environments, with some additional experiments on healthcare domains (Cancer treatment).
 
 ---
 
@@ -115,13 +112,3 @@ python exps/offline_ope_refactored.py \
 - Importance sampling corrections for off-policy evaluation
 - Reward normalization for stable training
 - Support for custom reward functions
-
----
-
-## License
-
-See LICENSE file for details.
-
-## TODO         
-
-make models be environment agnostic (i.e. have bounds as inputs, fixed scaling, clipping, etc.)
