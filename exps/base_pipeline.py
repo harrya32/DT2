@@ -17,7 +17,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -37,6 +37,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.datasets import OfflineDataset
 from src.fqe import estimate_V_from_Q_on_s0
+from src.morel import MorelDynamicsEnsemble, rollout_in_pessimistic_mdp, train_dynamics_ensemble
 from src.networks import DynamicsNet, QNet
 from src.policies import TorchPolicy
 
@@ -323,6 +324,8 @@ def save_dynamics_models(
     ranking_new_models: Dict[str, DynamicsNet],
     directory: Path,
     value_aware_model: Optional[DynamicsNet] = None,
+    morel_model: Optional[MorelDynamicsEnsemble] = None,
+    morel_info: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, object]:
     """Save dynamics models and create a manifest."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -332,6 +335,8 @@ def save_dynamics_models(
         "q_aware": {},
         "ranking_new": {},
         "value_aware": None,
+        "morel": None,
+        "morel_info": None,
     }
     if sup_model is not None:
         paths["supervised"] = (directory / "dynamics_supervised.pt").as_posix()
@@ -345,6 +350,12 @@ def save_dynamics_models(
     if value_aware_model is not None:
         paths["value_aware"] = (directory / "dynamics_value_aware.pt").as_posix()
         torch.save(copy.deepcopy(value_aware_model).cpu(), paths["value_aware"])
+
+    if morel_model is not None:
+        paths["morel"] = (directory / "dynamics_morel.pt").as_posix()
+        torch.save(copy.deepcopy(morel_model).cpu(), paths["morel"])
+    if morel_info is not None:
+        paths["morel_info"] = morel_info
 
     manifest = directory / "manifest.json"
     with open(manifest, "w", encoding="utf-8") as f:
@@ -382,6 +393,89 @@ def load_dynamics_models(
         value_aware_model.to(device)
 
     return sup_model, ranking_new_models, paths, value_aware_model
+
+
+def load_morel_model_from_paths(
+    paths: Mapping[str, object],
+    device: torch.device,
+) -> Optional[MorelDynamicsEnsemble]:
+    """Load a saved MOReL ensemble from manifest paths (if present)."""
+    path_obj = paths.get("morel")
+    if path_obj is None:
+        return None
+    model = torch.load(str(path_obj), map_location=device, weights_only=False)
+    if hasattr(model, "to"):
+        model.to(device)
+    return model
+
+
+def _safe_json_number(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    if not np.isfinite(value):
+        return None
+    return float(value)
+
+
+def compact_morel_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Convert MOReL training info to a compact JSON-serializable dict."""
+    if raw_info is None:
+        return None
+
+    info: Dict[str, Any] = {}
+    scalar_fields = (
+        "disagreement_mean",
+        "disagreement_std",
+        "disagreement_max",
+        "threshold",
+        "beta_effective",
+        "halt_reward",
+        "reward_min",
+        "reward_offset",
+    )
+    for field in scalar_fields:
+        if hasattr(raw_info, field):
+            info[field] = _safe_json_number(getattr(raw_info, field))
+
+    if hasattr(raw_info, "model_losses"):
+        losses = getattr(raw_info, "model_losses")
+        final_losses: List[Optional[float]] = []
+        epochs_per_member: List[int] = []
+        for member_losses in losses:
+            if member_losses:
+                final_losses.append(_safe_json_number(float(member_losses[-1])))
+                epochs_per_member.append(int(len(member_losses)))
+            else:
+                final_losses.append(None)
+                epochs_per_member.append(0)
+        info["member_final_losses"] = final_losses
+        info["member_epochs"] = epochs_per_member
+
+    return info
+
+
+def find_missing_requested_dynamics_models(
+    requested_models: Sequence[str],
+    supervised_model: Optional[DynamicsNet],
+    ranking_new_models: Mapping[str, DynamicsNet],
+    value_aware_model: Optional[DynamicsNet],
+    morel_model: Optional[MorelDynamicsEnsemble],
+    value_aware_only: bool = False,
+) -> List[str]:
+    """Return requested dynamics model names that are missing from loaded artifacts."""
+    if value_aware_only:
+        return [] if value_aware_model is not None else ["value_aware"]
+
+    requested_set = set(requested_models)
+    missing: List[str] = []
+    if "supervised" in requested_set and supervised_model is None:
+        missing.append("supervised")
+    for loss_name in ("kendall", "hinge", "listnet"):
+        if loss_name in requested_set and loss_name not in ranking_new_models:
+            missing.append(loss_name)
+    if "morel" in requested_set and morel_model is None:
+        missing.append("morel")
+    return missing
 
 
 # =============================================================================
@@ -715,18 +809,38 @@ def train_dynamics_models(
     value_aware_only: bool = False,
     act_low: float = -1.0,
     act_high: float = 1.0,
-) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet], Optional[DynamicsNet]]:
+    seed: int = 0,
+    env_name: Optional[str] = None,
+    morel_ensemble_size: int = 4,
+    morel_hidden_dim: Optional[int] = None,
+    morel_epochs: Optional[int] = None,
+    morel_batch_size: int = 256,
+    morel_lr: float = 5e-4,
+    morel_threshold: Optional[float] = None,
+    morel_threshold_mode: str = "mean_std",
+    morel_threshold_beta: float = 5.0,
+    morel_threshold_frac_of_max: float = 1.0,
+    morel_reward_offset: Optional[float] = None,
+    morel_halt_reward: Optional[float] = None,
+    morel_bootstrap: bool = True,
+) -> Tuple[
+    Optional[DynamicsNet],
+    Dict[str, DynamicsNet],
+    Optional[DynamicsNet],
+    Optional[MorelDynamicsEnsemble],
+    Optional[Dict[str, Any]],
+]:
     """Train supervised and ranking-aware dynamics models.
     
     Args:
-        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet'.
+        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet', 'morel'.
                         If None, trains all models.
         value_aware_only: If True, only train the value-aware model (ignore dynamics_models).
         act_low: Lower bound for actions (used by value-aware model).
         act_high: Upper bound for actions (used by value-aware model).
     
     Returns:
-        Tuple of (supervised_model, ranking_new_models, value_aware_model)
+        Tuple of (supervised_model, ranking_new_models, value_aware_model, morel_model, morel_info)
     """
     if dynamics_models is None:
         dynamics_models = ["supervised", "kendall", "hinge", "listnet"]
@@ -759,7 +873,7 @@ def train_dynamics_models(
             act_low=act_low,
             act_high=act_high,
         )
-        return None, {}, value_aware_model
+        return None, {}, value_aware_model, None, None
 
     # Supervised model
     sup_model: Optional[DynamicsNet] = None
@@ -789,6 +903,8 @@ def train_dynamics_models(
     # Ranking-aware models
     ranking_new_models: Dict[str, DynamicsNet] = {}
     value_aware_model: Optional[DynamicsNet] = None
+    morel_model: Optional[MorelDynamicsEnsemble] = None
+    morel_info: Optional[Dict[str, Any]] = None
 
     ranking_losses_to_train = [loss for loss in ("kendall", "hinge", "listnet") if loss in dynamics_models]
     for loss_name in ranking_losses_to_train:
@@ -823,7 +939,44 @@ def train_dynamics_models(
         )
         ranking_new_models[loss_name] = model
 
-    return sup_model, ranking_new_models, value_aware_model
+    if "morel" in dynamics_models:
+        morel_log_hook: Optional[Callable[[int, int, float], None]] = None
+        if wandb_run is not None:
+            def _hook(member_idx: int, epoch: int, loss: float) -> None:
+                step_key = f"dynamics/morel/member_{member_idx}/loss_step"
+                wandb_log(
+                    wandb_run,
+                    {
+                        f"dynamics/morel/member_{member_idx}/loss": float(loss),
+                        step_key: int(epoch + 1),
+                    },
+                )
+            morel_log_hook = _hook
+
+        morel_model, raw_morel_info = train_dynamics_ensemble(
+            dataset=dataset,
+            ensemble_size=int(max(1, morel_ensemble_size)),
+            hidden_dim=morel_hidden_dim,
+            epochs=morel_epochs,
+            batch_size=morel_batch_size,
+            lr=morel_lr,
+            seed=seed,
+            env_name=env_name,
+            reward_offset=morel_reward_offset,
+            halt_reward=morel_halt_reward,
+            threshold=morel_threshold,
+            threshold_beta=morel_threshold_beta,
+            threshold_mode=morel_threshold_mode,
+            threshold_frac_of_max=morel_threshold_frac_of_max,
+            state_low=state_low,
+            state_high=state_upper,
+            bootstrap=morel_bootstrap,
+            device=device,
+            log_hook=morel_log_hook,
+        )
+        morel_info = compact_morel_info(raw_morel_info)
+
+    return sup_model, ranking_new_models, value_aware_model, morel_model, morel_info
 
 
 # =============================================================================
@@ -901,6 +1054,35 @@ def evaluate_in_dynamics(
                 break
     
     return float(total.mean().item())
+
+
+def evaluate_in_morel_pessimistic_mdp(
+    morel_model: MorelDynamicsEnsemble,
+    policy: TorchPolicy,
+    initial_states: np.ndarray,
+    horizon: int,
+    gamma: float,
+    rollouts: int,
+    seed: int,
+    reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    act_low: float = -1.0,
+    act_high: float = 1.0,
+) -> Tuple[float, float, Dict[str, float]]:
+    """Evaluate a fixed policy in the MOReL pessimistic MDP via MC rollouts."""
+    return rollout_in_pessimistic_mdp(
+        ensemble=morel_model,
+        policy=policy,
+        initial_states=initial_states,
+        reward_fn_torch=reward_fn_torch,
+        horizon=horizon,
+        gamma=gamma,
+        rollouts=rollouts,
+        seed=seed,
+        act_low=act_low,
+        act_high=act_high,
+        deterministic_policy=True,
+        deterministic_dynamics=True,
+    )
 
 
 def evaluate_sb3_policy_fixed_horizon(
@@ -1097,6 +1279,18 @@ class BasePipelineConfig:
     backbone: str = "mlp"
     dyn_seq_len: int = 1
     dyn_seq_overlap: int = 0
+    morel_ensemble_size: int = 4
+    morel_hidden_dim: int = -1  # -1 -> use environment defaults
+    morel_epochs: int = -1      # -1 -> use environment defaults
+    morel_batch_size: int = 256
+    morel_lr: float = 5e-4
+    morel_threshold: Optional[float] = None
+    morel_threshold_mode: str = "mean_std"
+    morel_threshold_beta: float = 5.0
+    morel_threshold_frac_of_max: float = 1.0
+    morel_reward_offset: float = -1.0  # <0 -> use environment defaults
+    morel_halt_reward: Optional[float] = None
+    morel_bootstrap: bool = True
     
     # Evaluation
     eval_episodes: int = 20
@@ -1168,8 +1362,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         nargs="+",
         default=["supervised", "kendall", "hinge", "listnet"],
-        choices=["supervised", "kendall", "hinge", "listnet"],
-        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet",
+        choices=["supervised", "kendall", "hinge", "listnet", "morel"],
+        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet, morel",
     )
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
@@ -1181,6 +1375,24 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dyn-seq-len", type=int, default=1)
     parser.add_argument("--dyn-seq-overlap", type=int, default=0)
     parser.add_argument("--value-aware-only", action="store_true", help="Train only the value-aware dynamics model (no supervised or ranking models)")
+    parser.add_argument("--morel-ensemble-size", type=int, default=4, help="MOReL ensemble size (paper default: 4)")
+    parser.add_argument("--morel-hidden-dim", type=int, default=-1, help="MOReL hidden dim; -1 uses env-specific defaults")
+    parser.add_argument("--morel-epochs", type=int, default=-1, help="MOReL epochs; -1 uses env-specific defaults")
+    parser.add_argument("--morel-batch-size", type=int, default=256, help="MOReL dynamics batch size (paper default: 256)")
+    parser.add_argument("--morel-lr", type=float, default=5e-4, help="MOReL dynamics Adam stepsize (paper default: 5e-4)")
+    parser.add_argument("--morel-threshold", type=float, default=None, help="USAD threshold override; if unset, computed from dataset disagreements")
+    parser.add_argument(
+        "--morel-threshold-mode",
+        type=str,
+        default="mean_std",
+        choices=["mean_std", "fraction_max"],
+        help="How to compute MOReL USAD threshold when --morel-threshold is unset",
+    )
+    parser.add_argument("--morel-threshold-beta", type=float, default=5.0, help="Beta in threshold=mean+beta*std for mean_std mode")
+    parser.add_argument("--morel-threshold-frac-max", type=float, default=1.0, help="Threshold fraction of max disagreement for fraction_max mode")
+    parser.add_argument("--morel-reward-offset", type=float, default=-1.0, help="Offset in halt reward r_min(D)-offset; negative means use env defaults")
+    parser.add_argument("--morel-halt-reward", type=float, default=None, help="Direct halt reward override (takes precedence over offset)")
+    parser.add_argument("--morel-no-bootstrap", action="store_true", help="Disable bootstrap resampling across MOReL ensemble members")
     
     # Evaluation
     parser.add_argument("--eval-episodes", type=int, default=20)
@@ -1399,13 +1611,53 @@ def run_pipeline(
     dynamics_manifest = dynamics_dir / "manifest.json"
     dynamics_trained = False
     dynamics_train_time: Optional[float] = None
+    sup_model: Optional[DynamicsNet] = None
+    ranking_new_models: Dict[str, DynamicsNet] = {}
+    value_aware_model: Optional[DynamicsNet] = None
+    dynamics_paths: Dict[str, object] = {}
+    morel_model: Optional[MorelDynamicsEnsemble] = None
+    morel_info: Optional[Dict[str, Any]] = None
 
     value_aware_only = getattr(args, "value_aware_only", False)
-    if dynamics_manifest.exists() and not args.force_dynamics_training:
+    missing_requested_models: List[str] = []
+    need_dynamics_training = (not dynamics_manifest.exists()) or args.force_dynamics_training
+
+    if not need_dynamics_training:
         print("[Step 4] Using existing dynamics models...")
         sup_model, ranking_new_models, dynamics_paths, value_aware_model = load_dynamics_models(dynamics_dir, device)
-    else:
+        morel_model = load_morel_model_from_paths(dynamics_paths, device)
+        raw_morel_info = dynamics_paths.get("morel_info")
+        if isinstance(raw_morel_info, dict):
+            morel_info = raw_morel_info
+
+        missing_requested_models = find_missing_requested_dynamics_models(
+            requested_models=args.dynamics_models,
+            supervised_model=sup_model,
+            ranking_new_models=ranking_new_models,
+            value_aware_model=value_aware_model,
+            morel_model=morel_model,
+            value_aware_only=value_aware_only,
+        )
+        if missing_requested_models:
+            print(
+                "[Step 4] Existing dynamics manifest is missing requested models "
+                f"{missing_requested_models}; retraining dynamics."
+            )
+            need_dynamics_training = True
+
+    if need_dynamics_training:
         if args.results_only:
+            if missing_requested_models:
+                raise FileNotFoundError(
+                    "Saved dynamics manifest is missing requested models "
+                    f"{missing_requested_models}. Run once without --results-only "
+                    "to train and save them."
+                )
+            if args.force_dynamics_training:
+                raise FileNotFoundError(
+                    "Cannot use --results-only with --force-dynamics-training; "
+                    "disable one of these flags."
+                )
             raise FileNotFoundError(
                 f"No saved dynamics models at {dynamics_manifest}. "
                 "Run training once without --results-only."
@@ -1416,7 +1668,7 @@ def run_pipeline(
             print("[Step 4] Training dynamics models...")
             print(f"  Models to train: {args.dynamics_models}")
         start_time = time.perf_counter()
-        sup_model, ranking_new_models, value_aware_model = train_dynamics_models(
+        sup_model, ranking_new_models, value_aware_model, morel_model, morel_info = train_dynamics_models(
             dyn_dataset,
             torch_policies,
             q_models,
@@ -1445,14 +1697,42 @@ def run_pipeline(
             value_aware_only=value_aware_only,
             act_low=act_low,
             act_high=act_high,
+            seed=args.seed,
+            env_name=env_id,
+            morel_ensemble_size=args.morel_ensemble_size,
+            morel_hidden_dim=None if args.morel_hidden_dim <= 0 else args.morel_hidden_dim,
+            morel_epochs=None if args.morel_epochs <= 0 else args.morel_epochs,
+            morel_batch_size=args.morel_batch_size,
+            morel_lr=args.morel_lr,
+            morel_threshold=args.morel_threshold,
+            morel_threshold_mode=args.morel_threshold_mode,
+            morel_threshold_beta=args.morel_threshold_beta,
+            morel_threshold_frac_of_max=args.morel_threshold_frac_max,
+            morel_reward_offset=None if args.morel_reward_offset < 0 else args.morel_reward_offset,
+            morel_halt_reward=args.morel_halt_reward,
+            morel_bootstrap=not args.morel_no_bootstrap,
         )
-        dynamics_paths = save_dynamics_models(sup_model, ranking_new_models, dynamics_dir, value_aware_model)
+        dynamics_paths = save_dynamics_models(
+            sup_model,
+            ranking_new_models,
+            dynamics_dir,
+            value_aware_model=value_aware_model,
+            morel_model=morel_model,
+            morel_info=morel_info,
+        )
         dynamics_trained = True
         dynamics_train_time = time.perf_counter() - start_time
 
     dyn_log = {"dynamics/trained": int(dynamics_trained)}
     if dynamics_train_time is not None:
         dyn_log["timing/dynamics_training_sec"] = dynamics_train_time
+    if morel_info is not None:
+        if morel_info.get("threshold") is not None:
+            dyn_log["dynamics/morel_threshold"] = morel_info["threshold"]
+        if morel_info.get("halt_reward") is not None:
+            dyn_log["dynamics/morel_halt_reward"] = morel_info["halt_reward"]
+        if morel_info.get("disagreement_mean") is not None:
+            dyn_log["dynamics/morel_disagreement_mean"] = morel_info["disagreement_mean"]
     wandb_log(wandb_run, dyn_log)
 
     # =========================================================================
@@ -1525,6 +1805,28 @@ def run_pipeline(
                 value_aware_model, train_states, train_actions, train_next_states, device
             )
 
+        # MOReL pessimistic-MDP evaluation (fixed-policy rollouts)
+        dyn_morel_pess: Optional[float] = None
+        dyn_morel_pess_stderr: Optional[float] = None
+        dyn_morel_unknown_rate: Optional[float] = None
+        dyn_morel_halted_fraction: Optional[float] = None
+        if morel_model is not None:
+            morel_seed = int(args.seed + snap["timesteps"])
+            dyn_morel_pess, dyn_morel_pess_stderr, morel_metrics = evaluate_in_morel_pessimistic_mdp(
+                morel_model=morel_model,
+                policy=policy,
+                initial_states=initial_states,
+                horizon=args.eval_horizon,
+                gamma=args.gamma,
+                rollouts=args.eval_rollouts,
+                seed=morel_seed,
+                reward_fn_torch=reward_fn_torch,
+                act_low=act_low,
+                act_high=act_high,
+            )
+            dyn_morel_unknown_rate = float(morel_metrics.get("unknown_rate", 0.0))
+            dyn_morel_halted_fraction = float(morel_metrics.get("halted_fraction", 0.0))
+
         # Create numpy wrapper for termination function if provided
         termination_fn_np: Optional[Callable[[np.ndarray], bool]] = None
         if termination_fn_torch is not None:
@@ -1564,6 +1866,14 @@ def run_pipeline(
             wandb_payload["eval/dynamics_value_aware_mse"] = dyn_value_aware_mse
         if dyn_value_aware_train_mse is not None:
             wandb_payload["eval/dynamics_value_aware_train_mse"] = dyn_value_aware_train_mse
+        if dyn_morel_pess is not None:
+            wandb_payload["eval/morel_pessimistic_return"] = dyn_morel_pess
+        if dyn_morel_pess_stderr is not None:
+            wandb_payload["eval/morel_pessimistic_stderr"] = dyn_morel_pess_stderr
+        if dyn_morel_unknown_rate is not None:
+            wandb_payload["eval/morel_unknown_rate"] = dyn_morel_unknown_rate
+        if dyn_morel_halted_fraction is not None:
+            wandb_payload["eval/morel_halted_fraction"] = dyn_morel_halted_fraction
 
         wandb_log(wandb_run, wandb_payload, step=int(snap["timesteps"]))
 
@@ -1582,6 +1892,10 @@ def run_pipeline(
                 "value_aware": dyn_value_aware,
                 "value_aware_mse": dyn_value_aware_mse,
                 "value_aware_train_mse": dyn_value_aware_train_mse,
+                "morel_pessimistic": dyn_morel_pess,
+                "morel_pessimistic_stderr": dyn_morel_pess_stderr,
+                "morel_unknown_rate": dyn_morel_unknown_rate,
+                "morel_halted_fraction": dyn_morel_halted_fraction,
             },
             "env_mc": fixed_env,
         })
@@ -1595,6 +1909,7 @@ def run_pipeline(
         "num_transitions": int(len(dataset.states)),
         "q_model_paths": q_model_paths,
         "dynamics_paths": dynamics_paths,
+        "morel_info": morel_info,
         "results": results,
     }
 
@@ -1616,6 +1931,7 @@ def run_pipeline(
             "num_transitions": int(len(dataset.states)),
             "q_model_paths": q_model_paths,
             "dynamics_paths": dynamics_paths,
+            "morel_info": morel_info,
             "results": results,
         })
         wandb_run.finish()
