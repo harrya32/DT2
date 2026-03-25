@@ -1,4 +1,4 @@
-# Related Works: DT2 vs. MOREL
+# Related Works: DT2 vs. MOREL vs. MOPO
 
 ## 1) DT2 (Decision-Targeted Digital Twins)
 
@@ -121,3 +121,61 @@ In `exps/base_pipeline.py` evaluation section (after line ~1458):
 
 ## 5) Practical note on fit with current repository
 Current DT2 code is optimized for ranking candidate policies using learned dynamics and FQE proxies. In your requested scope, MOREL is used as a conservative dynamics backend: train ensemble dynamics + define pessimistic MDP + unroll the existing fixed policy batch inside that pessimistic model for value comparison. No planner/policy-learning component is required.
+
+## 6) MOPO (Model-Based Offline Policy Optimization)
+
+### Method summary from the MOPO paper
+MOPO is also a model-based offline RL method, but unlike MOREL's hard unknown-region termination, it uses a soft uncertainty penalty in reward:
+
+- Define an uncertainty-penalized reward `r_tilde(s,a) = r(s,a) - lambda * u(s,a)`.
+- Optimize policy in the corresponding uncertainty-penalized MDP.
+- In practice, train an ensemble of probabilistic Gaussian dynamics models and penalize reward with a conservative uncertainty estimate.
+- The practical algorithm rolls out model trajectories, writes penalized rewards into model-generated replay, and updates policy with SAC on real + model data.
+
+(See `papers/MOPO.txt`: lines 123-126 for MOPO vs MOReL hard-vs-soft distinction, 313-317 for uncertainty-penalized MDP, 411-440 for practical uncertainty estimator and penalty, and 959-980 for Algorithm 2 rollout/update loop.)
+
+### How MOPO relates to DT2 and MOREL
+
+| Aspect | DT2 | MOREL | MOPO |
+|---|---|---|---|
+| Core objective | Preserve policy ranking during dynamics training (`L_sim + lambda_rank * L_rank`) | Build pessimistic MDP with hard `HALT` on unknown `(s,a)` | Optimize in uncertainty-penalized MDP with soft reward penalty |
+| Uncertainty role | Secondary (stability via truncated rollout + Q bootstrap) | Primary safety gate via thresholded USAD | Primary conservative signal via continuous penalty `lambda * u(s,a)` |
+| Treatment of risky regions | No explicit pessimistic transition rule | Immediate absorb/terminate with large negative reward | Allow temporary risky steps but charge penalty; no forced termination |
+| Coupling to OPE / ranking | Strong coupling via FQE targets | Not ranking-targeted | Not ranking-targeted; conservative policy optimization |
+| Closest method | Distinct objective family | Closest to MOPO among current methods | Closest to MOREL in this repo (same model-based offline + uncertainty framing) |
+
+### How to implement MOPO here (delta from current MOREL path)
+
+`src/morel.py` and `exps/base_pipeline.py` already provide most of the scaffolding for a MOPO branch. The main required changes versus the current MOREL implementation are:
+
+### A) Replace hard-threshold pessimism with soft reward penalty
+In `src/morel.py`:
+
+- Remove dependence on `unknown_mask(...)` thresholding (`MorelDynamicsEnsemble.unknown_mask`, line ~192) for MOPO execution.
+- Replace `pessimistic_step(...)` (line ~466), which halts trajectories and emits `halt_reward`, with a `mopo_step(...)` that:
+  - always transitions using the ensemble model,
+  - computes uncertainty `u(s,a)`,
+  - sets reward to `r_hat(s,a) - lambda_mopo * u(s,a)` (or `reward_fn_torch(s,a) - lambda_mopo * u(s,a)` for fixed-policy evaluation).
+- Replace `rollout_in_pessimistic_mdp(...)` (line ~511) with `rollout_in_mopo_penalized_mdp(...)` that accumulates penalized returns and does not maintain `halted` state.
+
+### B) Update uncertainty estimator to MOPO-style (paper-faithful)
+Current MOREL code uses pairwise disagreement of ensemble mean next states (`disagreement(...)`, line ~184). MOPO practical implementation uses uncertainty from probabilistic model variance (max ensemble std norm).
+
+So for paper-faithful MOPO:
+
+- Extend the dynamics member to output probabilistic parameters (including covariance/variance) instead of only deterministic next-state mean (`MorelDynamicsModel`, line ~61).
+- Add/retain ensemble training by MLE, then compute `u(s,a)` from predicted variance (max across members), matching MOPO Section 4.3.
+
+### C) Pipeline/CLI branching changes
+In `exps/base_pipeline.py`:
+
+- Add `mopo` to `--dynamics-models` choices (near line ~1361).
+- Add MOPO hyperparameters (`--mopo-lambda`, optionally MOPO-specific ensemble settings).
+- In `train_dynamics_models(...)` (line ~785 onward), add a `mopo` branch parallel to `morel`.
+- Add `evaluate_in_mopo_penalized_mdp(...)` parallel to `evaluate_in_morel_pessimistic_mdp(...)` (line ~1059).
+- Log MOPO metrics separately (e.g., `eval/mopo_penalized_return`, `eval/mopo_uncertainty_mean`, `eval/mopo_penalty_mean`) alongside existing MOREL logs.
+
+### D) Scope note: fixed-policy evaluation vs full MOPO
+For this repository's current scope (policy ranking/evaluation of pre-trained policies), MOPO can be integrated as a conservative evaluation backend exactly like MOREL, but with soft penalized rewards instead of HALT transitions.
+
+For full paper-faithful MOPO, an additional policy-learning stage is required: MBPO-style synthetic rollouts with penalized rewards and SAC updates on `D_env U D_model` (Algorithm 2), which is beyond the current fixed-policy-only MOREL evaluation path.

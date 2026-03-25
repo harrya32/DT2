@@ -37,6 +37,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.datasets import OfflineDataset
 from src.fqe import estimate_V_from_Q_on_s0
+from src.mopo import MopoDynamicsEnsemble, rollout_in_penalized_mdp, train_mopo_dynamics_ensemble
 from src.morel import MorelDynamicsEnsemble, rollout_in_pessimistic_mdp, train_dynamics_ensemble
 from src.networks import DynamicsNet, QNet
 from src.policies import TorchPolicy
@@ -326,6 +327,8 @@ def save_dynamics_models(
     value_aware_model: Optional[DynamicsNet] = None,
     morel_model: Optional[MorelDynamicsEnsemble] = None,
     morel_info: Optional[Dict[str, Any]] = None,
+    mopo_model: Optional[MopoDynamicsEnsemble] = None,
+    mopo_info: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, object]:
     """Save dynamics models and create a manifest."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -337,6 +340,8 @@ def save_dynamics_models(
         "value_aware": None,
         "morel": None,
         "morel_info": None,
+        "mopo": None,
+        "mopo_info": None,
     }
     if sup_model is not None:
         paths["supervised"] = (directory / "dynamics_supervised.pt").as_posix()
@@ -356,6 +361,12 @@ def save_dynamics_models(
         torch.save(copy.deepcopy(morel_model).cpu(), paths["morel"])
     if morel_info is not None:
         paths["morel_info"] = morel_info
+
+    if mopo_model is not None:
+        paths["mopo"] = (directory / "dynamics_mopo.pt").as_posix()
+        torch.save(copy.deepcopy(mopo_model).cpu(), paths["mopo"])
+    if mopo_info is not None:
+        paths["mopo_info"] = mopo_info
 
     manifest = directory / "manifest.json"
     with open(manifest, "w", encoding="utf-8") as f:
@@ -409,6 +420,20 @@ def load_morel_model_from_paths(
     return model
 
 
+def load_mopo_model_from_paths(
+    paths: Mapping[str, object],
+    device: torch.device,
+) -> Optional[MopoDynamicsEnsemble]:
+    """Load a saved MOPO ensemble from manifest paths (if present)."""
+    path_obj = paths.get("mopo")
+    if path_obj is None:
+        return None
+    model = torch.load(str(path_obj), map_location=device, weights_only=False)
+    if hasattr(model, "to"):
+        model.to(device)
+    return model
+
+
 def _safe_json_number(value: Optional[float]) -> Optional[float]:
     if value is None:
         return None
@@ -454,12 +479,71 @@ def compact_morel_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
     return info
 
 
+def compact_mopo_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Convert MOPO training info to a compact JSON-serializable dict."""
+    if raw_info is None:
+        return None
+
+    info: Dict[str, Any] = {}
+    scalar_fields = (
+        "uncertainty_mean",
+        "uncertainty_std",
+        "uncertainty_max",
+        "penalty_coef",
+        "holdout_size",
+        "ensemble_size",
+        "elite_size",
+        "hidden_dim",
+        "hidden_layers",
+        "epochs",
+        "batch_size",
+        "lr",
+    )
+    for field in scalar_fields:
+        if hasattr(raw_info, field):
+            value = getattr(raw_info, field)
+            if isinstance(value, bool):
+                info[field] = bool(value)
+            elif isinstance(value, (int, np.integer)):
+                info[field] = int(value)
+            else:
+                info[field] = _safe_json_number(float(value))
+
+    if hasattr(raw_info, "bootstrap"):
+        info["bootstrap"] = bool(getattr(raw_info, "bootstrap"))
+
+    if hasattr(raw_info, "elite_indices"):
+        elite = getattr(raw_info, "elite_indices")
+        info["elite_indices"] = [int(v) for v in elite]
+
+    if hasattr(raw_info, "member_holdout_nll"):
+        holdout_losses = getattr(raw_info, "member_holdout_nll")
+        info["member_holdout_nll"] = [_safe_json_number(float(v)) for v in holdout_losses]
+
+    if hasattr(raw_info, "model_losses"):
+        losses = getattr(raw_info, "model_losses")
+        final_losses: List[Optional[float]] = []
+        epochs_per_member: List[int] = []
+        for member_losses in losses:
+            if member_losses:
+                final_losses.append(_safe_json_number(float(member_losses[-1])))
+                epochs_per_member.append(int(len(member_losses)))
+            else:
+                final_losses.append(None)
+                epochs_per_member.append(0)
+        info["member_final_losses"] = final_losses
+        info["member_epochs"] = epochs_per_member
+
+    return info
+
+
 def find_missing_requested_dynamics_models(
     requested_models: Sequence[str],
     supervised_model: Optional[DynamicsNet],
     ranking_new_models: Mapping[str, DynamicsNet],
     value_aware_model: Optional[DynamicsNet],
     morel_model: Optional[MorelDynamicsEnsemble],
+    mopo_model: Optional[MopoDynamicsEnsemble],
     value_aware_only: bool = False,
 ) -> List[str]:
     """Return requested dynamics model names that are missing from loaded artifacts."""
@@ -475,6 +559,8 @@ def find_missing_requested_dynamics_models(
             missing.append(loss_name)
     if "morel" in requested_set and morel_model is None:
         missing.append("morel")
+    if "mopo" in requested_set and mopo_model is None:
+        missing.append("mopo")
     return missing
 
 
@@ -823,24 +909,36 @@ def train_dynamics_models(
     morel_reward_offset: Optional[float] = None,
     morel_halt_reward: Optional[float] = None,
     morel_bootstrap: bool = True,
+    mopo_ensemble_size: int = 7,
+    mopo_elite_size: int = 5,
+    mopo_hidden_dim: int = 200,
+    mopo_hidden_layers: int = 4,
+    mopo_epochs: int = 300,
+    mopo_batch_size: int = 256,
+    mopo_lr: float = 1e-3,
+    mopo_holdout_size: int = 1000,
+    mopo_penalty_coef: float = 1.0,
+    mopo_bootstrap: bool = True,
 ) -> Tuple[
     Optional[DynamicsNet],
     Dict[str, DynamicsNet],
     Optional[DynamicsNet],
     Optional[MorelDynamicsEnsemble],
     Optional[Dict[str, Any]],
+    Optional[MopoDynamicsEnsemble],
+    Optional[Dict[str, Any]],
 ]:
     """Train supervised and ranking-aware dynamics models.
     
     Args:
-        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet', 'morel'.
+        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet', 'morel', 'mopo'.
                         If None, trains all models.
         value_aware_only: If True, only train the value-aware model (ignore dynamics_models).
         act_low: Lower bound for actions (used by value-aware model).
         act_high: Upper bound for actions (used by value-aware model).
     
     Returns:
-        Tuple of (supervised_model, ranking_new_models, value_aware_model, morel_model, morel_info)
+        Tuple of (supervised_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info)
     """
     if dynamics_models is None:
         dynamics_models = ["supervised", "kendall", "hinge", "listnet"]
@@ -873,7 +971,7 @@ def train_dynamics_models(
             act_low=act_low,
             act_high=act_high,
         )
-        return None, {}, value_aware_model, None, None
+        return None, {}, value_aware_model, None, None, None, None
 
     # Supervised model
     sup_model: Optional[DynamicsNet] = None
@@ -905,6 +1003,8 @@ def train_dynamics_models(
     value_aware_model: Optional[DynamicsNet] = None
     morel_model: Optional[MorelDynamicsEnsemble] = None
     morel_info: Optional[Dict[str, Any]] = None
+    mopo_model: Optional[MopoDynamicsEnsemble] = None
+    mopo_info: Optional[Dict[str, Any]] = None
 
     ranking_losses_to_train = [loss for loss in ("kendall", "hinge", "listnet") if loss in dynamics_models]
     for loss_name in ranking_losses_to_train:
@@ -976,7 +1076,43 @@ def train_dynamics_models(
         )
         morel_info = compact_morel_info(raw_morel_info)
 
-    return sup_model, ranking_new_models, value_aware_model, morel_model, morel_info
+    if "mopo" in dynamics_models:
+        mopo_log_hook: Optional[Callable[[int, int, float], None]] = None
+        if wandb_run is not None:
+            def _hook(member_idx: int, epoch: int, loss: float) -> None:
+                step_key = f"dynamics/mopo/member_{member_idx}/loss_step"
+                wandb_log(
+                    wandb_run,
+                    {
+                        f"dynamics/mopo/member_{member_idx}/loss": float(loss),
+                        step_key: int(epoch + 1),
+                    },
+                )
+            mopo_log_hook = _hook
+
+        mopo_model_raw, raw_mopo_info = train_mopo_dynamics_ensemble(
+            dataset=dataset,
+            ensemble_size=int(max(1, mopo_ensemble_size)),
+            elite_size=int(max(1, mopo_elite_size)),
+            hidden_dim=int(max(1, mopo_hidden_dim)),
+            hidden_layers=int(max(1, mopo_hidden_layers)),
+            epochs=int(max(1, mopo_epochs)),
+            batch_size=int(max(1, mopo_batch_size)),
+            lr=float(mopo_lr),
+            holdout_size=int(max(1, mopo_holdout_size)),
+            penalty_coef=float(mopo_penalty_coef),
+            seed=seed,
+            env_name=env_name,
+            state_low=state_low,
+            state_high=state_upper,
+            bootstrap=mopo_bootstrap,
+            device=device,
+            log_hook=mopo_log_hook,
+        )
+        mopo_model = mopo_model_raw
+        mopo_info = compact_mopo_info(raw_mopo_info)
+
+    return sup_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info
 
 
 # =============================================================================
@@ -1082,6 +1218,35 @@ def evaluate_in_morel_pessimistic_mdp(
         act_high=act_high,
         deterministic_policy=True,
         deterministic_dynamics=True,
+    )
+
+
+def evaluate_in_mopo_penalized_mdp(
+    mopo_model: MopoDynamicsEnsemble,
+    policy: TorchPolicy,
+    initial_states: np.ndarray,
+    horizon: int,
+    gamma: float,
+    rollouts: int,
+    seed: int,
+    act_low: float = -1.0,
+    act_high: float = 1.0,
+    deterministic_policy: bool = True,
+    deterministic_dynamics: bool = False,
+) -> Tuple[float, float, Dict[str, float]]:
+    """Evaluate a fixed policy in the MOPO uncertainty-penalized model MDP."""
+    return rollout_in_penalized_mdp(
+        ensemble=mopo_model,
+        policy=policy,
+        initial_states=initial_states,
+        horizon=horizon,
+        gamma=gamma,
+        rollouts=rollouts,
+        seed=seed,
+        act_low=act_low,
+        act_high=act_high,
+        deterministic_policy=deterministic_policy,
+        deterministic_dynamics=deterministic_dynamics,
     )
 
 
@@ -1291,6 +1456,17 @@ class BasePipelineConfig:
     morel_reward_offset: float = -1.0  # <0 -> use environment defaults
     morel_halt_reward: Optional[float] = None
     morel_bootstrap: bool = True
+    mopo_ensemble_size: int = 7
+    mopo_elite_size: int = 5
+    mopo_hidden_dim: int = 200
+    mopo_hidden_layers: int = 4
+    mopo_epochs: int = 300
+    mopo_batch_size: int = 256
+    mopo_lr: float = 1e-3
+    mopo_holdout_size: int = 1000
+    mopo_penalty_coef: float = 1.0
+    mopo_bootstrap: bool = True
+    mopo_deterministic_dynamics_eval: bool = False
     
     # Evaluation
     eval_episodes: int = 20
@@ -1362,8 +1538,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         nargs="+",
         default=["supervised", "kendall", "hinge", "listnet"],
-        choices=["supervised", "kendall", "hinge", "listnet", "morel"],
-        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet, morel",
+        choices=["supervised", "kendall", "hinge", "listnet", "morel", "mopo"],
+        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet, morel, mopo",
     )
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
@@ -1393,6 +1569,17 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--morel-reward-offset", type=float, default=-1.0, help="Offset in halt reward r_min(D)-offset; negative means use env defaults")
     parser.add_argument("--morel-halt-reward", type=float, default=None, help="Direct halt reward override (takes precedence over offset)")
     parser.add_argument("--morel-no-bootstrap", action="store_true", help="Disable bootstrap resampling across MOReL ensemble members")
+    parser.add_argument("--mopo-ensemble-size", type=int, default=7, help="MOPO ensemble size (paper: 7)")
+    parser.add_argument("--mopo-elite-size", type=int, default=5, help="MOPO number of elite models kept by holdout NLL (paper: 5)")
+    parser.add_argument("--mopo-hidden-dim", type=int, default=200, help="MOPO hidden width (paper: 200)")
+    parser.add_argument("--mopo-hidden-layers", type=int, default=4, help="MOPO hidden layers in feedforward dynamics (paper: 4)")
+    parser.add_argument("--mopo-epochs", type=int, default=300, help="MOPO dynamics epochs")
+    parser.add_argument("--mopo-batch-size", type=int, default=256, help="MOPO dynamics batch size (paper reports 256 for SAC updates)")
+    parser.add_argument("--mopo-lr", type=float, default=1e-3, help="MOPO dynamics Adam learning rate")
+    parser.add_argument("--mopo-holdout-size", type=int, default=1000, help="MOPO holdout transitions for elite selection (paper: 1000)")
+    parser.add_argument("--mopo-penalty-coef", type=float, default=1.0, help="MOPO uncertainty penalty coefficient lambda")
+    parser.add_argument("--mopo-no-bootstrap", action="store_true", help="Disable bootstrap resampling across MOPO ensemble members")
+    parser.add_argument("--mopo-deterministic-dynamics-eval", action="store_true", help="Use deterministic MOPO dynamics means at evaluation time")
     
     # Evaluation
     parser.add_argument("--eval-episodes", type=int, default=20)
@@ -1617,6 +1804,8 @@ def run_pipeline(
     dynamics_paths: Dict[str, object] = {}
     morel_model: Optional[MorelDynamicsEnsemble] = None
     morel_info: Optional[Dict[str, Any]] = None
+    mopo_model: Optional[MopoDynamicsEnsemble] = None
+    mopo_info: Optional[Dict[str, Any]] = None
 
     value_aware_only = getattr(args, "value_aware_only", False)
     missing_requested_models: List[str] = []
@@ -1626,9 +1815,13 @@ def run_pipeline(
         print("[Step 4] Using existing dynamics models...")
         sup_model, ranking_new_models, dynamics_paths, value_aware_model = load_dynamics_models(dynamics_dir, device)
         morel_model = load_morel_model_from_paths(dynamics_paths, device)
+        mopo_model = load_mopo_model_from_paths(dynamics_paths, device)
         raw_morel_info = dynamics_paths.get("morel_info")
         if isinstance(raw_morel_info, dict):
             morel_info = raw_morel_info
+        raw_mopo_info = dynamics_paths.get("mopo_info")
+        if isinstance(raw_mopo_info, dict):
+            mopo_info = raw_mopo_info
 
         missing_requested_models = find_missing_requested_dynamics_models(
             requested_models=args.dynamics_models,
@@ -1636,6 +1829,7 @@ def run_pipeline(
             ranking_new_models=ranking_new_models,
             value_aware_model=value_aware_model,
             morel_model=morel_model,
+            mopo_model=mopo_model,
             value_aware_only=value_aware_only,
         )
         if missing_requested_models:
@@ -1668,7 +1862,7 @@ def run_pipeline(
             print("[Step 4] Training dynamics models...")
             print(f"  Models to train: {args.dynamics_models}")
         start_time = time.perf_counter()
-        sup_model, ranking_new_models, value_aware_model, morel_model, morel_info = train_dynamics_models(
+        sup_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info = train_dynamics_models(
             dyn_dataset,
             torch_policies,
             q_models,
@@ -1711,6 +1905,16 @@ def run_pipeline(
             morel_reward_offset=None if args.morel_reward_offset < 0 else args.morel_reward_offset,
             morel_halt_reward=args.morel_halt_reward,
             morel_bootstrap=not args.morel_no_bootstrap,
+            mopo_ensemble_size=args.mopo_ensemble_size,
+            mopo_elite_size=args.mopo_elite_size,
+            mopo_hidden_dim=args.mopo_hidden_dim,
+            mopo_hidden_layers=args.mopo_hidden_layers,
+            mopo_epochs=args.mopo_epochs,
+            mopo_batch_size=args.mopo_batch_size,
+            mopo_lr=args.mopo_lr,
+            mopo_holdout_size=args.mopo_holdout_size,
+            mopo_penalty_coef=args.mopo_penalty_coef,
+            mopo_bootstrap=not args.mopo_no_bootstrap,
         )
         dynamics_paths = save_dynamics_models(
             sup_model,
@@ -1719,6 +1923,8 @@ def run_pipeline(
             value_aware_model=value_aware_model,
             morel_model=morel_model,
             morel_info=morel_info,
+            mopo_model=mopo_model,
+            mopo_info=mopo_info,
         )
         dynamics_trained = True
         dynamics_train_time = time.perf_counter() - start_time
@@ -1733,6 +1939,15 @@ def run_pipeline(
             dyn_log["dynamics/morel_halt_reward"] = morel_info["halt_reward"]
         if morel_info.get("disagreement_mean") is not None:
             dyn_log["dynamics/morel_disagreement_mean"] = morel_info["disagreement_mean"]
+    if mopo_info is not None:
+        if mopo_info.get("penalty_coef") is not None:
+            dyn_log["dynamics/mopo_penalty_coef"] = mopo_info["penalty_coef"]
+        if mopo_info.get("uncertainty_mean") is not None:
+            dyn_log["dynamics/mopo_uncertainty_mean"] = mopo_info["uncertainty_mean"]
+        if mopo_info.get("uncertainty_max") is not None:
+            dyn_log["dynamics/mopo_uncertainty_max"] = mopo_info["uncertainty_max"]
+        if mopo_info.get("elite_size") is not None:
+            dyn_log["dynamics/mopo_elite_size"] = mopo_info["elite_size"]
     wandb_log(wandb_run, dyn_log)
 
     # =========================================================================
@@ -1827,6 +2042,31 @@ def run_pipeline(
             dyn_morel_unknown_rate = float(morel_metrics.get("unknown_rate", 0.0))
             dyn_morel_halted_fraction = float(morel_metrics.get("halted_fraction", 0.0))
 
+        # MOPO uncertainty-penalized model evaluation (fixed-policy rollouts)
+        dyn_mopo_penalized: Optional[float] = None
+        dyn_mopo_penalized_stderr: Optional[float] = None
+        dyn_mopo_uncertainty_mean: Optional[float] = None
+        dyn_mopo_penalty_mean: Optional[float] = None
+        dyn_mopo_model_reward_mean: Optional[float] = None
+        if mopo_model is not None:
+            mopo_seed = int(args.seed + snap["timesteps"] + 17)
+            dyn_mopo_penalized, dyn_mopo_penalized_stderr, mopo_metrics = evaluate_in_mopo_penalized_mdp(
+                mopo_model=mopo_model,
+                policy=policy,
+                initial_states=initial_states,
+                horizon=args.eval_horizon,
+                gamma=args.gamma,
+                rollouts=args.eval_rollouts,
+                seed=mopo_seed,
+                act_low=act_low,
+                act_high=act_high,
+                deterministic_policy=True,
+                deterministic_dynamics=bool(args.mopo_deterministic_dynamics_eval),
+            )
+            dyn_mopo_uncertainty_mean = float(mopo_metrics.get("uncertainty_mean", 0.0))
+            dyn_mopo_penalty_mean = float(mopo_metrics.get("penalty_mean", 0.0))
+            dyn_mopo_model_reward_mean = float(mopo_metrics.get("model_reward_mean", 0.0))
+
         # Create numpy wrapper for termination function if provided
         termination_fn_np: Optional[Callable[[np.ndarray], bool]] = None
         if termination_fn_torch is not None:
@@ -1874,6 +2114,16 @@ def run_pipeline(
             wandb_payload["eval/morel_unknown_rate"] = dyn_morel_unknown_rate
         if dyn_morel_halted_fraction is not None:
             wandb_payload["eval/morel_halted_fraction"] = dyn_morel_halted_fraction
+        if dyn_mopo_penalized is not None:
+            wandb_payload["eval/mopo_penalized_return"] = dyn_mopo_penalized
+        if dyn_mopo_penalized_stderr is not None:
+            wandb_payload["eval/mopo_penalized_stderr"] = dyn_mopo_penalized_stderr
+        if dyn_mopo_uncertainty_mean is not None:
+            wandb_payload["eval/mopo_uncertainty_mean"] = dyn_mopo_uncertainty_mean
+        if dyn_mopo_penalty_mean is not None:
+            wandb_payload["eval/mopo_penalty_mean"] = dyn_mopo_penalty_mean
+        if dyn_mopo_model_reward_mean is not None:
+            wandb_payload["eval/mopo_model_reward_mean"] = dyn_mopo_model_reward_mean
 
         wandb_log(wandb_run, wandb_payload, step=int(snap["timesteps"]))
 
@@ -1896,6 +2146,11 @@ def run_pipeline(
                 "morel_pessimistic_stderr": dyn_morel_pess_stderr,
                 "morel_unknown_rate": dyn_morel_unknown_rate,
                 "morel_halted_fraction": dyn_morel_halted_fraction,
+                "mopo_penalized": dyn_mopo_penalized,
+                "mopo_penalized_stderr": dyn_mopo_penalized_stderr,
+                "mopo_uncertainty_mean": dyn_mopo_uncertainty_mean,
+                "mopo_penalty_mean": dyn_mopo_penalty_mean,
+                "mopo_model_reward_mean": dyn_mopo_model_reward_mean,
             },
             "env_mc": fixed_env,
         })
@@ -1910,6 +2165,7 @@ def run_pipeline(
         "q_model_paths": q_model_paths,
         "dynamics_paths": dynamics_paths,
         "morel_info": morel_info,
+        "mopo_info": mopo_info,
         "results": results,
     }
 
@@ -1932,6 +2188,7 @@ def run_pipeline(
             "q_model_paths": q_model_paths,
             "dynamics_paths": dynamics_paths,
             "morel_info": morel_info,
+            "mopo_info": mopo_info,
             "results": results,
         })
         wandb_run.finish()
