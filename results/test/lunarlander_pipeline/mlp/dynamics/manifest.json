@@ -4,39 +4,52 @@
   "q_aware": {},
   "ranking_new": {},
   "value_aware": null,
-  "morel": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_morel.pt",
-  "morel_info": {
-    "disagreement_mean": 0.03954736143350601,
-    "disagreement_std": 0.08471517264842987,
-    "disagreement_max": 2.2544422149658203,
-    "threshold": 0.46312322467565536,
-    "beta_effective": 5.0,
-    "halt_reward": -150.0,
-    "reward_min": -100.0,
-    "reward_offset": 50.0,
-    "val_fraction": 0.1,
-    "early_stop_patience": 20.0,
-    "min_epochs": 50.0,
-    "min_delta": 0.0,
-    "member_final_losses": [
-      0.34387513001759845,
-      0.29033558319012326,
-      0.24673561565577984,
-      0.2916831945379575
-    ],
-    "member_epochs": [
-      187,
-      361,
-      318,
-      273
-    ],
-    "member_best_val_loss": [
-      0.4445505738258362,
-      0.492458701133728,
-      0.34665337204933167,
-      0.2540595829486847
-    ]
-  },
+  "morel": null,
+  "morel_info": null,
   "mopo": null,
-  "mopo_info": null
+  "mopo_info": null,
+  "romi": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_romi.pt",
+  "romi_info": {
+    "uncertainty_mean": 0.09325359761714935,
+    "uncertainty_std": 0.024487022310495377,
+    "uncertainty_max": 0.1933659315109253,
+    "model_buffer_size": 200000,
+    "ensemble_size": 4,
+    "uncertainty_scale": 0.1,
+    "uncertainty_samples": 20,
+    "real_data_ratio": 0.5,
+    "rollout_horizon": 5,
+    "rollouts_per_epoch": 512,
+    "policy_updates_per_epoch": 200,
+    "dynamics_updates_per_epoch": 1,
+    "weight_updates_per_epoch": 1,
+    "batch_size": 256,
+    "automatic_entropy_tuning": true,
+    "epoch_dynamics_loss_epochs": 300,
+    "epoch_dynamics_loss_final": 6.509018421173096,
+    "epoch_weight_loss_epochs": 300,
+    "epoch_weight_loss_final": 728574.5,
+    "epoch_actor_loss_epochs": 300,
+    "epoch_actor_loss_final": 2318.216014404297,
+    "epoch_critic1_loss_epochs": 300,
+    "epoch_critic1_loss_final": 19264.7465234375,
+    "epoch_critic2_loss_epochs": 300,
+    "epoch_critic2_loss_final": 19198.958486328123,
+    "epoch_alpha_loss_epochs": 300,
+    "epoch_alpha_loss_final": -0.21888949271291494,
+    "epoch_alpha_epochs": 300,
+    "epoch_alpha_final": 0.5950051546096802,
+    "pretrain_member_final_losses": [
+      14.381186485290527,
+      12.337682723999023,
+      9.549588203430176,
+      9.004030227661133
+    ],
+    "pretrain_member_steps": [
+      50,
+      50,
+      50,
+      50
+    ]
+  }
 }

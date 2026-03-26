@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(4000)
+DEFAULT_SEEDS=(4000 4001 4002)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -37,12 +37,13 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[romi] Running seed ${seed}..."
+    python exps/hopper_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cheetah_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/ant_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
     python exps/lunarlander_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/hopper_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/walker_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/cheetah_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/ant_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    #python exps/pendulum_runner.py --dynamics-models romi --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+
     echo "[romi] Completed seed ${seed}"
     echo
 done
