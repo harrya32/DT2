@@ -604,6 +604,13 @@ def compact_romi_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
         "policy_updates_per_epoch",
         "dynamics_updates_per_epoch",
         "weight_updates_per_epoch",
+        "step_per_epoch",
+        "rollout_freq",
+        "rollout_batch_size",
+        "dynamics_update_freq",
+        "adv_train_steps",
+        "model_retain_epochs",
+        "weight_input_mode",
         "batch_size",
         "automatic_entropy_tuning",
     )
@@ -612,6 +619,8 @@ def compact_romi_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
             value = getattr(raw_info, field)
             if isinstance(value, bool):
                 info[field] = bool(value)
+            elif isinstance(value, str):
+                info[field] = value
             elif isinstance(value, (int, np.integer)):
                 info[field] = int(value)
             else:
@@ -626,6 +635,10 @@ def compact_romi_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
         "epoch_critic2_loss",
         "epoch_alpha_loss",
         "epoch_alpha",
+        "epoch_rollout_calls",
+        "epoch_dynamics_update_calls",
+        "epoch_dynamics_optimizer_steps",
+        "epoch_weight_optimizer_steps",
     )
     for field in series_fields:
         if hasattr(raw_info, field):
@@ -1000,6 +1013,7 @@ def train_dynamics_models(
     early_stop_patience: int,
     min_epochs: int,
     reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
     dynamics_loss: str = "nll",
     hidden_dim: int = 256,
     backbone: str = "mlp",
@@ -1061,6 +1075,13 @@ def train_dynamics_models(
     romi_bilevel_inner_lr: float = 3e-4,
     romi_bootstrap: bool = True,
     romi_policy_pretrain_steps: int = 0,
+    romi_step_per_epoch: int = 0,
+    romi_rollout_freq: int = 0,
+    romi_rollout_batch_size: int = 0,
+    romi_dynamics_update_freq: int = 0,
+    romi_adv_train_steps: int = 1000,
+    romi_model_retain_epochs: int = 5,
+    romi_weight_input_mode: str = "sa_snext",
 ) -> Tuple[
     Optional[DynamicsNet],
     Dict[str, DynamicsNet],
@@ -1309,6 +1330,14 @@ def train_dynamics_models(
             bilevel_inner_lr=float(max(1e-8, romi_bilevel_inner_lr)),
             bootstrap=bool(romi_bootstrap),
             policy_pretrain_steps=int(max(0, romi_policy_pretrain_steps)),
+            step_per_epoch=None if int(romi_step_per_epoch) <= 0 else int(romi_step_per_epoch),
+            rollout_freq=None if int(romi_rollout_freq) <= 0 else int(romi_rollout_freq),
+            rollout_batch_size=None if int(romi_rollout_batch_size) <= 0 else int(romi_rollout_batch_size),
+            dynamics_update_freq=None if int(romi_dynamics_update_freq) <= 0 else int(romi_dynamics_update_freq),
+            adv_train_steps=int(max(1, romi_adv_train_steps)),
+            model_retain_epochs=int(max(1, romi_model_retain_epochs)),
+            weight_input_mode=str(romi_weight_input_mode),
+            termination_fn_torch=termination_fn_torch,
             act_low=float(act_low),
             act_high=float(act_high),
             state_low=state_low,
@@ -1482,6 +1511,7 @@ def evaluate_in_romi_model_mdp(
     act_high: float = 1.0,
     deterministic_policy: bool = True,
     deterministic_dynamics: bool = False,
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
 ) -> Tuple[float, float, Dict[str, float]]:
     """Evaluate a fixed policy in ROMI learned dynamics."""
     return rollout_in_romi_model(
@@ -1497,6 +1527,7 @@ def evaluate_in_romi_model_mdp(
         act_high=act_high,
         deterministic_policy=deterministic_policy,
         deterministic_dynamics=deterministic_dynamics,
+        termination_fn_torch=termination_fn_torch,
     )
 
 
@@ -1743,6 +1774,13 @@ class BasePipelineConfig:
     romi_bilevel_inner_lr: float = 3e-4
     romi_bootstrap: bool = True
     romi_policy_pretrain_steps: int = 0
+    romi_step_per_epoch: int = 0
+    romi_rollout_freq: int = 0
+    romi_rollout_batch_size: int = 0
+    romi_dynamics_update_freq: int = 0
+    romi_adv_train_steps: int = 1000
+    romi_model_retain_epochs: int = 5
+    romi_weight_input_mode: str = "sa_snext"
     romi_deterministic_dynamics_eval: bool = False
     
     # Evaluation
@@ -1888,6 +1926,13 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--romi-bilevel-inner-lr", type=float, default=3e-4, help="ROMI inner-step lr used for implicit bilevel update")
     parser.add_argument("--romi-no-bootstrap", action="store_true", help="Disable bootstrap resampling across ROMI ensemble members")
     parser.add_argument("--romi-policy-pretrain-steps", type=int, default=0, help="Optional behavior-cloning warmup steps for ROMI policy")
+    parser.add_argument("--romi-step-per-epoch", type=int, default=0, help="ROMI scheduler steps per epoch (0 uses romi-policy-updates-per-epoch)")
+    parser.add_argument("--romi-rollout-freq", type=int, default=0, help="ROMI scheduler rollout frequency in policy steps (0 uses one rollout trigger per epoch)")
+    parser.add_argument("--romi-rollout-batch-size", type=int, default=0, help="ROMI rollout start-state batch size per rollout trigger (0 uses romi-rollouts-per-epoch)")
+    parser.add_argument("--romi-dynamics-update-freq", type=int, default=0, help="ROMI scheduler dynamics-update frequency in policy steps (0 derives from romi-dynamics-updates-per-epoch)")
+    parser.add_argument("--romi-adv-train-steps", type=int, default=1000, help="ROMI adversarial dynamics steps per triggered dynamics update")
+    parser.add_argument("--romi-model-retain-epochs", type=int, default=5, help="ROMI retain epochs used to derive model buffer size when capacity is not explicitly set")
+    parser.add_argument("--romi-weight-input-mode", type=str, default="sa_snext", choices=["sa_snext", "sa"], help="ROMI weighting-network input mode: sa_snext -> w(s,a,s'), sa -> w(s,a)")
     parser.add_argument("--romi-deterministic-dynamics-eval", action="store_true", help="Use deterministic ROMI dynamics means at evaluation time")
     
     # Evaluation
@@ -2206,6 +2251,7 @@ def run_pipeline(
             early_stop_patience=args.dyn_early_stop_patience,
             min_epochs=args.dyn_min_epochs,
             reward_fn_torch=reward_fn_torch,
+            termination_fn_torch=termination_fn_torch,
             dynamics_loss=args.dynamics_loss,
             hidden_dim=args.dyn_hidden_dim,
             backbone=args.backbone,
@@ -2267,6 +2313,13 @@ def run_pipeline(
             romi_bilevel_inner_lr=args.romi_bilevel_inner_lr,
             romi_bootstrap=not args.romi_no_bootstrap,
             romi_policy_pretrain_steps=args.romi_policy_pretrain_steps,
+            romi_step_per_epoch=args.romi_step_per_epoch,
+            romi_rollout_freq=args.romi_rollout_freq,
+            romi_rollout_batch_size=args.romi_rollout_batch_size,
+            romi_dynamics_update_freq=args.romi_dynamics_update_freq,
+            romi_adv_train_steps=args.romi_adv_train_steps,
+            romi_model_retain_epochs=args.romi_model_retain_epochs,
+            romi_weight_input_mode=args.romi_weight_input_mode,
         )
         dynamics_paths = save_dynamics_models(
             sup_model,
@@ -2447,6 +2500,7 @@ def run_pipeline(
                 act_high=act_high,
                 deterministic_policy=True,
                 deterministic_dynamics=bool(args.romi_deterministic_dynamics_eval),
+                termination_fn_torch=termination_fn_torch,
             )
             dyn_romi_uncertainty_mean = float(romi_metrics.get("uncertainty_mean", 0.0))
 

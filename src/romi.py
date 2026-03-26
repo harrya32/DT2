@@ -59,6 +59,15 @@ class RomiDefaults:
     bootstrap: bool = True
     automatic_entropy_tuning: bool = True
     policy_pretrain_steps: int = 0
+    # Scheduler defaults are chosen for backward compatibility with existing
+    # pipeline defaults unless explicitly overridden.
+    step_per_epoch: int = 200
+    rollout_freq: int = 200
+    rollout_batch_size: int = 512
+    dynamics_update_freq: int = 200
+    adv_train_steps: int = 1000
+    model_retain_epochs: int = 5
+    weight_input_mode: str = "sa_snext"
 
 
 def get_romi_defaults(env_name: Optional[str] = None) -> RomiDefaults:
@@ -305,7 +314,11 @@ class RomiDynamicsEnsemble(nn.Module):
 
 
 class AdaptiveWeightNet(nn.Module):
-    """Adaptive sample reweighting network w_nu(s, a, s')."""
+    """Adaptive sample reweighting network.
+
+    Supports either w_nu(s, a, s') (`input_mode="sa_snext"`) or w_nu(s, a)
+    (`input_mode="sa"`).
+    """
 
     def __init__(
         self,
@@ -315,14 +328,21 @@ class AdaptiveWeightNet(nn.Module):
         hidden_layers: int = 3,
         weight_min: float = 0.5,
         weight_max: float = 2.0,
+        input_mode: str = "sa_snext",
     ) -> None:
         super().__init__()
         if hidden_layers < 1:
             raise ValueError("hidden_layers must be >= 1.")
         if weight_max <= weight_min:
             raise ValueError("weight_max must be > weight_min.")
+        if input_mode not in ("sa_snext", "sa"):
+            raise ValueError("input_mode must be one of {'sa_snext', 'sa'}.")
+        self.input_mode = str(input_mode)
 
-        in_dim = state_dim + act_dim + state_dim
+        if self.input_mode == "sa_snext":
+            in_dim = state_dim + act_dim + state_dim
+        else:
+            in_dim = state_dim + act_dim
         layers: List[nn.Module] = []
         cur = in_dim
         for _ in range(hidden_layers):
@@ -334,8 +354,18 @@ class AdaptiveWeightNet(nn.Module):
         self.weight_min = float(weight_min)
         self.weight_max = float(weight_max)
 
-    def forward(self, states: torch.Tensor, actions: torch.Tensor, next_states: torch.Tensor) -> torch.Tensor:
-        x = torch.cat([states, actions, next_states], dim=-1)
+    def forward(
+        self,
+        states: torch.Tensor,
+        actions: torch.Tensor,
+        next_states: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        if self.input_mode == "sa_snext":
+            if next_states is None:
+                raise ValueError("next_states must be provided when input_mode='sa_snext'.")
+            x = torch.cat([states, actions, next_states], dim=-1)
+        else:
+            x = torch.cat([states, actions], dim=-1)
         h = self.body(x)
         raw = self.out(h).squeeze(-1)
         scale = 0.5 * (self.weight_max - self.weight_min)
@@ -539,6 +569,17 @@ class RomiTrainingInfo:
     policy_updates_per_epoch: int
     dynamics_updates_per_epoch: int
     weight_updates_per_epoch: int
+    step_per_epoch: int
+    rollout_freq: int
+    rollout_batch_size: int
+    dynamics_update_freq: int
+    adv_train_steps: int
+    model_retain_epochs: int
+    weight_input_mode: str
+    epoch_rollout_calls: List[int]
+    epoch_dynamics_update_calls: List[int]
+    epoch_dynamics_optimizer_steps: List[int]
+    epoch_weight_optimizer_steps: List[int]
     batch_size: int
     automatic_entropy_tuning: bool
 
@@ -655,6 +696,48 @@ def _min_uncertainty_target_values(
         flat, actor=actor, target_q1=target_q1, target_q2=target_q2, act_low=act_low, act_high=act_high
     ).reshape(bsz, k)
     return vals.min(dim=1).values
+
+
+def _combine_termination_outputs(
+    termination_output: object,
+    batch_size: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """Normalize termination function output to a boolean mask [B]."""
+    if isinstance(termination_output, (tuple, list)):
+        if len(termination_output) == 0:
+            raise ValueError("termination_fn_torch returned an empty tuple/list.")
+        parts = list(termination_output)
+    else:
+        parts = [termination_output]
+
+    merged: Optional[torch.Tensor] = None
+    for part in parts:
+        if not torch.is_tensor(part):
+            part_t = torch.as_tensor(part, device=device)
+        else:
+            part_t = part.to(device)
+        if part_t.ndim == 0:
+            part_t = part_t.expand(batch_size)
+        part_t = part_t.reshape(batch_size, -1)
+        part_mask = part_t.bool().any(dim=1)
+        merged = part_mask if merged is None else (merged | part_mask)
+
+    if merged is None:
+        raise ValueError("Failed to parse termination function output.")
+    return merged
+
+
+def _compute_weight_values(
+    weight_net: AdaptiveWeightNet,
+    states: torch.Tensor,
+    actions: torch.Tensor,
+    next_states: torch.Tensor,
+    weight_input_mode: str,
+) -> torch.Tensor:
+    if weight_input_mode == "sa":
+        return weight_net(states, actions, None)
+    return weight_net(states, actions, next_states)
 
 
 def robust_value_aware_loss(
@@ -779,16 +862,33 @@ def _append_model_rollouts(
     horizon: int,
     act_low: float,
     act_high: float,
-) -> None:
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+) -> int:
     states = start_states
     rollout_h = int(max(1, horizon))
+    transitions_added = 0
     for _ in range(rollout_h):
+        if states.size(0) == 0:
+            break
         actions = actor.sample_torch_actions(states, deterministic=False, act_low=act_low, act_high=act_high)
         next_states = ensemble.sample_next(states, actions, deterministic=False)
         rewards = reward_fn_torch(states, actions).reshape(-1).to(torch.float32)
-        dones = torch.zeros(states.size(0), dtype=torch.float32, device=states.device)
+        if termination_fn_torch is None:
+            dones = torch.zeros(states.size(0), dtype=torch.float32, device=states.device)
+        else:
+            termination_output = termination_fn_torch(next_states)
+            terminated = _combine_termination_outputs(termination_output, states.size(0), states.device)
+            dones = terminated.to(dtype=torch.float32)
         buffer.add_batch(states, actions, rewards, next_states, dones)
-        states = next_states
+        transitions_added += int(states.size(0))
+        if termination_fn_torch is None:
+            states = next_states
+        else:
+            nonterminal = dones < 0.5
+            if not torch.any(nonterminal):
+                break
+            states = next_states[nonterminal]
+    return transitions_added
 
 
 def _sample_mixed_batch(
@@ -839,6 +939,112 @@ def _batched_uncertainty(
     return torch.cat(vals, dim=0)
 
 
+def _run_dynamics_update_block(
+    ensemble: RomiDynamicsEnsemble,
+    dyn_opts: Sequence[torch.optim.Optimizer],
+    weight_net: AdaptiveWeightNet,
+    weight_optimizer: torch.optim.Optimizer,
+    actor: TanhGaussianActor,
+    target_q1: QCritic,
+    target_q2: QCritic,
+    states: torch.Tensor,
+    actions: torch.Tensor,
+    next_states: torch.Tensor,
+    batch_size: int,
+    adv_train_steps: int,
+    weight_updates_per_step: int,
+    bilevel_inner_lr: float,
+    uncertainty_scale: float,
+    uncertainty_samples: int,
+    act_low: float,
+    act_high: float,
+    weight_input_mode: str,
+    log_hook: Optional[Callable[[str, int, float], None]] = None,
+    epoch_idx: Optional[int] = None,
+) -> Tuple[List[float], List[float], int, int]:
+    """Run a block of adversarial dynamics updates and outer weighting updates."""
+    dyn_losses: List[float] = []
+    outer_losses: List[float] = []
+    dyn_steps = 0
+    outer_steps = 0
+
+    n_samples = int(states.size(0))
+    n_members = int(len(ensemble.models))
+    if n_samples <= 0 or n_members <= 0:
+        return dyn_losses, outer_losses, dyn_steps, outer_steps
+
+    inner_steps = int(max(1, adv_train_steps))
+    outer_per_step = int(max(0, weight_updates_per_step))
+
+    for inner_step in range(inner_steps):
+        member_idx = int(torch.randint(0, n_members, (1,), device=states.device).item())
+        model = ensemble.models[member_idx]
+        dyn_opt = dyn_opts[member_idx]
+
+        idx = torch.randint(0, n_samples, (int(batch_size),), device=states.device)
+        sb = states[idx]
+        ab = actions[idx]
+        snb = next_states[idx]
+
+        # Inner supervised dynamics update with detached weights.
+        with torch.no_grad():
+            weights_det = _compute_weight_values(weight_net, sb, ab, snb, weight_input_mode).detach()
+        per_sample_nll = model.nll_loss_per_sample(sb, ab, snb)
+        dyn_loss = (weights_det * per_sample_nll).mean() + model.logvar_regularizer()
+        dyn_opt.zero_grad(set_to_none=True)
+        dyn_loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
+        dyn_opt.step()
+        dyn_loss_value = float(dyn_loss.item())
+        dyn_losses.append(dyn_loss_value)
+        dyn_steps += 1
+
+        if log_hook is not None and epoch_idx is not None:
+            # Keep logging keys stable with prior implementation.
+            log_hook(f"romi/inner_member_{member_idx}", int(epoch_idx), dyn_loss_value)
+
+        # Outer bilevel weighting update(s).
+        for _ in range(outer_per_step):
+            weights = _compute_weight_values(weight_net, sb, ab, snb, weight_input_mode)
+            per_sample_nll_outer = model.nll_loss_per_sample(sb, ab, snb)
+            inner_loss = (weights * per_sample_nll_outer).mean() + model.logvar_regularizer()
+
+            named_params = list(model.named_parameters())
+            grads = torch.autograd.grad(
+                inner_loss,
+                [p for _, p in named_params],
+                create_graph=True,
+                allow_unused=True,
+            )
+            updated_params: Dict[str, torch.Tensor] = {}
+            for (name, p), g in zip(named_params, grads):
+                g_safe = g if g is not None else torch.zeros_like(p)
+                updated_params[name] = p - float(bilevel_inner_lr) * g_safe
+
+            outer_loss = robust_value_aware_loss(
+                model=model,
+                params=updated_params,
+                states=sb,
+                actions=ab,
+                next_states=snb,
+                actor=actor,
+                target_q1=target_q1,
+                target_q2=target_q2,
+                uncertainty_scale=uncertainty_scale,
+                uncertainty_samples=uncertainty_samples,
+                act_low=act_low,
+                act_high=act_high,
+            )
+            weight_optimizer.zero_grad(set_to_none=True)
+            outer_loss.backward()
+            torch.nn.utils.clip_grad_norm_(weight_net.parameters(), 10.0)
+            weight_optimizer.step()
+            outer_losses.append(float(outer_loss.item()))
+            outer_steps += 1
+
+    return dyn_losses, outer_losses, dyn_steps, outer_steps
+
+
 def train_romi_full(
     dataset: OfflineDataset | Mapping[str, np.ndarray],
     reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
@@ -873,6 +1079,14 @@ def train_romi_full(
     bootstrap: Optional[bool] = None,
     automatic_entropy_tuning: Optional[bool] = None,
     policy_pretrain_steps: Optional[int] = None,
+    step_per_epoch: Optional[int] = None,
+    rollout_freq: Optional[int] = None,
+    rollout_batch_size: Optional[int] = None,
+    dynamics_update_freq: Optional[int] = None,
+    adv_train_steps: Optional[int] = None,
+    model_retain_epochs: Optional[int] = None,
+    weight_input_mode: Optional[str] = None,
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
     act_low: float = -1.0,
     act_high: float = 1.0,
     state_low: Optional[torch.Tensor] = None,
@@ -929,13 +1143,58 @@ def train_romi_full(
     uncertainty_samples = int(defaults.uncertainty_samples if uncertainty_samples is None else uncertainty_samples)
     weight_min = float(defaults.weight_min if weight_min is None else weight_min)
     weight_max = float(defaults.weight_max if weight_max is None else weight_max)
-    model_buffer_capacity = int(defaults.model_buffer_capacity if model_buffer_capacity is None else model_buffer_capacity)
     bilevel_inner_lr = float(defaults.bilevel_inner_lr if bilevel_inner_lr is None else bilevel_inner_lr)
     bootstrap = bool(defaults.bootstrap if bootstrap is None else bootstrap)
     automatic_entropy_tuning = bool(
         defaults.automatic_entropy_tuning if automatic_entropy_tuning is None else automatic_entropy_tuning
     )
     policy_pretrain_steps = int(defaults.policy_pretrain_steps if policy_pretrain_steps is None else policy_pretrain_steps)
+    step_per_epoch = int(policy_updates_per_epoch if step_per_epoch is None else step_per_epoch)
+    rollout_batch_size = int(model_rollouts_per_epoch if rollout_batch_size is None else rollout_batch_size)
+    rollout_freq = int(step_per_epoch if rollout_freq is None else rollout_freq)
+    dynamics_update_freq = int(0 if dynamics_update_freq is None else dynamics_update_freq)
+    adv_train_steps = int(
+        defaults.adv_train_steps if adv_train_steps is None else adv_train_steps
+    )
+    model_retain_epochs = int(
+        defaults.model_retain_epochs
+        if model_retain_epochs is None
+        else model_retain_epochs
+    )
+    weight_input_mode = str(defaults.weight_input_mode if weight_input_mode is None else weight_input_mode)
+    if weight_input_mode not in ("sa_snext", "sa"):
+        raise ValueError("weight_input_mode must be one of {'sa_snext', 'sa'}.")
+
+    # Backward-compatible mapping for existing call sites that pass only the
+    # epoch-level knobs.
+    if step_per_epoch <= 0:
+        step_per_epoch = int(max(1, policy_updates_per_epoch))
+    if rollout_batch_size <= 0:
+        rollout_batch_size = int(max(0, model_rollouts_per_epoch))
+    if rollout_freq <= 0:
+        rollout_freq = int(max(1, step_per_epoch)) if rollout_batch_size > 0 else 0
+    if dynamics_update_freq <= 0:
+        if dynamics_updates_per_epoch <= 0:
+            dynamics_update_freq = 0
+        else:
+            dynamics_update_freq = int(max(1, step_per_epoch // int(max(1, dynamics_updates_per_epoch))))
+
+    if model_buffer_capacity is None:
+        if rollout_freq > 0 and rollout_batch_size > 0:
+            rollout_calls_per_epoch = int(max(1, step_per_epoch // rollout_freq))
+            model_buffer_capacity = int(
+                max(
+                    1,
+                    rollout_calls_per_epoch
+                    * int(max(1, model_retain_epochs))
+                    * int(max(1, rollout_batch_size))
+                    * int(max(1, model_rollout_horizon)),
+                )
+            )
+        else:
+            model_buffer_capacity = int(defaults.model_buffer_capacity)
+    else:
+        model_buffer_capacity = int(max(1, model_buffer_capacity))
 
     states, actions, rewards, next_states, dones = _dataset_tensors(dataset, device)
     n_samples = int(states.size(0))
@@ -995,6 +1254,7 @@ def train_romi_full(
         hidden_layers=weight_hidden_layers,
         weight_min=weight_min,
         weight_max=weight_max,
+        input_mode=weight_input_mode,
     ).to(device)
     weight_optimizer = torch.optim.Adam(weight_net.parameters(), lr=weight_lr)
 
@@ -1048,33 +1308,41 @@ def train_romi_full(
     epoch_critic2_loss: List[float] = []
     epoch_alpha_loss: List[float] = []
     epoch_alpha: List[float] = []
+    epoch_rollout_calls: List[int] = []
+    epoch_dynamics_update_calls: List[int] = []
+    epoch_dynamics_optimizer_steps: List[int] = []
+    epoch_weight_optimizer_steps: List[int] = []
 
+    num_timesteps = 0
     for epoch_idx in range(epochs):
-        # ------------------------------------------------------------------
-        # 1) Build model buffer with current policy + current model ensemble.
-        # ------------------------------------------------------------------
-        if model_rollouts_per_epoch > 0:
-            start_idx = torch.randint(0, n_samples, (model_rollouts_per_epoch,), device=device)
-            _append_model_rollouts(
-                ensemble=ensemble,
-                actor=actor,
-                reward_fn_torch=reward_fn_torch,
-                start_states=states[start_idx],
-                buffer=model_buffer,
-                horizon=model_rollout_horizon,
-                act_low=act_low,
-                act_high=act_high,
-            )
-
-        # ------------------------------------------------------------------
-        # 2) Policy optimization (SAC) on mixed real/model batches.
-        # ------------------------------------------------------------------
         actor_losses_step: List[float] = []
         critic1_losses_step: List[float] = []
         critic2_losses_step: List[float] = []
         alpha_losses_step: List[float] = []
+        dyn_losses_step: List[float] = []
+        weight_losses_step: List[float] = []
 
-        for _ in range(policy_updates_per_epoch):
+        rollout_calls = 0
+        dynamics_update_calls = 0
+        dynamics_opt_steps = 0
+        weight_opt_steps = 0
+
+        for _ in range(step_per_epoch):
+            if rollout_freq > 0 and rollout_batch_size > 0 and (num_timesteps % rollout_freq == 0):
+                start_idx = torch.randint(0, n_samples, (rollout_batch_size,), device=device)
+                _append_model_rollouts(
+                    ensemble=ensemble,
+                    actor=actor,
+                    reward_fn_torch=reward_fn_torch,
+                    start_states=states[start_idx],
+                    buffer=model_buffer,
+                    horizon=model_rollout_horizon,
+                    act_low=act_low,
+                    act_high=act_high,
+                    termination_fn_torch=termination_fn_torch,
+                )
+                rollout_calls += 1
+
             sb, ab, rb, snb, db = _sample_mixed_batch(
                 real_states=states,
                 real_actions=actions,
@@ -1115,77 +1383,38 @@ def train_romi_full(
             critic2_losses_step.append(c2_loss)
             alpha_losses_step.append(al_loss)
 
-        # ------------------------------------------------------------------
-        # 3) Inner dynamics updates: weighted supervised likelihood.
-        # ------------------------------------------------------------------
-        dyn_losses_step: List[float] = []
-        for _ in range(dynamics_updates_per_epoch):
-            for member_idx, (model, opt) in enumerate(zip(ensemble.models, dyn_opts)):
-                idx = torch.randint(0, n_samples, (batch_size,), device=device)
-                sb = states[idx]
-                ab = actions[idx]
-                snb = next_states[idx]
-                with torch.no_grad():
-                    weights = weight_net(sb, ab, snb)
-                per_sample_nll = model.nll_loss_per_sample(sb, ab, snb)
-                dyn_loss = (weights * per_sample_nll).mean() + model.logvar_regularizer()
-                opt.zero_grad(set_to_none=True)
-                dyn_loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 10.0)
-                opt.step()
-                dyn_losses_step.append(float(dyn_loss.item()))
-                if log_hook is not None:
-                    log_hook(f"romi/inner_member_{member_idx}", epoch_idx, float(dyn_loss.item()))
+            if dynamics_update_freq > 0 and ((num_timesteps + 1) % dynamics_update_freq == 0):
+                dyn_losses_block, weight_losses_block, dyn_steps, outer_steps = _run_dynamics_update_block(
+                    ensemble=ensemble,
+                    dyn_opts=dyn_opts,
+                    weight_net=weight_net,
+                    weight_optimizer=weight_optimizer,
+                    actor=actor,
+                    target_q1=target_critic1,
+                    target_q2=target_critic2,
+                    states=states,
+                    actions=actions,
+                    next_states=next_states,
+                    batch_size=batch_size,
+                    adv_train_steps=adv_train_steps,
+                    weight_updates_per_step=weight_updates_per_epoch,
+                    bilevel_inner_lr=bilevel_inner_lr,
+                    uncertainty_scale=uncertainty_scale,
+                    uncertainty_samples=uncertainty_samples,
+                    act_low=act_low,
+                    act_high=act_high,
+                    weight_input_mode=weight_input_mode,
+                    log_hook=log_hook,
+                    epoch_idx=epoch_idx,
+                )
+                dyn_losses_step.extend(dyn_losses_block)
+                weight_losses_step.extend(weight_losses_block)
+                dynamics_update_calls += 1
+                dynamics_opt_steps += int(dyn_steps)
+                weight_opt_steps += int(outer_steps)
 
-        # ------------------------------------------------------------------
-        # 4) Outer updates: one-step differentiable bilevel weighting update.
-        # ------------------------------------------------------------------
-        weight_losses_step: List[float] = []
-        for _ in range(weight_updates_per_epoch):
-            member_idx = int(torch.randint(0, ensemble_size, (1,), device=device).item())
-            model = ensemble.models[member_idx]
+            num_timesteps += 1
 
-            idx = torch.randint(0, n_samples, (batch_size,), device=device)
-            sb = states[idx]
-            ab = actions[idx]
-            snb = next_states[idx]
-
-            weights = weight_net(sb, ab, snb)
-            per_sample_nll = model.nll_loss_per_sample(sb, ab, snb)
-            inner_loss = (weights * per_sample_nll).mean() + model.logvar_regularizer()
-
-            named_params = list(model.named_parameters())
-            grad_list = torch.autograd.grad(
-                inner_loss,
-                [p for _, p in named_params],
-                create_graph=True,
-            )
-            updated_params: Dict[str, torch.Tensor] = {
-                name: p - float(bilevel_inner_lr) * g
-                for (name, p), g in zip(named_params, grad_list)
-            }
-
-            outer_loss = robust_value_aware_loss(
-                model=model,
-                params=updated_params,
-                states=sb,
-                actions=ab,
-                next_states=snb,
-                actor=actor,
-                target_q1=target_critic1,
-                target_q2=target_critic2,
-                uncertainty_scale=uncertainty_scale,
-                uncertainty_samples=uncertainty_samples,
-                act_low=act_low,
-                act_high=act_high,
-            )
-            weight_optimizer.zero_grad(set_to_none=True)
-            outer_loss.backward()
-            torch.nn.utils.clip_grad_norm_(weight_net.parameters(), 10.0)
-            weight_optimizer.step()
-            weight_losses_step.append(float(outer_loss.item()))
-
-        # Epoch metrics.
         mean_dyn = float(np.mean(dyn_losses_step)) if dyn_losses_step else 0.0
         mean_w = float(np.mean(weight_losses_step)) if weight_losses_step else 0.0
         mean_actor = float(np.mean(actor_losses_step)) if actor_losses_step else 0.0
@@ -1201,6 +1430,10 @@ def train_romi_full(
         epoch_critic2_loss.append(mean_c2)
         epoch_alpha_loss.append(mean_alpha_loss)
         epoch_alpha.append(alpha_value_epoch)
+        epoch_rollout_calls.append(int(rollout_calls))
+        epoch_dynamics_update_calls.append(int(dynamics_update_calls))
+        epoch_dynamics_optimizer_steps.append(int(dynamics_opt_steps))
+        epoch_weight_optimizer_steps.append(int(weight_opt_steps))
 
         if log_hook is not None:
             log_hook("romi/epoch_dynamics_loss", epoch_idx, mean_dyn)
@@ -1209,6 +1442,10 @@ def train_romi_full(
             log_hook("romi/epoch_critic1_loss", epoch_idx, mean_c1)
             log_hook("romi/epoch_critic2_loss", epoch_idx, mean_c2)
             log_hook("romi/epoch_alpha", epoch_idx, alpha_value_epoch)
+            log_hook("romi/epoch_rollout_calls", epoch_idx, float(rollout_calls))
+            log_hook("romi/epoch_dynamics_update_calls", epoch_idx, float(dynamics_update_calls))
+            log_hook("romi/epoch_dynamics_optimizer_steps", epoch_idx, float(dynamics_opt_steps))
+            log_hook("romi/epoch_weight_optimizer_steps", epoch_idx, float(weight_opt_steps))
 
     uncertainties = _batched_uncertainty(ensemble, states, actions, batch_size=8192)
     info = RomiTrainingInfo(
@@ -1229,10 +1466,21 @@ def train_romi_full(
         uncertainty_samples=int(max(1, uncertainty_samples)),
         real_data_ratio=float(np.clip(real_data_ratio, 0.0, 1.0)),
         rollout_horizon=int(max(1, model_rollout_horizon)),
-        rollouts_per_epoch=int(max(0, model_rollouts_per_epoch)),
-        policy_updates_per_epoch=int(max(0, policy_updates_per_epoch)),
+        rollouts_per_epoch=int(max(0, rollout_batch_size)),
+        policy_updates_per_epoch=int(max(0, step_per_epoch)),
         dynamics_updates_per_epoch=int(max(0, dynamics_updates_per_epoch)),
         weight_updates_per_epoch=int(max(0, weight_updates_per_epoch)),
+        step_per_epoch=int(max(1, step_per_epoch)),
+        rollout_freq=int(max(0, rollout_freq)),
+        rollout_batch_size=int(max(0, rollout_batch_size)),
+        dynamics_update_freq=int(max(0, dynamics_update_freq)),
+        adv_train_steps=int(max(1, adv_train_steps)),
+        model_retain_epochs=int(max(1, model_retain_epochs)),
+        weight_input_mode=weight_input_mode,
+        epoch_rollout_calls=epoch_rollout_calls,
+        epoch_dynamics_update_calls=epoch_dynamics_update_calls,
+        epoch_dynamics_optimizer_steps=epoch_dynamics_optimizer_steps,
+        epoch_weight_optimizer_steps=epoch_weight_optimizer_steps,
         batch_size=int(max(1, batch_size)),
         automatic_entropy_tuning=bool(automatic_entropy_tuning),
     )
@@ -1253,6 +1501,7 @@ def rollout_in_romi_model(
     act_high: float = 1.0,
     deterministic_policy: bool = True,
     deterministic_dynamics: bool = False,
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
 ) -> Tuple[float, float, Dict[str, float]]:
     """Evaluate a fixed policy in ROMI learned dynamics."""
     if isinstance(initial_states, np.ndarray):
@@ -1272,8 +1521,11 @@ def rollout_in_romi_model(
 
     uncertainty_sum = 0.0
     step_count = 0.0
+    alive = torch.ones(rollouts, dtype=torch.bool, device=states.device)
 
     for _ in range(horizon):
+        if not torch.any(alive):
+            break
         actions = policy.sample_torch_actions(
             states,
             repeats=1,
@@ -1285,12 +1537,18 @@ def rollout_in_romi_model(
         uncertainty = ensemble.uncertainty(states, actions)
         next_states = ensemble.sample_next(states, actions, deterministic=deterministic_dynamics)
 
-        returns = returns + discount * rewards
+        alive_float = alive.to(dtype=torch.float32)
+        returns = returns + discount * rewards * alive_float
         discount *= gamma
         states = next_states
 
-        uncertainty_sum += float(uncertainty.sum().item())
-        step_count += float(rollouts)
+        uncertainty_sum += float((uncertainty * alive_float).sum().item())
+        step_count += float(alive_float.sum().item())
+
+        if termination_fn_torch is not None:
+            termination_output = termination_fn_torch(states)
+            terminated = _combine_termination_outputs(termination_output, rollouts, states.device)
+            alive = alive & ~terminated
 
     mean = float(returns.mean().item())
     stderr = float(returns.std(unbiased=False).item() / np.sqrt(max(1, rollouts)))
@@ -1314,6 +1572,7 @@ def evaluate_policies_in_romi_model(
     act_high: float = 1.0,
     deterministic_policy: bool = True,
     deterministic_dynamics: bool = False,
+    termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
 ) -> Dict[str, Dict[str, float]]:
     results: Dict[str, Dict[str, float]] = {}
     for i, policy in enumerate(policies):
@@ -1330,6 +1589,7 @@ def evaluate_policies_in_romi_model(
             act_high=act_high,
             deterministic_policy=deterministic_policy,
             deterministic_dynamics=deterministic_dynamics,
+            termination_fn_torch=termination_fn_torch,
         )
         name = getattr(policy, "name", f"policy_{i}")
         results[name] = {"mean": mean, "stderr": stderr, **metrics}
