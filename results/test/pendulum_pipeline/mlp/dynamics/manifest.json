@@ -4,56 +4,39 @@
   "q_aware": {},
   "ranking_new": {},
   "value_aware": null,
-  "morel": null,
-  "morel_info": null,
-  "mopo": "results/test/pendulum_pipeline/mlp/dynamics/dynamics_mopo.pt",
-  "mopo_info": {
-    "uncertainty_mean": 0.7294261455535889,
-    "uncertainty_std": 1.3445590734481812,
-    "uncertainty_max": 3.708819627761841,
-    "penalty_coef": 1.0,
-    "holdout_size": 1000,
-    "ensemble_size": 7,
-    "elite_size": 5,
-    "hidden_dim": 64,
-    "hidden_layers": 4,
-    "epochs": 300,
-    "batch_size": 256,
-    "lr": 0.001,
-    "bootstrap": true,
-    "elite_indices": [
-      0,
-      4,
-      6,
-      2,
-      5
-    ],
-    "member_holdout_nll": [
-      -8.187395095825195,
-      -6.874152660369873,
-      -7.718120574951172,
-      -7.426336288452148,
-      -8.002127647399902,
-      -7.667656421661377,
-      -7.834945201873779
-    ],
+  "morel": "results/test/pendulum_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 0.00468726921826601,
+    "disagreement_std": 0.005262283608317375,
+    "disagreement_max": 0.09825973212718964,
+    "threshold": 0.030998687259852886,
+    "beta_effective": 5.0,
+    "halt_reward": -66.17110443115234,
+    "reward_min": -16.171104431152344,
+    "reward_offset": 50.0,
+    "val_fraction": 0.1,
+    "early_stop_patience": 20.0,
+    "min_epochs": 50.0,
+    "min_delta": 0.0,
     "member_final_losses": [
-      -7.484498274953742,
-      -7.3893991436874655,
-      -7.456566187373379,
-      -5.813890348400986,
-      -6.122110065660979,
-      -7.711744931706211,
-      -7.262673465829146
+      0.0003700835090366693,
+      0.0003474251964192108,
+      0.00030275313941463127,
+      0.0003659046957387923
     ],
     "member_epochs": [
-      300,
-      300,
-      300,
-      300,
-      300,
-      300,
-      300
+      163,
+      138,
+      164,
+      134
+    ],
+    "member_best_val_loss": [
+      0.00026911739795468746,
+      0.00025620794633869084,
+      0.00019972989494757105,
+      0.00026884932125297684
     ]
-  }
+  },
+  "mopo": null,
+  "mopo_info": null
 }

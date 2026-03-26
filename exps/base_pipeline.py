@@ -1556,9 +1556,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dyn-epochs", type=int, default=2000)
     parser.add_argument("--dyn-batch", type=int, default=1024)
     parser.add_argument("--dyn-lr", type=float, default=3e-4)
-    parser.add_argument("--dyn-hidden-dim", type=int, default=256)
+    parser.add_argument("--dyn-hidden-dim", type=int, default=64)
     parser.add_argument("--dyn-val-fraction", type=float, default=0.1)
-    parser.add_argument("--dyn-early-stop-patience", type=int, default=200)
+    parser.add_argument("--dyn-early-stop-patience", type=int, default=20)
     parser.add_argument("--dyn-min-epochs", type=int, default=50)
     parser.add_argument("--dynamics-loss", type=str, default="nll", choices=["nll", "mse"])
     parser.add_argument(
@@ -1580,10 +1580,10 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dyn-seq-overlap", type=int, default=0)
     parser.add_argument("--value-aware-only", action="store_true", help="Train only the value-aware dynamics model (no supervised or ranking models)")
     parser.add_argument("--morel-ensemble-size", type=int, default=4, help="MOReL ensemble size (paper default: 4)")
-    parser.add_argument("--morel-hidden-dim", type=int, default=-1, help="MOReL hidden dim; -1 uses env-specific defaults")
-    parser.add_argument("--morel-epochs", type=int, default=-1, help="MOReL epochs; -1 uses env-specific defaults")
+    parser.add_argument("--morel-hidden-dim", type=int, default=64, help="MOReL hidden dim; -1 uses env-specific defaults")
+    parser.add_argument("--morel-epochs", type=int, default=2000, help="MOReL epochs; -1 uses env-specific defaults")
     parser.add_argument("--morel-batch-size", type=int, default=256, help="MOReL dynamics batch size (paper default: 256)")
-    parser.add_argument("--morel-lr", type=float, default=5e-4, help="MOReL dynamics Adam stepsize (paper default: 5e-4)")
+    parser.add_argument("--morel-lr", type=float, default=3e-4, help="MOReL dynamics Adam stepsize (paper default: 5e-4)")
     parser.add_argument("--morel-threshold", type=float, default=None, help="USAD threshold override; if unset, computed from dataset disagreements")
     parser.add_argument(
         "--morel-threshold-mode",
@@ -1598,12 +1598,12 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--morel-halt-reward", type=float, default=None, help="Direct halt reward override (takes precedence over offset)")
     parser.add_argument("--morel-no-bootstrap", action="store_true", help="Disable bootstrap resampling across MOReL ensemble members")
     parser.add_argument("--mopo-ensemble-size", type=int, default=7, help="MOPO ensemble size (paper: 7)")
-    parser.add_argument("--mopo-elite-size", type=int, default=5, help="MOPO number of elite models kept by holdout NLL (paper: 5)")
+    parser.add_argument("--mopo-elite-size", type=int, default=4, help="MOPO number of elite models kept by holdout NLL (paper: 5)")
     parser.add_argument("--mopo-hidden-dim", type=int, default=64, help="MOPO hidden width (paper: 200)")
-    parser.add_argument("--mopo-hidden-layers", type=int, default=4, help="MOPO hidden layers in feedforward dynamics (paper: 4)")
-    parser.add_argument("--mopo-epochs", type=int, default=300, help="MOPO dynamics epochs")
+    parser.add_argument("--mopo-hidden-layers", type=int, default=2, help="MOPO hidden layers in feedforward dynamics (paper: 4)")
+    parser.add_argument("--mopo-epochs", type=int, default=2000, help="MOPO dynamics epochs")
     parser.add_argument("--mopo-batch-size", type=int, default=256, help="MOPO dynamics batch size (paper reports 256 for SAC updates)")
-    parser.add_argument("--mopo-lr", type=float, default=1e-3, help="MOPO dynamics Adam learning rate")
+    parser.add_argument("--mopo-lr", type=float, default=3e-4, help="MOPO dynamics Adam learning rate")
     parser.add_argument(
         "--mopo-holdout-size",
         type=int,
