@@ -30,13 +30,13 @@ from .utils import DEVICE, set_seed
 @dataclass(frozen=True)
 class MopoDefaults:
     hidden_dim: int = 64
-    hidden_layers: int = 4
+    hidden_layers: int = 2
     ensemble_size: int = 7
     elite_size: int = 4
     holdout_size: int = 1000
     batch_size: int = 256
-    epochs: int = 300
-    lr: float = 1e-3
+    epochs: int = 2000
+    lr: float = 3e-4
 
 
 def get_mopo_defaults(env_name: Optional[str] = None) -> MopoDefaults:
@@ -57,7 +57,7 @@ class MopoDynamicsModel(nn.Module):
         state_dim: int,
         act_dim: int,
         hidden_dim: int = 64,
-        hidden_layers: int = 4,
+        hidden_layers: int = 2,
         state_low: Optional[torch.Tensor] = None,
         state_high: Optional[torch.Tensor] = None,
     ) -> None:

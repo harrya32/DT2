@@ -29,9 +29,9 @@
     "dyn_epochs": 2000,
     "dyn_batch": 1024,
     "dyn_lr": 0.0003,
-    "dyn_hidden_dim": 256,
+    "dyn_hidden_dim": 64,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 200,
+    "dyn_early_stop_patience": 20,
     "dyn_min_epochs": 50,
     "dynamics_loss": "nll",
     "dynamics_models": [
@@ -48,10 +48,10 @@
     "dyn_seq_overlap": 0,
     "value_aware_only": false,
     "morel_ensemble_size": 4,
-    "morel_hidden_dim": -1,
-    "morel_epochs": -1,
-    "morel_batch_size": 256,
-    "morel_lr": 0.0005,
+    "morel_hidden_dim": 64,
+    "morel_epochs": 2000,
+    "morel_batch_size": 1024,
+    "morel_lr": 0.0003,
     "morel_threshold": null,
     "morel_threshold_mode": "mean_std",
     "morel_threshold_beta": 5.0,
@@ -59,6 +59,17 @@
     "morel_reward_offset": -1.0,
     "morel_halt_reward": null,
     "morel_no_bootstrap": false,
+    "mopo_ensemble_size": 7,
+    "mopo_elite_size": 4,
+    "mopo_hidden_dim": 64,
+    "mopo_hidden_layers": 2,
+    "mopo_epochs": 2000,
+    "mopo_batch_size": 1024,
+    "mopo_lr": 0.0003,
+    "mopo_holdout_size": 1000,
+    "mopo_penalty_coef": 1.0,
+    "mopo_no_bootstrap": false,
+    "mopo_deterministic_dynamics_eval": false,
     "eval_episodes": 20,
     "eval_rollouts": 20,
     "eval_horizon": 500,
@@ -90,56 +101,79 @@
     "value_aware": null,
     "morel": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_morel.pt",
     "morel_info": {
-      "disagreement_mean": 0.04868216812610626,
-      "disagreement_std": 0.16635538637638092,
-      "disagreement_max": 5.127615928649902,
-      "threshold": 0.8804591000080109,
+      "disagreement_mean": 0.03276624158024788,
+      "disagreement_std": 0.09607215225696564,
+      "disagreement_max": 4.578042507171631,
+      "threshold": 0.5131270028650761,
       "beta_effective": 5.0,
       "halt_reward": -150.0,
       "reward_min": -100.0,
       "reward_offset": 50.0,
+      "val_fraction": 0.1,
+      "early_stop_patience": 20.0,
+      "min_epochs": 50.0,
+      "min_delta": 0.0,
       "member_final_losses": [
-        0.11621001486976941,
-        0.1494569960050285,
-        0.16374011943116784,
-        0.12631476810202003
+        0.4231255700190862,
+        0.2945840582251549,
+        0.4280235941211383,
+        0.38169516374667484
       ],
       "member_epochs": [
-        300,
-        300,
-        300,
-        300
+        95,
+        190,
+        96,
+        79
+      ],
+      "member_best_val_loss": [
+        0.4500311315059662,
+        0.4558584690093994,
+        0.5726734399795532,
+        0.6892196536064148
       ]
-    }
+    },
+    "mopo": null,
+    "mopo_info": null
   },
   "morel_info": {
-    "disagreement_mean": 0.04868216812610626,
-    "disagreement_std": 0.16635538637638092,
-    "disagreement_max": 5.127615928649902,
-    "threshold": 0.8804591000080109,
+    "disagreement_mean": 0.03276624158024788,
+    "disagreement_std": 0.09607215225696564,
+    "disagreement_max": 4.578042507171631,
+    "threshold": 0.5131270028650761,
     "beta_effective": 5.0,
     "halt_reward": -150.0,
     "reward_min": -100.0,
     "reward_offset": 50.0,
+    "val_fraction": 0.1,
+    "early_stop_patience": 20.0,
+    "min_epochs": 50.0,
+    "min_delta": 0.0,
     "member_final_losses": [
-      0.11621001486976941,
-      0.1494569960050285,
-      0.16374011943116784,
-      0.12631476810202003
+      0.4231255700190862,
+      0.2945840582251549,
+      0.4280235941211383,
+      0.38169516374667484
     ],
     "member_epochs": [
-      300,
-      300,
-      300,
-      300
+      95,
+      190,
+      96,
+      79
+    ],
+    "member_best_val_loss": [
+      0.4500311315059662,
+      0.4558584690093994,
+      0.5726734399795532,
+      0.6892196536064148
     ]
   },
+  "mopo_info": null,
   "results": [
     {
       "name": "ppo_frac_0",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": -31.186384201049805,
+      "q_estimate": -31.253225326538086,
       "dynamics": {
         "supervised": null,
         "supervised_mse": null,
@@ -150,10 +184,15 @@
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
-        "morel_pessimistic": -6620.0234375,
-        "morel_pessimistic_stderr": 219.05920268946426,
-        "morel_unknown_rate": 0.011990407673860911,
-        "morel_halted_fraction": 1.0
+        "morel_pessimistic": -7369.12646484375,
+        "morel_pessimistic_stderr": 251.4891078362617,
+        "morel_unknown_rate": 0.006839945280437756,
+        "morel_halted_fraction": 1.0,
+        "mopo_penalized": null,
+        "mopo_penalized_stderr": null,
+        "mopo_uncertainty_mean": null,
+        "mopo_penalty_mean": null,
+        "mopo_model_reward_mean": null
       },
       "env_mc": -6201.81873264272
     },
@@ -161,7 +200,7 @@
       "name": "ppo_frac_200000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "q_estimate": -1.9390486478805542,
+      "q_estimate": -1.853251338005066,
       "dynamics": {
         "supervised": null,
         "supervised_mse": null,
@@ -172,10 +211,15 @@
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
-        "morel_pessimistic": -6542.64599609375,
-        "morel_pessimistic_stderr": 249.91122231898473,
-        "morel_unknown_rate": 0.00929368029739777,
-        "morel_halted_fraction": 1.0
+        "morel_pessimistic": -6243.3984375,
+        "morel_pessimistic_stderr": 210.84169381578005,
+        "morel_unknown_rate": 0.0012802458071949814,
+        "morel_halted_fraction": 0.5,
+        "mopo_penalized": null,
+        "mopo_penalized_stderr": null,
+        "mopo_uncertainty_mean": null,
+        "mopo_penalty_mean": null,
+        "mopo_model_reward_mean": null
       },
       "env_mc": -6219.849554456236
     },
@@ -183,7 +227,7 @@
       "name": "ppo_frac_400000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": 14.911493301391602,
+      "q_estimate": 14.899187088012695,
       "dynamics": {
         "supervised": null,
         "supervised_mse": null,
@@ -194,10 +238,15 @@
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
-        "morel_pessimistic": -7025.2890625,
-        "morel_pessimistic_stderr": 321.672026439184,
-        "morel_unknown_rate": 0.008428150021070375,
-        "morel_halted_fraction": 1.0
+        "morel_pessimistic": -6139.01025390625,
+        "morel_pessimistic_stderr": 206.4213242538387,
+        "morel_unknown_rate": 0.004463289444320465,
+        "morel_halted_fraction": 1.0,
+        "mopo_penalized": null,
+        "mopo_penalized_stderr": null,
+        "mopo_uncertainty_mean": null,
+        "mopo_penalty_mean": null,
+        "mopo_model_reward_mean": null
       },
       "env_mc": -5945.114174973617
     },
@@ -205,7 +254,7 @@
       "name": "ppo_frac_600000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "q_estimate": 18.13668441772461,
+      "q_estimate": 18.1513614654541,
       "dynamics": {
         "supervised": null,
         "supervised_mse": null,
@@ -216,10 +265,15 @@
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
-        "morel_pessimistic": -7158.83935546875,
-        "morel_pessimistic_stderr": 287.2015591362837,
-        "morel_unknown_rate": 0.006357279084551812,
-        "morel_halted_fraction": 1.0
+        "morel_pessimistic": -6169.13330078125,
+        "morel_pessimistic_stderr": 203.59746955969484,
+        "morel_unknown_rate": 0.004693733865289838,
+        "morel_halted_fraction": 1.0,
+        "mopo_penalized": null,
+        "mopo_penalized_stderr": null,
+        "mopo_uncertainty_mean": null,
+        "mopo_penalty_mean": null,
+        "mopo_model_reward_mean": null
       },
       "env_mc": -5866.562275308569
     },
@@ -227,7 +281,7 @@
       "name": "ppo_frac_800000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 16.815149307250977,
+      "q_estimate": 16.797317504882812,
       "dynamics": {
         "supervised": null,
         "supervised_mse": null,
@@ -238,10 +292,15 @@
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
-        "morel_pessimistic": -7294.97900390625,
-        "morel_pessimistic_stderr": 267.25194040279627,
-        "morel_unknown_rate": 0.006772773450728073,
-        "morel_halted_fraction": 1.0
+        "morel_pessimistic": -6161.28662109375,
+        "morel_pessimistic_stderr": 202.52170304241906,
+        "morel_unknown_rate": 0.004659832246039142,
+        "morel_halted_fraction": 1.0,
+        "mopo_penalized": null,
+        "mopo_penalized_stderr": null,
+        "mopo_uncertainty_mean": null,
+        "mopo_penalty_mean": null,
+        "mopo_model_reward_mean": null
       },
       "env_mc": -5861.870061052523
     },
@@ -249,7 +308,7 @@
       "name": "ppo_frac_1000000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "q_estimate": 22.273033142089844,
+      "q_estimate": 22.271207809448242,
       "dynamics": {
         "supervised": null,
         "supervised_mse": null,
@@ -260,10 +319,15 @@
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
-        "morel_pessimistic": -6870.8095703125,
-        "morel_pessimistic_stderr": 205.6989694814198,
-        "morel_unknown_rate": 0.008159934720522236,
-        "morel_halted_fraction": 1.0
+        "morel_pessimistic": -6206.79931640625,
+        "morel_pessimistic_stderr": 200.91953795402407,
+        "morel_unknown_rate": 0.004657661853749418,
+        "morel_halted_fraction": 1.0,
+        "mopo_penalized": null,
+        "mopo_penalized_stderr": null,
+        "mopo_uncertainty_mean": null,
+        "mopo_penalty_mean": null,
+        "mopo_model_reward_mean": null
       },
       "env_mc": -5856.34845245637
     }

@@ -1582,7 +1582,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--morel-ensemble-size", type=int, default=4, help="MOReL ensemble size (paper default: 4)")
     parser.add_argument("--morel-hidden-dim", type=int, default=64, help="MOReL hidden dim; -1 uses env-specific defaults")
     parser.add_argument("--morel-epochs", type=int, default=2000, help="MOReL epochs; -1 uses env-specific defaults")
-    parser.add_argument("--morel-batch-size", type=int, default=256, help="MOReL dynamics batch size (paper default: 256)")
+    parser.add_argument("--morel-batch-size", type=int, default=1024, help="MOReL dynamics batch size (paper default: 256)")
     parser.add_argument("--morel-lr", type=float, default=3e-4, help="MOReL dynamics Adam stepsize (paper default: 5e-4)")
     parser.add_argument("--morel-threshold", type=float, default=None, help="USAD threshold override; if unset, computed from dataset disagreements")
     parser.add_argument(
@@ -1602,7 +1602,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mopo-hidden-dim", type=int, default=64, help="MOPO hidden width (paper: 200)")
     parser.add_argument("--mopo-hidden-layers", type=int, default=2, help="MOPO hidden layers in feedforward dynamics (paper: 4)")
     parser.add_argument("--mopo-epochs", type=int, default=2000, help="MOPO dynamics epochs")
-    parser.add_argument("--mopo-batch-size", type=int, default=256, help="MOPO dynamics batch size (paper reports 256 for SAC updates)")
+    parser.add_argument("--mopo-batch-size", type=int, default=1024, help="MOPO dynamics batch size (paper reports 256 for SAC updates)")
     parser.add_argument("--mopo-lr", type=float, default=3e-4, help="MOPO dynamics Adam learning rate")
     parser.add_argument(
         "--mopo-holdout-size",
