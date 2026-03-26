@@ -41,6 +41,7 @@ from src.mopo import MopoDynamicsEnsemble, rollout_in_penalized_mdp, train_mopo_
 from src.morel import MorelDynamicsEnsemble, rollout_in_pessimistic_mdp, train_dynamics_ensemble
 from src.networks import DynamicsNet, QNet
 from src.policies import TorchPolicy
+from src.romi import RomiDynamicsEnsemble, rollout_in_romi_model, train_romi_full
 
 
 # =============================================================================
@@ -329,6 +330,8 @@ def save_dynamics_models(
     morel_info: Optional[Dict[str, Any]] = None,
     mopo_model: Optional[MopoDynamicsEnsemble] = None,
     mopo_info: Optional[Dict[str, Any]] = None,
+    romi_model: Optional[RomiDynamicsEnsemble] = None,
+    romi_info: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, object]:
     """Save dynamics models and create a manifest."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -342,6 +345,8 @@ def save_dynamics_models(
         "morel_info": None,
         "mopo": None,
         "mopo_info": None,
+        "romi": None,
+        "romi_info": None,
     }
     if sup_model is not None:
         paths["supervised"] = (directory / "dynamics_supervised.pt").as_posix()
@@ -367,6 +372,12 @@ def save_dynamics_models(
         torch.save(copy.deepcopy(mopo_model).cpu(), paths["mopo"])
     if mopo_info is not None:
         paths["mopo_info"] = mopo_info
+
+    if romi_model is not None:
+        paths["romi"] = (directory / "dynamics_romi.pt").as_posix()
+        torch.save(copy.deepcopy(romi_model).cpu(), paths["romi"])
+    if romi_info is not None:
+        paths["romi_info"] = romi_info
 
     manifest = directory / "manifest.json"
     with open(manifest, "w", encoding="utf-8") as f:
@@ -426,6 +437,20 @@ def load_mopo_model_from_paths(
 ) -> Optional[MopoDynamicsEnsemble]:
     """Load a saved MOPO ensemble from manifest paths (if present)."""
     path_obj = paths.get("mopo")
+    if path_obj is None:
+        return None
+    model = torch.load(str(path_obj), map_location=device, weights_only=False)
+    if hasattr(model, "to"):
+        model.to(device)
+    return model
+
+
+def load_romi_model_from_paths(
+    paths: Mapping[str, object],
+    device: torch.device,
+) -> Optional[RomiDynamicsEnsemble]:
+    """Load a saved ROMI ensemble from manifest paths (if present)."""
+    path_obj = paths.get("romi")
     if path_obj is None:
         return None
     model = torch.load(str(path_obj), map_location=device, weights_only=False)
@@ -559,6 +584,72 @@ def compact_mopo_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
     return info
 
 
+def compact_romi_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Convert ROMI training info to a compact JSON-serializable dict."""
+    if raw_info is None:
+        return None
+
+    info: Dict[str, Any] = {}
+    scalar_fields = (
+        "uncertainty_mean",
+        "uncertainty_std",
+        "uncertainty_max",
+        "model_buffer_size",
+        "ensemble_size",
+        "uncertainty_scale",
+        "uncertainty_samples",
+        "real_data_ratio",
+        "rollout_horizon",
+        "rollouts_per_epoch",
+        "policy_updates_per_epoch",
+        "dynamics_updates_per_epoch",
+        "weight_updates_per_epoch",
+        "batch_size",
+        "automatic_entropy_tuning",
+    )
+    for field in scalar_fields:
+        if hasattr(raw_info, field):
+            value = getattr(raw_info, field)
+            if isinstance(value, bool):
+                info[field] = bool(value)
+            elif isinstance(value, (int, np.integer)):
+                info[field] = int(value)
+            else:
+                info[field] = _safe_json_number(float(value))
+
+    # Epoch-level traces: keep last value and length for compactness.
+    series_fields = (
+        "epoch_dynamics_loss",
+        "epoch_weight_loss",
+        "epoch_actor_loss",
+        "epoch_critic1_loss",
+        "epoch_critic2_loss",
+        "epoch_alpha_loss",
+        "epoch_alpha",
+    )
+    for field in series_fields:
+        if hasattr(raw_info, field):
+            series = list(getattr(raw_info, field))
+            info[f"{field}_epochs"] = int(len(series))
+            info[f"{field}_final"] = _safe_json_number(float(series[-1])) if series else None
+
+    if hasattr(raw_info, "pretrain_losses"):
+        pretrain_losses = getattr(raw_info, "pretrain_losses")
+        final_losses: List[Optional[float]] = []
+        steps_per_member: List[int] = []
+        for member_losses in pretrain_losses:
+            if member_losses:
+                final_losses.append(_safe_json_number(float(member_losses[-1])))
+                steps_per_member.append(int(len(member_losses)))
+            else:
+                final_losses.append(None)
+                steps_per_member.append(0)
+        info["pretrain_member_final_losses"] = final_losses
+        info["pretrain_member_steps"] = steps_per_member
+
+    return info
+
+
 def find_missing_requested_dynamics_models(
     requested_models: Sequence[str],
     supervised_model: Optional[DynamicsNet],
@@ -566,6 +657,7 @@ def find_missing_requested_dynamics_models(
     value_aware_model: Optional[DynamicsNet],
     morel_model: Optional[MorelDynamicsEnsemble],
     mopo_model: Optional[MopoDynamicsEnsemble],
+    romi_model: Optional[RomiDynamicsEnsemble],
     value_aware_only: bool = False,
 ) -> List[str]:
     """Return requested dynamics model names that are missing from loaded artifacts."""
@@ -583,6 +675,8 @@ def find_missing_requested_dynamics_models(
         missing.append("morel")
     if "mopo" in requested_set and mopo_model is None:
         missing.append("mopo")
+    if "romi" in requested_set and romi_model is None:
+        missing.append("romi")
     return missing
 
 
@@ -941,6 +1035,32 @@ def train_dynamics_models(
     mopo_holdout_size: int = 1000,
     mopo_penalty_coef: float = 1.0,
     mopo_bootstrap: bool = True,
+    romi_ensemble_size: int = 4,
+    romi_hidden_dim: int = 64,
+    romi_hidden_layers: int = 2,
+    romi_weight_hidden_dim: int = 64,
+    romi_weight_hidden_layers: int = 2,
+    romi_epochs: int = 300,
+    romi_pretrain_epochs: int = 50,
+    romi_batch_size: int = 256,
+    romi_dynamics_lr: float = 3e-4,
+    romi_weight_lr: float = 1e-4,
+    romi_actor_lr: float = 1e-4,
+    romi_critic_lr: float = 3e-4,
+    romi_real_data_ratio: float = 0.5,
+    romi_rollout_horizon: int = 5,
+    romi_rollouts_per_epoch: int = 512,
+    romi_policy_updates_per_epoch: int = 200,
+    romi_dynamics_updates_per_epoch: int = 1,
+    romi_weight_updates_per_epoch: int = 1,
+    romi_uncertainty_scale: float = 0.1,
+    romi_uncertainty_samples: int = 20,
+    romi_weight_min: float = 0.5,
+    romi_weight_max: float = 2.0,
+    romi_model_buffer_capacity: int = 200_000,
+    romi_bilevel_inner_lr: float = 3e-4,
+    romi_bootstrap: bool = True,
+    romi_policy_pretrain_steps: int = 0,
 ) -> Tuple[
     Optional[DynamicsNet],
     Dict[str, DynamicsNet],
@@ -949,18 +1069,20 @@ def train_dynamics_models(
     Optional[Dict[str, Any]],
     Optional[MopoDynamicsEnsemble],
     Optional[Dict[str, Any]],
+    Optional[RomiDynamicsEnsemble],
+    Optional[Dict[str, Any]],
 ]:
     """Train supervised and ranking-aware dynamics models.
     
     Args:
-        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet', 'morel', 'mopo'.
+        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet', 'morel', 'mopo', 'romi'.
                         If None, trains all models.
         value_aware_only: If True, only train the value-aware model (ignore dynamics_models).
         act_low: Lower bound for actions (used by value-aware model).
         act_high: Upper bound for actions (used by value-aware model).
     
     Returns:
-        Tuple of (supervised_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info)
+        Tuple of (supervised_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info, romi_model, romi_info)
     """
     if dynamics_models is None:
         dynamics_models = ["supervised", "kendall", "hinge", "listnet"]
@@ -993,7 +1115,7 @@ def train_dynamics_models(
             act_low=act_low,
             act_high=act_high,
         )
-        return None, {}, value_aware_model, None, None, None, None
+        return None, {}, value_aware_model, None, None, None, None, None, None
 
     # Supervised model
     sup_model: Optional[DynamicsNet] = None
@@ -1027,6 +1149,8 @@ def train_dynamics_models(
     morel_info: Optional[Dict[str, Any]] = None
     mopo_model: Optional[MopoDynamicsEnsemble] = None
     mopo_info: Optional[Dict[str, Any]] = None
+    romi_model: Optional[RomiDynamicsEnsemble] = None
+    romi_info: Optional[Dict[str, Any]] = None
 
     ranking_losses_to_train = [loss for loss in ("kendall", "hinge", "listnet") if loss in dynamics_models]
     for loss_name in ranking_losses_to_train:
@@ -1140,7 +1264,74 @@ def train_dynamics_models(
         mopo_model = mopo_model_raw
         mopo_info = compact_mopo_info(raw_mopo_info)
 
-    return sup_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info
+    if "romi" in dynamics_models:
+        romi_log_hook: Optional[Callable[[str, int, float], None]] = None
+        if wandb_run is not None:
+            def _hook(metric_key: str, epoch: int, value: float) -> None:
+                step_key = f"{metric_key}_step"
+                payload = {
+                    metric_key: float(value),
+                    step_key: int(epoch + 1),
+                }
+                wandb_log(wandb_run, payload)
+            romi_log_hook = _hook
+
+        romi_model_raw, _romi_policy, raw_romi_info = train_romi_full(
+            dataset=dataset,
+            reward_fn_torch=reward_fn_torch,
+            ensemble_size=int(max(1, romi_ensemble_size)),
+            dynamics_hidden_dim=int(max(1, romi_hidden_dim)),
+            dynamics_hidden_layers=int(max(1, romi_hidden_layers)),
+            weight_hidden_dim=int(max(1, romi_weight_hidden_dim)),
+            weight_hidden_layers=int(max(1, romi_weight_hidden_layers)),
+            actor_hidden_dim=int(max(1, romi_hidden_dim)),
+            critic_hidden_dim=int(max(1, romi_hidden_dim)),
+            model_pretrain_epochs=int(max(1, romi_pretrain_epochs)),
+            epochs=int(max(1, romi_epochs)),
+            batch_size=int(max(1, romi_batch_size)),
+            dynamics_lr=float(romi_dynamics_lr),
+            weight_lr=float(romi_weight_lr),
+            actor_lr=float(romi_actor_lr),
+            critic_lr=float(romi_critic_lr),
+            gamma=float(gamma),
+            tau=5e-3,
+            real_data_ratio=float(np.clip(romi_real_data_ratio, 0.0, 1.0)),
+            model_rollout_horizon=int(max(1, romi_rollout_horizon)),
+            model_rollouts_per_epoch=int(max(0, romi_rollouts_per_epoch)),
+            policy_updates_per_epoch=int(max(0, romi_policy_updates_per_epoch)),
+            dynamics_updates_per_epoch=int(max(0, romi_dynamics_updates_per_epoch)),
+            weight_updates_per_epoch=int(max(0, romi_weight_updates_per_epoch)),
+            uncertainty_scale=float(max(0.0, romi_uncertainty_scale)),
+            uncertainty_samples=int(max(1, romi_uncertainty_samples)),
+            weight_min=float(romi_weight_min),
+            weight_max=float(romi_weight_max),
+            model_buffer_capacity=int(max(1, romi_model_buffer_capacity)),
+            bilevel_inner_lr=float(max(1e-8, romi_bilevel_inner_lr)),
+            bootstrap=bool(romi_bootstrap),
+            policy_pretrain_steps=int(max(0, romi_policy_pretrain_steps)),
+            act_low=float(act_low),
+            act_high=float(act_high),
+            state_low=state_low,
+            state_high=state_upper,
+            seed=int(seed),
+            env_name=env_name,
+            device=device,
+            log_hook=romi_log_hook,
+        )
+        romi_model = romi_model_raw
+        romi_info = compact_romi_info(raw_romi_info)
+
+    return (
+        sup_model,
+        ranking_new_models,
+        value_aware_model,
+        morel_model,
+        morel_info,
+        mopo_model,
+        mopo_info,
+        romi_model,
+        romi_info,
+    )
 
 
 # =============================================================================
@@ -1267,6 +1458,37 @@ def evaluate_in_mopo_penalized_mdp(
         ensemble=mopo_model,
         policy=policy,
         initial_states=initial_states,
+        horizon=horizon,
+        gamma=gamma,
+        rollouts=rollouts,
+        seed=seed,
+        act_low=act_low,
+        act_high=act_high,
+        deterministic_policy=deterministic_policy,
+        deterministic_dynamics=deterministic_dynamics,
+    )
+
+
+def evaluate_in_romi_model_mdp(
+    romi_model: RomiDynamicsEnsemble,
+    policy: TorchPolicy,
+    initial_states: np.ndarray,
+    horizon: int,
+    gamma: float,
+    rollouts: int,
+    seed: int,
+    reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    act_low: float = -1.0,
+    act_high: float = 1.0,
+    deterministic_policy: bool = True,
+    deterministic_dynamics: bool = False,
+) -> Tuple[float, float, Dict[str, float]]:
+    """Evaluate a fixed policy in ROMI learned dynamics."""
+    return rollout_in_romi_model(
+        ensemble=romi_model,
+        policy=policy,
+        initial_states=initial_states,
+        reward_fn_torch=reward_fn_torch,
         horizon=horizon,
         gamma=gamma,
         rollouts=rollouts,
@@ -1495,6 +1717,33 @@ class BasePipelineConfig:
     mopo_penalty_coef: float = 1.0
     mopo_bootstrap: bool = True
     mopo_deterministic_dynamics_eval: bool = False
+    romi_ensemble_size: int = 4
+    romi_hidden_dim: int = 64
+    romi_hidden_layers: int = 2
+    romi_weight_hidden_dim: int = 64
+    romi_weight_hidden_layers: int = 2
+    romi_epochs: int = 300
+    romi_pretrain_epochs: int = 50
+    romi_batch_size: int = 256
+    romi_dynamics_lr: float = 3e-4
+    romi_weight_lr: float = 1e-4
+    romi_actor_lr: float = 1e-4
+    romi_critic_lr: float = 3e-4
+    romi_real_data_ratio: float = 0.5
+    romi_rollout_horizon: int = 5
+    romi_rollouts_per_epoch: int = 512
+    romi_policy_updates_per_epoch: int = 200
+    romi_dynamics_updates_per_epoch: int = 1
+    romi_weight_updates_per_epoch: int = 1
+    romi_uncertainty_scale: float = 0.1
+    romi_uncertainty_samples: int = 20
+    romi_weight_min: float = 0.5
+    romi_weight_max: float = 2.0
+    romi_model_buffer_capacity: int = 200_000
+    romi_bilevel_inner_lr: float = 3e-4
+    romi_bootstrap: bool = True
+    romi_policy_pretrain_steps: int = 0
+    romi_deterministic_dynamics_eval: bool = False
     
     # Evaluation
     eval_episodes: int = 20
@@ -1566,8 +1815,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         nargs="+",
         default=["supervised", "kendall", "hinge", "listnet"],
-        choices=["supervised", "kendall", "hinge", "listnet", "morel", "mopo"],
-        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet, morel, mopo",
+        choices=["supervised", "kendall", "hinge", "listnet", "morel", "mopo", "romi"],
+        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet, morel, mopo, romi",
     )
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
@@ -1613,6 +1862,33 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mopo-penalty-coef", type=float, default=1.0, help="MOPO uncertainty penalty coefficient lambda")
     parser.add_argument("--mopo-no-bootstrap", action="store_true", help="Disable bootstrap resampling across MOPO ensemble members")
     parser.add_argument("--mopo-deterministic-dynamics-eval", action="store_true", help="Use deterministic MOPO dynamics means at evaluation time")
+    parser.add_argument("--romi-ensemble-size", type=int, default=4, help="ROMI ensemble size")
+    parser.add_argument("--romi-hidden-dim", type=int, default=64, help="ROMI dynamics hidden width")
+    parser.add_argument("--romi-hidden-layers", type=int, default=2, help="ROMI dynamics hidden layers")
+    parser.add_argument("--romi-weight-hidden-dim", type=int, default=64, help="ROMI weighting network hidden width")
+    parser.add_argument("--romi-weight-hidden-layers", type=int, default=2, help="ROMI weighting network hidden layers")
+    parser.add_argument("--romi-epochs", type=int, default=300, help="ROMI joint training epochs")
+    parser.add_argument("--romi-pretrain-epochs", type=int, default=50, help="ROMI dynamics pretraining epochs")
+    parser.add_argument("--romi-batch-size", type=int, default=256, help="ROMI training batch size")
+    parser.add_argument("--romi-dynamics-lr", type=float, default=3e-4, help="ROMI dynamics learning rate")
+    parser.add_argument("--romi-weight-lr", type=float, default=1e-4, help="ROMI weighting-network learning rate")
+    parser.add_argument("--romi-actor-lr", type=float, default=1e-4, help="ROMI actor learning rate")
+    parser.add_argument("--romi-critic-lr", type=float, default=3e-4, help="ROMI critic learning rate")
+    parser.add_argument("--romi-real-data-ratio", type=float, default=0.5, help="ROMI real-data ratio in mixed SAC batches")
+    parser.add_argument("--romi-rollout-horizon", type=int, default=5, help="ROMI model rollout horizon")
+    parser.add_argument("--romi-rollouts-per-epoch", type=int, default=512, help="ROMI model rollout starts per epoch")
+    parser.add_argument("--romi-policy-updates-per-epoch", type=int, default=200, help="ROMI SAC policy updates per epoch")
+    parser.add_argument("--romi-dynamics-updates-per-epoch", type=int, default=1, help="ROMI inner dynamics updates per epoch")
+    parser.add_argument("--romi-weight-updates-per-epoch", type=int, default=1, help="ROMI outer weighting updates per epoch")
+    parser.add_argument("--romi-uncertainty-scale", type=float, default=0.1, help="ROMI uncertainty-set perturbation scale xi")
+    parser.add_argument("--romi-uncertainty-samples", type=int, default=20, help="ROMI uncertainty-set sample count N")
+    parser.add_argument("--romi-weight-min", type=float, default=0.5, help="ROMI minimum sample weight")
+    parser.add_argument("--romi-weight-max", type=float, default=2.0, help="ROMI maximum sample weight")
+    parser.add_argument("--romi-model-buffer-capacity", type=int, default=200000, help="ROMI model replay buffer capacity")
+    parser.add_argument("--romi-bilevel-inner-lr", type=float, default=3e-4, help="ROMI inner-step lr used for implicit bilevel update")
+    parser.add_argument("--romi-no-bootstrap", action="store_true", help="Disable bootstrap resampling across ROMI ensemble members")
+    parser.add_argument("--romi-policy-pretrain-steps", type=int, default=0, help="Optional behavior-cloning warmup steps for ROMI policy")
+    parser.add_argument("--romi-deterministic-dynamics-eval", action="store_true", help="Use deterministic ROMI dynamics means at evaluation time")
     
     # Evaluation
     parser.add_argument("--eval-episodes", type=int, default=20)
@@ -1839,6 +2115,8 @@ def run_pipeline(
     morel_info: Optional[Dict[str, Any]] = None
     mopo_model: Optional[MopoDynamicsEnsemble] = None
     mopo_info: Optional[Dict[str, Any]] = None
+    romi_model: Optional[RomiDynamicsEnsemble] = None
+    romi_info: Optional[Dict[str, Any]] = None
 
     value_aware_only = getattr(args, "value_aware_only", False)
     missing_requested_models: List[str] = []
@@ -1849,12 +2127,16 @@ def run_pipeline(
         sup_model, ranking_new_models, dynamics_paths, value_aware_model = load_dynamics_models(dynamics_dir, device)
         morel_model = load_morel_model_from_paths(dynamics_paths, device)
         mopo_model = load_mopo_model_from_paths(dynamics_paths, device)
+        romi_model = load_romi_model_from_paths(dynamics_paths, device)
         raw_morel_info = dynamics_paths.get("morel_info")
         if isinstance(raw_morel_info, dict):
             morel_info = raw_morel_info
         raw_mopo_info = dynamics_paths.get("mopo_info")
         if isinstance(raw_mopo_info, dict):
             mopo_info = raw_mopo_info
+        raw_romi_info = dynamics_paths.get("romi_info")
+        if isinstance(raw_romi_info, dict):
+            romi_info = raw_romi_info
 
         missing_requested_models = find_missing_requested_dynamics_models(
             requested_models=args.dynamics_models,
@@ -1863,6 +2145,7 @@ def run_pipeline(
             value_aware_model=value_aware_model,
             morel_model=morel_model,
             mopo_model=mopo_model,
+            romi_model=romi_model,
             value_aware_only=value_aware_only,
         )
         if missing_requested_models:
@@ -1895,7 +2178,17 @@ def run_pipeline(
             print("[Step 4] Training dynamics models...")
             print(f"  Models to train: {args.dynamics_models}")
         start_time = time.perf_counter()
-        sup_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info = train_dynamics_models(
+        (
+            sup_model,
+            ranking_new_models,
+            value_aware_model,
+            morel_model,
+            morel_info,
+            mopo_model,
+            mopo_info,
+            romi_model,
+            romi_info,
+        ) = train_dynamics_models(
             dyn_dataset,
             torch_policies,
             q_models,
@@ -1948,6 +2241,32 @@ def run_pipeline(
             mopo_holdout_size=args.mopo_holdout_size,
             mopo_penalty_coef=args.mopo_penalty_coef,
             mopo_bootstrap=not args.mopo_no_bootstrap,
+            romi_ensemble_size=args.romi_ensemble_size,
+            romi_hidden_dim=args.romi_hidden_dim,
+            romi_hidden_layers=args.romi_hidden_layers,
+            romi_weight_hidden_dim=args.romi_weight_hidden_dim,
+            romi_weight_hidden_layers=args.romi_weight_hidden_layers,
+            romi_epochs=args.romi_epochs,
+            romi_pretrain_epochs=args.romi_pretrain_epochs,
+            romi_batch_size=args.romi_batch_size,
+            romi_dynamics_lr=args.romi_dynamics_lr,
+            romi_weight_lr=args.romi_weight_lr,
+            romi_actor_lr=args.romi_actor_lr,
+            romi_critic_lr=args.romi_critic_lr,
+            romi_real_data_ratio=args.romi_real_data_ratio,
+            romi_rollout_horizon=args.romi_rollout_horizon,
+            romi_rollouts_per_epoch=args.romi_rollouts_per_epoch,
+            romi_policy_updates_per_epoch=args.romi_policy_updates_per_epoch,
+            romi_dynamics_updates_per_epoch=args.romi_dynamics_updates_per_epoch,
+            romi_weight_updates_per_epoch=args.romi_weight_updates_per_epoch,
+            romi_uncertainty_scale=args.romi_uncertainty_scale,
+            romi_uncertainty_samples=args.romi_uncertainty_samples,
+            romi_weight_min=args.romi_weight_min,
+            romi_weight_max=args.romi_weight_max,
+            romi_model_buffer_capacity=args.romi_model_buffer_capacity,
+            romi_bilevel_inner_lr=args.romi_bilevel_inner_lr,
+            romi_bootstrap=not args.romi_no_bootstrap,
+            romi_policy_pretrain_steps=args.romi_policy_pretrain_steps,
         )
         dynamics_paths = save_dynamics_models(
             sup_model,
@@ -1958,6 +2277,8 @@ def run_pipeline(
             morel_info=morel_info,
             mopo_model=mopo_model,
             mopo_info=mopo_info,
+            romi_model=romi_model,
+            romi_info=romi_info,
         )
         dynamics_trained = True
         dynamics_train_time = time.perf_counter() - start_time
@@ -1981,6 +2302,13 @@ def run_pipeline(
             dyn_log["dynamics/mopo_uncertainty_max"] = mopo_info["uncertainty_max"]
         if mopo_info.get("elite_size") is not None:
             dyn_log["dynamics/mopo_elite_size"] = mopo_info["elite_size"]
+    if romi_info is not None:
+        if romi_info.get("uncertainty_mean") is not None:
+            dyn_log["dynamics/romi_uncertainty_mean"] = romi_info["uncertainty_mean"]
+        if romi_info.get("uncertainty_max") is not None:
+            dyn_log["dynamics/romi_uncertainty_max"] = romi_info["uncertainty_max"]
+        if romi_info.get("ensemble_size") is not None:
+            dyn_log["dynamics/romi_ensemble_size"] = romi_info["ensemble_size"]
     wandb_log(wandb_run, dyn_log)
 
     # =========================================================================
@@ -2100,6 +2428,28 @@ def run_pipeline(
             dyn_mopo_penalty_mean = float(mopo_metrics.get("penalty_mean", 0.0))
             dyn_mopo_model_reward_mean = float(mopo_metrics.get("model_reward_mean", 0.0))
 
+        # ROMI learned-model evaluation on fixed policy set
+        dyn_romi_model: Optional[float] = None
+        dyn_romi_model_stderr: Optional[float] = None
+        dyn_romi_uncertainty_mean: Optional[float] = None
+        if romi_model is not None:
+            romi_seed = int(args.seed + snap["timesteps"] + 31)
+            dyn_romi_model, dyn_romi_model_stderr, romi_metrics = evaluate_in_romi_model_mdp(
+                romi_model=romi_model,
+                policy=policy,
+                initial_states=initial_states,
+                horizon=args.eval_horizon,
+                gamma=args.gamma,
+                rollouts=args.eval_rollouts,
+                seed=romi_seed,
+                reward_fn_torch=reward_fn_torch,
+                act_low=act_low,
+                act_high=act_high,
+                deterministic_policy=True,
+                deterministic_dynamics=bool(args.romi_deterministic_dynamics_eval),
+            )
+            dyn_romi_uncertainty_mean = float(romi_metrics.get("uncertainty_mean", 0.0))
+
         # Create numpy wrapper for termination function if provided
         termination_fn_np: Optional[Callable[[np.ndarray], bool]] = None
         if termination_fn_torch is not None:
@@ -2157,6 +2507,12 @@ def run_pipeline(
             wandb_payload["eval/mopo_penalty_mean"] = dyn_mopo_penalty_mean
         if dyn_mopo_model_reward_mean is not None:
             wandb_payload["eval/mopo_model_reward_mean"] = dyn_mopo_model_reward_mean
+        if dyn_romi_model is not None:
+            wandb_payload["eval/romi_model_return"] = dyn_romi_model
+        if dyn_romi_model_stderr is not None:
+            wandb_payload["eval/romi_model_stderr"] = dyn_romi_model_stderr
+        if dyn_romi_uncertainty_mean is not None:
+            wandb_payload["eval/romi_uncertainty_mean"] = dyn_romi_uncertainty_mean
 
         wandb_log(wandb_run, wandb_payload, step=int(snap["timesteps"]))
 
@@ -2184,6 +2540,9 @@ def run_pipeline(
                 "mopo_uncertainty_mean": dyn_mopo_uncertainty_mean,
                 "mopo_penalty_mean": dyn_mopo_penalty_mean,
                 "mopo_model_reward_mean": dyn_mopo_model_reward_mean,
+                "romi_model_return": dyn_romi_model,
+                "romi_model_stderr": dyn_romi_model_stderr,
+                "romi_uncertainty_mean": dyn_romi_uncertainty_mean,
             },
             "env_mc": fixed_env,
         })
@@ -2199,6 +2558,7 @@ def run_pipeline(
         "dynamics_paths": dynamics_paths,
         "morel_info": morel_info,
         "mopo_info": mopo_info,
+        "romi_info": romi_info,
         "results": results,
     }
 
@@ -2222,6 +2582,7 @@ def run_pipeline(
             "dynamics_paths": dynamics_paths,
             "morel_info": morel_info,
             "mopo_info": mopo_info,
+            "romi_info": romi_info,
             "results": results,
         })
         wandb_run.finish()
