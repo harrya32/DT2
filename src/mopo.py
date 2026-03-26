@@ -19,8 +19,8 @@ from .utils import DEVICE, set_seed
 # -----------------------------------------------------------------------------
 # MOPO paper-aligned defaults (Appendix G.2, arXiv:2005.13239)
 # -----------------------------------------------------------------------------
-# - Ensemble size: 7, keep best 5 on holdout.
-# - Dynamics architecture: 4-layer feedforward, hidden size 200.
+# - Ensemble size: 7, keep best 5 on holdout (changed to 4 for consistency with MOReL).
+# - Dynamics architecture: 4-layer feedforward, hidden size 200 (changed to 64 for consistency with DT2).
 # - Two-head output: mean + variance.
 # - Spectral normalization on all layers except variance head.
 # - Batch size 256 for SAC updates; we mirror this for dynamics minibatches.
@@ -28,10 +28,10 @@ from .utils import DEVICE, set_seed
 
 @dataclass(frozen=True)
 class MopoDefaults:
-    hidden_dim: int = 200
+    hidden_dim: int = 64
     hidden_layers: int = 4
     ensemble_size: int = 7
-    elite_size: int = 5
+    elite_size: int = 4
     holdout_size: int = 1000
     batch_size: int = 256
     epochs: int = 300
@@ -55,7 +55,7 @@ class MopoDynamicsModel(nn.Module):
         self,
         state_dim: int,
         act_dim: int,
-        hidden_dim: int = 200,
+        hidden_dim: int = 64,
         hidden_layers: int = 4,
         state_low: Optional[torch.Tensor] = None,
         state_high: Optional[torch.Tensor] = None,

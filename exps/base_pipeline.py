@@ -911,7 +911,7 @@ def train_dynamics_models(
     morel_bootstrap: bool = True,
     mopo_ensemble_size: int = 7,
     mopo_elite_size: int = 5,
-    mopo_hidden_dim: int = 200,
+    mopo_hidden_dim: int = 64,
     mopo_hidden_layers: int = 4,
     mopo_epochs: int = 300,
     mopo_batch_size: int = 256,
@@ -1458,7 +1458,7 @@ class BasePipelineConfig:
     morel_bootstrap: bool = True
     mopo_ensemble_size: int = 7
     mopo_elite_size: int = 5
-    mopo_hidden_dim: int = 200
+    mopo_hidden_dim: int = 64
     mopo_hidden_layers: int = 4
     mopo_epochs: int = 300
     mopo_batch_size: int = 256
@@ -1571,7 +1571,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--morel-no-bootstrap", action="store_true", help="Disable bootstrap resampling across MOReL ensemble members")
     parser.add_argument("--mopo-ensemble-size", type=int, default=7, help="MOPO ensemble size (paper: 7)")
     parser.add_argument("--mopo-elite-size", type=int, default=5, help="MOPO number of elite models kept by holdout NLL (paper: 5)")
-    parser.add_argument("--mopo-hidden-dim", type=int, default=200, help="MOPO hidden width (paper: 200)")
+    parser.add_argument("--mopo-hidden-dim", type=int, default=64, help="MOPO hidden width (paper: 200)")
     parser.add_argument("--mopo-hidden-layers", type=int, default=4, help="MOPO hidden layers in feedforward dynamics (paper: 4)")
     parser.add_argument("--mopo-epochs", type=int, default=300, help="MOPO dynamics epochs")
     parser.add_argument("--mopo-batch-size", type=int, default=256, help="MOPO dynamics batch size (paper reports 256 for SAC updates)")

@@ -1,9 +1,59 @@
 {
-  "supervised": "results/test/ant_pipeline/mlp/dynamics/dynamics_supervised.pt",
+  "supervised": null,
   "ranking": "results/test/ant_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/test/ant_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
-  },
-  "value_aware": null
+  "ranking_new": {},
+  "value_aware": null,
+  "morel": null,
+  "morel_info": null,
+  "mopo": "results/test/ant_pipeline/mlp/dynamics/dynamics_mopo.pt",
+  "mopo_info": {
+    "uncertainty_mean": 9.30286693572998,
+    "uncertainty_std": 2.607287883758545,
+    "uncertainty_max": 20.38536262512207,
+    "penalty_coef": 1.0,
+    "holdout_size": 1000,
+    "ensemble_size": 7,
+    "elite_size": 5,
+    "hidden_dim": 64,
+    "hidden_layers": 4,
+    "epochs": 300,
+    "batch_size": 256,
+    "lr": 0.001,
+    "bootstrap": true,
+    "elite_indices": [
+      5,
+      1,
+      0,
+      4,
+      2
+    ],
+    "member_holdout_nll": [
+      18.69889259338379,
+      16.4715633392334,
+      19.747875213623047,
+      21.006877899169922,
+      19.56287956237793,
+      12.255254745483398,
+      20.36732292175293
+    ],
+    "member_final_losses": [
+      14.128503052187172,
+      13.118403769158698,
+      14.877354291610388,
+      16.267972009006517,
+      14.521873511277237,
+      8.990411320806066,
+      15.637737125545353
+    ],
+    "member_epochs": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+    ]
+  }
 }
