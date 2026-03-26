@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -270,12 +271,14 @@ class MopoDynamicsEnsemble(nn.Module):
 class MopoTrainingInfo:
     model_losses: List[List[float]]
     member_holdout_nll: List[float]
+    member_best_holdout_nll: List[Optional[float]]
     elite_indices: List[int]
     uncertainty_mean: float
     uncertainty_std: float
     uncertainty_max: float
     penalty_coef: float
     holdout_size: int
+    holdout_fraction: float
     ensemble_size: int
     elite_size: int
     hidden_dim: int
@@ -284,6 +287,9 @@ class MopoTrainingInfo:
     batch_size: int
     lr: float
     bootstrap: bool
+    early_stop_patience: int
+    min_epochs: int
+    min_delta: float
 
 
 def _as_dict(dataset: OfflineDataset | Mapping[str, np.ndarray]) -> Mapping[str, np.ndarray]:
@@ -381,14 +387,18 @@ def train_mopo_dynamics_ensemble(
     batch_size: Optional[int] = None,
     lr: Optional[float] = None,
     holdout_size: Optional[int] = None,
+    val_fraction: Optional[float] = None,
     penalty_coef: float = 1.0,
     seed: int = 0,
     env_name: Optional[str] = None,
     state_low: Optional[torch.Tensor] = None,
     state_high: Optional[torch.Tensor] = None,
     bootstrap: bool = True,
+    early_stop_patience: int = 50,
+    min_epochs: int = 50,
+    min_delta: float = 0.0,
     device: Optional[torch.device] = None,
-    log_hook: Optional[Callable[[int, int, float], None]] = None,
+    log_hook: Optional[Callable[[int, int, float, Optional[float]], None]] = None,
 ) -> Tuple[MopoDynamicsEnsemble, MopoTrainingInfo]:
     """Train MOPO probabilistic dynamics ensemble and keep top holdout models."""
     set_seed(seed)
@@ -416,7 +426,13 @@ def train_mopo_dynamics_ensemble(
     if n_samples < 2:
         raise ValueError("Dataset is too small for MOPO dynamics training.")
 
-    holdout_count = int(np.clip(holdout_size, 1, n_samples - 1))
+    if val_fraction is not None and float(val_fraction) > 0.0:
+        val_fraction = float(max(0.0, min(float(val_fraction), 0.9)))
+        holdout_count = max(1, int(n_samples * val_fraction))
+        holdout_count = min(n_samples - 1, holdout_count)
+    else:
+        holdout_count = int(np.clip(holdout_size, 1, n_samples - 1))
+    holdout_fraction = float(holdout_count / n_samples)
     perm = torch.randperm(n_samples, device=device)
     holdout_idx = perm[:holdout_count]
     train_idx = perm[holdout_count:]
@@ -427,6 +443,7 @@ def train_mopo_dynamics_ensemble(
     models: List[MopoDynamicsModel] = []
     member_losses: List[List[float]] = []
     member_holdout: List[float] = []
+    member_best_holdout: List[Optional[float]] = []
 
     for member_idx in range(ensemble_size):
         model = MopoDynamicsModel(
@@ -460,6 +477,10 @@ def train_mopo_dynamics_ensemble(
         loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, drop_last=False)
 
         losses: List[float] = []
+        best_state = copy.deepcopy(model.state_dict())
+        best_holdout = float("inf")
+        best_holdout_nll: Optional[float] = None
+        epochs_without_improve = 0
         for epoch in range(epochs):
             total = 0.0
             batches = 0
@@ -473,8 +494,39 @@ def train_mopo_dynamics_ensemble(
 
             avg_loss = total / max(1, batches)
             losses.append(avg_loss)
+            should_stop = False
+
+            holdout_nll_epoch = _mean_holdout_nll(
+                model=model,
+                states=states,
+                actions=actions,
+                rewards=rewards,
+                next_states=next_states,
+                holdout_idx=holdout_idx,
+                batch_size=4096,
+            )
+            if holdout_nll_epoch + min_delta < best_holdout:
+                best_holdout = holdout_nll_epoch
+                best_holdout_nll = float(holdout_nll_epoch)
+                epochs_without_improve = 0
+                best_state = copy.deepcopy(model.state_dict())
+            else:
+                epochs_without_improve += 1
+
+            if (
+                early_stop_patience > 0
+                and epoch + 1 >= min_epochs
+                and epochs_without_improve >= early_stop_patience
+            ):
+                should_stop = True
+
             if log_hook is not None:
-                log_hook(member_idx, epoch, avg_loss)
+                log_hook(member_idx, epoch, avg_loss, float(holdout_nll_epoch))
+
+            if should_stop:
+                break
+
+        model.load_state_dict(best_state)
 
         holdout_nll = _mean_holdout_nll(
             model=model,
@@ -489,6 +541,7 @@ def train_mopo_dynamics_ensemble(
         models.append(model)
         member_losses.append(losses)
         member_holdout.append(holdout_nll)
+        member_best_holdout.append(best_holdout_nll)
 
     elite_size_eff = min(elite_size, len(models))
     elite_indices = np.argsort(np.asarray(member_holdout, dtype=np.float64))[:elite_size_eff].tolist()
@@ -503,12 +556,14 @@ def train_mopo_dynamics_ensemble(
     info = MopoTrainingInfo(
         model_losses=member_losses,
         member_holdout_nll=[float(v) for v in member_holdout],
+        member_best_holdout_nll=member_best_holdout,
         elite_indices=[int(i) for i in elite_indices],
         uncertainty_mean=unc_mean,
         uncertainty_std=unc_std,
         uncertainty_max=unc_max,
         penalty_coef=float(penalty_coef),
         holdout_size=int(holdout_count),
+        holdout_fraction=float(holdout_fraction),
         ensemble_size=int(ensemble_size),
         elite_size=int(elite_size_eff),
         hidden_dim=int(hidden_dim),
@@ -517,6 +572,9 @@ def train_mopo_dynamics_ensemble(
         batch_size=int(batch_size),
         lr=float(lr),
         bootstrap=bool(bootstrap),
+        early_stop_patience=int(early_stop_patience),
+        min_epochs=int(min_epochs),
+        min_delta=float(min_delta),
     )
     return ensemble, info
 

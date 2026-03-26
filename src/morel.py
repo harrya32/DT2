@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -196,6 +197,7 @@ class MorelDynamicsEnsemble(nn.Module):
 @dataclass
 class MorelTrainingInfo:
     model_losses: List[List[float]]
+    member_best_val_loss: List[Optional[float]]
     disagreement_mean: float
     disagreement_std: float
     disagreement_max: float
@@ -204,6 +206,10 @@ class MorelTrainingInfo:
     halt_reward: float
     reward_min: float
     reward_offset: float
+    val_fraction: float
+    early_stop_patience: int
+    min_epochs: int
+    min_delta: float
 
 
 def _as_dict(dataset: OfflineDataset | Mapping[str, np.ndarray]) -> Mapping[str, np.ndarray]:
@@ -260,6 +266,24 @@ def _dataset_tensors(
     )
 
 
+def _split_train_val_indices(
+    num_samples: int,
+    val_fraction: float,
+    device: torch.device,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    if num_samples <= 1 or val_fraction <= 0.0:
+        return torch.arange(num_samples, device=device), None
+
+    val_fraction = float(max(0.0, min(val_fraction, 0.9)))
+    val_count = max(1, int(num_samples * val_fraction))
+    val_count = min(num_samples - 1, val_count)
+    if val_count <= 0:
+        return torch.arange(num_samples, device=device), None
+
+    perm = torch.randperm(num_samples, device=device)
+    return perm[val_count:], perm[:val_count]
+
+
 def _resolve_threshold(
     disagreements: torch.Tensor,
     threshold: Optional[float],
@@ -311,6 +335,26 @@ def _batched_disagreements(
     return torch.cat(values, dim=0)
 
 
+@torch.no_grad()
+def _mean_validation_loss(
+    model: MorelDynamicsModel,
+    states: torch.Tensor,
+    actions: torch.Tensor,
+    next_states: torch.Tensor,
+    val_idx: torch.Tensor,
+    batch_size: int,
+) -> float:
+    total = 0.0
+    count = 0
+    for start in range(0, val_idx.numel(), batch_size):
+        idx = val_idx[start : start + batch_size]
+        loss = model.loss(states[idx], actions[idx], next_states[idx])
+        bsz = int(idx.numel())
+        total += float(loss.item()) * bsz
+        count += bsz
+    return float(total / max(1, count))
+
+
 def train_dynamics_ensemble(
     dataset: OfflineDataset | Mapping[str, np.ndarray],
     ensemble_size: int = 4,
@@ -329,8 +373,12 @@ def train_dynamics_ensemble(
     state_low: Optional[torch.Tensor] = None,
     state_high: Optional[torch.Tensor] = None,
     bootstrap: bool = True,
+    val_fraction: float = 0.1,
+    early_stop_patience: int = 50,
+    min_epochs: int = 50,
+    min_delta: float = 0.0,
     device: Optional[torch.device] = None,
-    log_hook: Optional[Callable[[int, int, float], None]] = None,
+    log_hook: Optional[Callable[[int, int, float, Optional[float]], None]] = None,
 ) -> Tuple[MorelDynamicsEnsemble, MorelTrainingInfo]:
     """Train a MOReL-style ensemble and calibrate USAD threshold.
 
@@ -349,7 +397,11 @@ def train_dynamics_ensemble(
         threshold_mode: 'mean_std' (paper-style) or 'fraction_max' (ablation-style).
         threshold_frac_of_max: Used when threshold_mode='fraction_max'.
         bootstrap: Whether to bootstrap sample each ensemble member's training set.
-        log_hook: Optional callback(model_idx, epoch, avg_loss).
+        val_fraction: Fraction of data reserved for validation/early stopping.
+        early_stop_patience: Epochs to wait for validation improvement.
+        min_epochs: Minimum epochs before applying early stopping.
+        min_delta: Minimum validation improvement to reset patience.
+        log_hook: Optional callback(model_idx, epoch, avg_loss, val_loss).
     """
     set_seed(seed)
     device = device or DEVICE
@@ -364,12 +416,13 @@ def train_dynamics_ensemble(
     n_samples = states.size(0)
     if n_samples < 2:
         raise ValueError("Dataset is too small for MOReL dynamics training.")
+    train_idx, val_idx = _split_train_val_indices(n_samples, val_fraction, device)
     state_dim = states.size(-1)
     act_dim = actions.size(-1)
 
     model_losses: List[List[float]] = []
+    member_best_val_losses: List[Optional[float]] = []
     models: List[MorelDynamicsModel] = []
-    base_indices = torch.arange(n_samples, device=device)
 
     for model_idx in range(ensemble_size):
         model = MorelDynamicsModel(
@@ -379,24 +432,22 @@ def train_dynamics_ensemble(
             state_low=state_low,
             state_high=state_high,
         ).to(device)
-        model.fit_normalizer(states, actions, next_states)
+        if bootstrap:
+            train_indices = train_idx[torch.randint(0, train_idx.numel(), (train_idx.numel(),), device=device)]
+        else:
+            train_indices = train_idx
+        model.fit_normalizer(states[train_indices], actions[train_indices], next_states[train_indices])
 
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-        if bootstrap:
-            train_indices = torch.randint(
-                low=0,
-                high=n_samples,
-                size=(n_samples,),
-                device=device,
-            )
-        else:
-            train_indices = base_indices
 
         train_ds = TensorDataset(states[train_indices], actions[train_indices], next_states[train_indices])
         loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, drop_last=False)
 
         losses: List[float] = []
+        best_state = copy.deepcopy(model.state_dict()) if val_idx is not None else None
+        best_val = float("inf")
+        best_val_loss: Optional[float] = None
+        epochs_without_improve = 0
         for epoch in range(epochs):
             total = 0.0
             batches = 0
@@ -410,11 +461,46 @@ def train_dynamics_ensemble(
 
             avg_loss = total / max(1, batches)
             losses.append(avg_loss)
+            val_loss: Optional[float] = None
+            should_stop = False
+
+            if val_idx is not None:
+                val_loss = _mean_validation_loss(
+                    model=model,
+                    states=states,
+                    actions=actions,
+                    next_states=next_states,
+                    val_idx=val_idx,
+                    batch_size=max(1, batch_size),
+                )
+
+                if val_loss + min_delta < best_val:
+                    best_val = val_loss
+                    best_val_loss = float(val_loss)
+                    epochs_without_improve = 0
+                    best_state = copy.deepcopy(model.state_dict())
+                else:
+                    epochs_without_improve += 1
+
+                if (
+                    early_stop_patience > 0
+                    and epoch + 1 >= min_epochs
+                    and epochs_without_improve >= early_stop_patience
+                ):
+                    should_stop = True
+
             if log_hook is not None:
-                log_hook(model_idx, epoch, avg_loss)
+                log_hook(model_idx, epoch, avg_loss, val_loss)
+
+            if should_stop:
+                break
+
+        if best_state is not None:
+            model.load_state_dict(best_state)
 
         models.append(model)
         model_losses.append(losses)
+        member_best_val_losses.append(best_val_loss)
 
     ensemble = MorelDynamicsEnsemble(models=models, threshold=0.0, halt_reward=0.0).to(device)
     disagreements = _batched_disagreements(ensemble, states, actions, batch_size=8192)
@@ -434,6 +520,7 @@ def train_dynamics_ensemble(
 
     info = MorelTrainingInfo(
         model_losses=model_losses,
+        member_best_val_loss=member_best_val_losses,
         disagreement_mean=d_mean,
         disagreement_std=d_std,
         disagreement_max=d_max,
@@ -442,6 +529,10 @@ def train_dynamics_ensemble(
         halt_reward=resolved_halt_reward,
         reward_min=reward_min,
         reward_offset=resolved_offset if halt_reward is None else float("nan"),
+        val_fraction=float(max(0.0, min(val_fraction, 0.9))),
+        early_stop_patience=int(early_stop_patience),
+        min_epochs=int(min_epochs),
+        min_delta=float(min_delta),
     )
     return ensemble, info
 

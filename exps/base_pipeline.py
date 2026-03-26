@@ -457,6 +457,10 @@ def compact_morel_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
         "halt_reward",
         "reward_min",
         "reward_offset",
+        "val_fraction",
+        "early_stop_patience",
+        "min_epochs",
+        "min_delta",
     )
     for field in scalar_fields:
         if hasattr(raw_info, field):
@@ -476,6 +480,13 @@ def compact_morel_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
         info["member_final_losses"] = final_losses
         info["member_epochs"] = epochs_per_member
 
+    if hasattr(raw_info, "member_best_val_loss"):
+        best_vals = getattr(raw_info, "member_best_val_loss")
+        info["member_best_val_loss"] = [
+            None if v is None else _safe_json_number(float(v))
+            for v in best_vals
+        ]
+
     return info
 
 
@@ -491,6 +502,7 @@ def compact_mopo_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
         "uncertainty_max",
         "penalty_coef",
         "holdout_size",
+        "holdout_fraction",
         "ensemble_size",
         "elite_size",
         "hidden_dim",
@@ -498,6 +510,9 @@ def compact_mopo_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
         "epochs",
         "batch_size",
         "lr",
+        "early_stop_patience",
+        "min_epochs",
+        "min_delta",
     )
     for field in scalar_fields:
         if hasattr(raw_info, field):
@@ -519,6 +534,13 @@ def compact_mopo_info(raw_info: Optional[Any]) -> Optional[Dict[str, Any]]:
     if hasattr(raw_info, "member_holdout_nll"):
         holdout_losses = getattr(raw_info, "member_holdout_nll")
         info["member_holdout_nll"] = [_safe_json_number(float(v)) for v in holdout_losses]
+
+    if hasattr(raw_info, "member_best_holdout_nll"):
+        best_holdout_losses = getattr(raw_info, "member_best_holdout_nll")
+        info["member_best_holdout_nll"] = [
+            None if v is None else _safe_json_number(float(v))
+            for v in best_holdout_losses
+        ]
 
     if hasattr(raw_info, "model_losses"):
         losses = getattr(raw_info, "model_losses")
@@ -1040,17 +1062,17 @@ def train_dynamics_models(
         ranking_new_models[loss_name] = model
 
     if "morel" in dynamics_models:
-        morel_log_hook: Optional[Callable[[int, int, float], None]] = None
+        morel_log_hook: Optional[Callable[[int, int, float, Optional[float]], None]] = None
         if wandb_run is not None:
-            def _hook(member_idx: int, epoch: int, loss: float) -> None:
+            def _hook(member_idx: int, epoch: int, loss: float, val_loss: Optional[float] = None) -> None:
                 step_key = f"dynamics/morel/member_{member_idx}/loss_step"
-                wandb_log(
-                    wandb_run,
-                    {
-                        f"dynamics/morel/member_{member_idx}/loss": float(loss),
-                        step_key: int(epoch + 1),
-                    },
-                )
+                payload = {
+                    f"dynamics/morel/member_{member_idx}/loss": float(loss),
+                    step_key: int(epoch + 1),
+                }
+                if val_loss is not None:
+                    payload[f"dynamics/morel/member_{member_idx}/loss_val"] = float(val_loss)
+                wandb_log(wandb_run, payload)
             morel_log_hook = _hook
 
         morel_model, raw_morel_info = train_dynamics_ensemble(
@@ -1071,23 +1093,26 @@ def train_dynamics_models(
             state_low=state_low,
             state_high=state_upper,
             bootstrap=morel_bootstrap,
+            val_fraction=val_fraction,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
             device=device,
             log_hook=morel_log_hook,
         )
         morel_info = compact_morel_info(raw_morel_info)
 
     if "mopo" in dynamics_models:
-        mopo_log_hook: Optional[Callable[[int, int, float], None]] = None
+        mopo_log_hook: Optional[Callable[[int, int, float, Optional[float]], None]] = None
         if wandb_run is not None:
-            def _hook(member_idx: int, epoch: int, loss: float) -> None:
+            def _hook(member_idx: int, epoch: int, loss: float, val_loss: Optional[float] = None) -> None:
                 step_key = f"dynamics/mopo/member_{member_idx}/loss_step"
-                wandb_log(
-                    wandb_run,
-                    {
-                        f"dynamics/mopo/member_{member_idx}/loss": float(loss),
-                        step_key: int(epoch + 1),
-                    },
-                )
+                payload = {
+                    f"dynamics/mopo/member_{member_idx}/loss": float(loss),
+                    step_key: int(epoch + 1),
+                }
+                if val_loss is not None:
+                    payload[f"dynamics/mopo/member_{member_idx}/loss_val"] = float(val_loss)
+                wandb_log(wandb_run, payload)
             mopo_log_hook = _hook
 
         mopo_model_raw, raw_mopo_info = train_mopo_dynamics_ensemble(
@@ -1100,12 +1125,15 @@ def train_dynamics_models(
             batch_size=int(max(1, mopo_batch_size)),
             lr=float(mopo_lr),
             holdout_size=int(max(1, mopo_holdout_size)),
+            val_fraction=val_fraction,
             penalty_coef=float(mopo_penalty_coef),
             seed=seed,
             env_name=env_name,
             state_low=state_low,
             state_high=state_upper,
             bootstrap=mopo_bootstrap,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
             device=device,
             log_hook=mopo_log_hook,
         )
@@ -1576,7 +1604,12 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mopo-epochs", type=int, default=300, help="MOPO dynamics epochs")
     parser.add_argument("--mopo-batch-size", type=int, default=256, help="MOPO dynamics batch size (paper reports 256 for SAC updates)")
     parser.add_argument("--mopo-lr", type=float, default=1e-3, help="MOPO dynamics Adam learning rate")
-    parser.add_argument("--mopo-holdout-size", type=int, default=1000, help="MOPO holdout transitions for elite selection (paper: 1000)")
+    parser.add_argument(
+        "--mopo-holdout-size",
+        type=int,
+        default=1000,
+        help="MOPO holdout transitions fallback when --dyn-val-fraction <= 0 (paper: 1000)",
+    )
     parser.add_argument("--mopo-penalty-coef", type=float, default=1.0, help="MOPO uncertainty penalty coefficient lambda")
     parser.add_argument("--mopo-no-bootstrap", action="store_true", help="Disable bootstrap resampling across MOPO ensemble members")
     parser.add_argument("--mopo-deterministic-dynamics-eval", action="store_true", help="Use deterministic MOPO dynamics means at evaluation time")

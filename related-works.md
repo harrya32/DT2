@@ -1,4 +1,4 @@
-# Related Works: DT2 vs. MOREL vs. MOPO
+# Related Works: DT2 vs. MOREL vs. MOPO vs. POPCORN
 
 ## 1) DT2 (Decision-Targeted Digital Twins)
 
@@ -179,3 +179,181 @@ In `exps/base_pipeline.py`:
 For this repository's current scope (policy ranking/evaluation of pre-trained policies), MOPO can be integrated as a conservative evaluation backend exactly like MOREL, but with soft penalized rewards instead of HALT transitions.
 
 For full paper-faithful MOPO, an additional policy-learning stage is required: MBPO-style synthetic rollouts with penalized rewards and SAC updates on `D_env U D_model` (Algorithm 2), which is beyond the current fixed-policy-only MOREL evaluation path.
+
+## 7) POPCORN (Partially Observed Prediction Constrained RL)
+
+### Method summary from the POPCORN paper
+POPCORN is designed for **batch off-policy RL under partial observability**. Instead of only maximizing model likelihood (2-stage POMDP fitting) or only optimizing policy value (value-only), it learns a POMDP model that balances both:
+
+- Learn a latent-state IO-HMM/POMDP model (`tau, mu, sigma, R`) from trajectories.
+- Solve the current model with PBVI (point-based value iteration) to get policy `pi_theta`.
+- Estimate policy value off-policy using CWPDIS under the behavior policy.
+- Optimize a prediction-constrained objective:
+  - constrained form: maximize `L_gen(theta)` subject to `V(pi_theta) >= epsilon`;
+  - practical Lagrangian form: maximize `L_gen(theta) + lambda * V(pi_theta)`.
+- In real-data settings, add OPE stabilization:
+  - ESS regularization (`-lambda_ESS / ESS(theta)`),
+  - support restriction so `pi_theta(a|h)` only uses actions with sufficient behavior-policy support.
+
+Unlike MOReL/MOPO, POPCORN's core pessimism mechanism is **not** uncertainty penalties on rewards/transitions; it is a **joint model-fit + decision-value training objective** with explicit off-policy value control.
+
+(See `papers/popcorn.pdf`: Section 1 for motivation, Section 4.1 for constrained/Lagrangian objective, Section 4.1-4.2 for differentiable PBVI + CWPDIS + ESS/support stabilization, and Section 7 for the high-level conclusion.)
+
+### Algorithm specifics that matter for implementation
+Key paper-level mechanics to preserve if you want POPCORN fidelity:
+
+- **Latent POMDP parameterization** (`tau, mu, sigma, R`) with IO-HMM likelihood and forward-backward filtering.
+- **Planner in the loop**: PBVI is part of training, not just post-hoc evaluation.
+- **Differentiable PBVI relaxation**:
+  - relax PBVI argmax operations to softmax (temperature-controlled),
+  - use stochastic policies for more stable OPE support.
+- **Continuous-observation PBVI approximation**:
+  - cluster observations into meta-observations via sampled observation partitions and alpha-vector assignments.
+- **Training loop engineering from appendix**:
+  - cache PBVI value function/belief sets across gradient updates,
+  - do a few backups per update (instead of full PBVI each step),
+  - occasional hard reset of belief/value caches.
+- **Reward-learning guardrail**:
+  - do not backprop OPE value through reward parameters directly; fit reward separately (EM-style update) to avoid reward inflation artifacts.
+
+(See `papers/popcorn.pdf`: Section 3 for model/planning setup, Appendix A.2-A.4 for cached-PBVI + meta-observation approximation + softmax PBVI relaxation, and Appendix B for separate reward fitting.)
+
+### How POPCORN compares to DT2, MOREL, and MOPO
+
+| Aspect | DT2 | MOREL | MOPO | POPCORN |
+|---|---|---|---|---|
+| Primary setting | Offline MDP policy ranking | Offline MDP conservative policy optimization/eval | Offline MDP conservative policy optimization | Offline **POMDP** policy learning in batch off-policy data |
+| Core objective | `L_sim + lambda_rank * L_rank` | Model fit + hard pessimistic HALT MDP | Model fit + soft uncertainty-penalized rewards | `L_gen + lambda * V_OPE(pi_theta)` (or constrained `V >= epsilon`) |
+| Decision signal during model training | Pairwise policy ordering proxies (FQE) | No direct value term in dynamics fitting | No direct value term in dynamics fitting | Direct off-policy value of solved policy is in training objective |
+| Uncertainty usage | Secondary/stability-related | Central (USAD threshold + HALT) | Central (continuous uncertainty penalty) | OPE variance/safety control via ESS + support overlap, not HALT/uncertainty penalty |
+| Partial observability handling | Not explicit | Not explicit | Not explicit | First-class (latent-state POMDP + belief-state planning) |
+
+### How to implement POPCORN in this codebase
+Because POPCORN is structurally different from MOReL/MOPO, a clean integration is a **new module** plus a new pipeline branch.
+
+### A) Add a dedicated POPCORN module
+Create `src/popcorn.py` with:
+
+- `PopcornPOMDPModel`:
+  - latent transition/emission/reward parameters (`tau, mu, sigma, R`),
+  - forward filtering / sequence log-likelihood.
+- `soft_pbvi(...)`:
+  - differentiable PBVI backups (temperature softmax),
+  - support for continuous observations using sampled meta-observations.
+- `cwpdis_value(...)` + `effective_sample_size(...)`:
+  - off-policy value and ESS computations from trajectory-level data.
+- `train_popcorn(...)`:
+  - objective `L_gen + lambda * V - lambda_ess / ESS`,
+  - support restriction using `pi_beh`,
+  - optional cached value-function/belief updates and periodic resets.
+
+### B) Extend base pipeline entry points
+In `exps/base_pipeline.py`:
+
+- Add `popcorn` to `--dynamics-models` choices (currently includes `supervised`, `kendall`, `hinge`, `listnet`, `morel`, `mopo`; see lines 1537-1542).
+- Add POPCORN hyperparameters, e.g.:
+  - `--popcorn-num-latent-states`,
+  - `--popcorn-lambda`,
+  - `--popcorn-lambda-ess`,
+  - `--popcorn-support-delta`,
+  - `--popcorn-pbvi-temp`,
+  - `--popcorn-pbvi-backups-per-step`.
+- Branch inside `train_dynamics_models(...)` (line ~869 onward) to call `train_popcorn(...)`, parallel to existing MOReL/MOPO branches (lines 1042-1113).
+
+### C) Save/load + evaluation plumbing
+Follow existing MOReL/MOPO patterns:
+
+- Extend manifest save/load in `save_dynamics_models(...)` / `load_dynamics_models(...)` (lines 323-406) with `popcorn` and `popcorn_info`.
+- Add `evaluate_in_popcorn_*` helper(s) alongside `evaluate_in_morel_pessimistic_mdp(...)` and `evaluate_in_mopo_penalized_mdp(...)` (lines 1195-1250), depending on whether you evaluate:
+  - learned `pi_theta` from PBVI directly, or
+  - fixed candidate policies under POPCORN-trained model.
+- Add logging in the evaluation/logging block (lines 2000-2126), e.g.:
+  - `eval/popcorn_cwpdis_value`,
+  - `eval/popcorn_ess`,
+  - `eval/popcorn_loglik`,
+  - `eval/popcorn_support_overlap`.
+
+### D) Data/trajectory requirements (important)
+POPCORN needs trajectory-level histories and behavior-policy probabilities for CWPDIS. Current `OfflineDataset` use in this repo is often transition-centric for MDP methods, so POPCORN integration likely requires:
+
+- preserving sequence structure (`o_{0:t}, a_{0:t}`),
+- behavior-policy estimation module (or known `pi_beh`) to compute importance ratios,
+- policy support-masking utilities.
+
+### E) Best-fit scope in this repository
+POPCORN is most natural for the partially observed workflows (`exps/pomdp_pipeline.py` and clinical/sepsis-style trajectories), rather than fully observed MuJoCo-style branches where MOReL/MOPO are currently aligned.
+
+For a lighter-weight first step in `exps/base_pipeline.py`, you can implement a **POPCORN-inspired** objective (`model-fit + OPE-valued policy term`) without full latent-state PBVI. But full paper-faithful POPCORN requires the POMDP planner-in-the-loop design above.
+
+## 8) Decision-Focused RL for Reward Transfer (RDF-MBRL)
+
+### Method summary from the reward-transfer paper
+This paper proposes **Robust Decision-Focused (RDF) model learning** for settings where reward preferences can change between training and deployment. The reward is parameterized as a weighted combination of reward bases, and preferences are represented by a weight vector `w`.
+
+Core objective (paper Eq. 8):
+
+- learn model parameters `theta` that do well on average over deployment-time preferences `w ~ P(w)`,
+- while keeping performance high on the known learning-phase preference `w_bar`.
+
+Constrained form:
+
+- minimize `E_{w~P(w)} [ J_{T*, R_w}(theta) ]`,
+- subject to `J_{T*, R_{w_bar}}(pi*(theta, R_{w_bar})) >= delta`.
+
+They optimize a Lagrangian relaxation (Eq. 12), approximate the expectation over `P(w)` with a finite grid `W` (Eq. 13), and compute gradients through the planning step with implicit differentiation (Eq. 14-15). Their Algorithm 1 is:
+
+1. Build a preference grid `W` over deployment preferences.
+2. For each `w in {w_bar} U W`, plan `pi*(theta, R_w)` under the current model.
+3. Evaluate returns on the true environment for each planned policy.
+4. Update `theta` using the averaged deployment objective plus learning-phase constraint term.
+
+So, unlike plain DF, RDF is explicitly optimized for **reward-transfer robustness**.
+
+### How RDF differs from current methods in this repo
+
+| Aspect | DT2 | MOREL | MOPO | POPCORN | RDF (this paper) |
+|---|---|---|---|---|---|
+| Main training signal | `L_sim + lambda_rank * L_rank` on fixed candidate policies | Model fit + hard pessimism (HALT) | Model fit + soft uncertainty penalty | `L_gen + lambda * V_OPE` in latent POMDP | Decision-focused value objective averaged over reward preferences, with learning-task constraint |
+| Reward-shift handling | Indirect via ranking supervision for one target reward setup | Not reward-transfer targeted | Not reward-transfer targeted | Handles changing objectives but in POMDP/OPE-planner setting | Explicitly targets transfer across `P(w)` |
+| Uses uncertainty pessimism | No (primary signal is ranking) | Yes | Yes | OPE variance/support controls | No explicit pessimistic uncertainty mechanism |
+| Planner in training loop | No (fixed policy set + FQE proxies) | Not required for fixed-policy eval branch | Not required for fixed-policy eval branch | Yes (PBVI) | Yes (differentiate through `pi*(theta, R_w)`) |
+| Best match to DT2 question (policy ranking after model learning) | Native | Usable conservative evaluator | Usable conservative evaluator | Heavy mismatch for MDP ranking | Usable, but needs adaptation for fixed-policy ranking in this codebase |
+
+### How to implement RDF in this codebase
+There are two practical options:
+
+### A) Paper-faithful RDF branch (harder)
+Add `src/rdf.py` with:
+
+- `build_preference_grid(...)`,
+- `train_rdf_model(...)` implementing Eq. 12/13/15,
+- planner adapters (tabular VI / LQR where differentiable policy gradients w.r.t. model parameters are available),
+- optional implicit-diff utilities.
+
+Then in `exps/base_pipeline.py`:
+
+- add `rdf` to `--dynamics-models`,
+- add RDF args (`--rdf-lambda`, `--rdf-delta`, `--rdf-w-min`, `--rdf-w-max`, `--rdf-num-w`),
+- branch in `train_dynamics_models(...)` to call `train_rdf_model(...)`,
+- extend save/load (`save_dynamics_models(...)`, `load_dynamics_models(...)`) with `rdf` + `rdf_info`,
+- add evaluation keys (e.g. `eval/rdf_return`, `eval/rdf_avg_over_w`).
+
+Important mismatch: paper-faithful RDF evaluates planned policies on the true simulator during learning. For fully offline branches, you would need an OPE proxy in place of true-environment returns.
+
+### B) RDF-style fixed-policy variant (recommended for your DT2 comparison)
+Because your main evaluation is ranking a **pre-defined set of policies**, implement an RDF-inspired objective that avoids differentiating through a planner:
+
+- keep current dynamics parameterization (`DynamicsNet`),
+- for each training step, evaluate candidate policies in the learned model across a preference grid `W`,
+- optimize average deployment preference performance plus a learning-preference constraint/penalty term,
+- continue to include simulation fit loss (`nll`/`mse`) for stability.
+
+This gives a reward-transfer-aware model-learning baseline that is directly aligned with your fixed-policy ranking protocol.
+
+### Can RDF be used as a baseline for DT2 in your ranking setup?
+Yes, with a caveat.
+
+- **Yes**: once the RDF (or RDF-style) transition model is learned, you can score each pre-defined policy by model rollouts and rank by predicted return (exactly like other dynamics evaluators in this repo).
+- **Caveat**: paper-faithful RDF is planner-centric, not fixed-policy-ranking-centric. For fair DT2 comparison on policy ranking, use the fixed-policy RDF-style adaptation above (or clearly label the baseline as "RDF-planner-transfer" vs "DT2-ranking-transfer").
+
+In short: RDF is a strong, conceptually relevant reward-transfer baseline, but for your exact ranking task it should be adapted to fixed-policy evaluation to avoid an apples-to-oranges comparison.
