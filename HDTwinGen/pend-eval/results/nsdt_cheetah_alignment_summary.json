@@ -1,0 +1,157 @@
+{
+  "config": {
+    "env_id": "HalfCheetah-v5",
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
+    "gamma": 0.97,
+    "seed": 42,
+    "device": "cpu",
+    "deterministic_policy": true,
+    "respect_env_done": true,
+    "env_kwargs": {}
+  },
+  "artifacts": {
+    "policy_dir": "pend-eval/cheetah-policies",
+    "policy_snapshots": null,
+    "nsdt_run_dir": "logs/run-20260327-173047_NSDT_Dataset-Cheetah_0_1-runs_log_MAIN_TABLE/Dataset-Cheetah/0",
+    "state_diff_file": "best_state_differential.py",
+    "state_dict_file": "best_state_dict.pt"
+  },
+  "metrics": {
+    "spearman_rank_corr": 0.7142857142857143,
+    "regret": 1.810507182266699
+  },
+  "policy_selection": {
+    "real_optimal_policy": "ppo_frac_1000000",
+    "simulator_optimal_policy": "ppo_frac_800000",
+    "real_optimal_true_value": 11.49487490644842,
+    "simulator_optimal_true_value": 9.68436772418172,
+    "simulator_optimal_sim_value": 26.91719493865967,
+    "env_rank_vector": {
+      "ppo_frac_0": 6.0,
+      "ppo_frac_200000": 4.0,
+      "ppo_frac_400000": 5.0,
+      "ppo_frac_600000": 2.0,
+      "ppo_frac_800000": 3.0,
+      "ppo_frac_1000000": 1.0
+    },
+    "sim_rank_vector": {
+      "ppo_frac_0": 6.0,
+      "ppo_frac_200000": 5.0,
+      "ppo_frac_400000": 4.0,
+      "ppo_frac_600000": 2.0,
+      "ppo_frac_800000": 1.0,
+      "ppo_frac_1000000": 3.0
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "pend-eval/cheetah-policies/ppo_frac_0.zip",
+      "timesteps": 0,
+      "true_env": {
+        "mean": -0.12827558567170982,
+        "std": 0.71369675489651,
+        "stderr": 0.1595874459269602,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 16.41661500930786,
+        "std": 0.42234053272411387,
+        "stderr": 0.0944382140824593,
+        "n": 20
+      },
+      "delta_mean": 16.54489059497957
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "pend-eval/cheetah-policies/ppo_frac_200000.zip",
+      "timesteps": 200000,
+      "true_env": {
+        "mean": 6.540793979259353,
+        "std": 4.434253479303256,
+        "stderr": 0.9915292209187037,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 24.845689296722412,
+        "std": 0.46197622768280183,
+        "stderr": 0.1033010249087665,
+        "n": 20
+      },
+      "delta_mean": 18.30489531746306
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "pend-eval/cheetah-policies/ppo_frac_400000.zip",
+      "timesteps": 400000,
+      "true_env": {
+        "mean": 5.032181501594744,
+        "std": 11.274108582553149,
+        "stderr": 2.520967317630264,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 24.98774662017822,
+        "std": 0.5781098618316758,
+        "stderr": 0.12926929495186382,
+        "n": 20
+      },
+      "delta_mean": 19.95556511858348
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "pend-eval/cheetah-policies/ppo_frac_600000.zip",
+      "timesteps": 600000,
+      "true_env": {
+        "mean": 11.342660210939707,
+        "std": 6.7715864225689675,
+        "stderr": 1.5141727556378826,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 26.680574321746825,
+        "std": 0.4086185419870498,
+        "stderr": 0.09136988367498952,
+        "n": 20
+      },
+      "delta_mean": 15.337914110807118
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "pend-eval/cheetah-policies/ppo_frac_800000.zip",
+      "timesteps": 800000,
+      "true_env": {
+        "mean": 9.68436772418172,
+        "std": 7.540024139260985,
+        "stderr": 1.6860006527376903,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 26.91719493865967,
+        "std": 0.4591898325651705,
+        "stderr": 0.10267796801924678,
+        "n": 20
+      },
+      "delta_mean": 17.23282721447795
+    },
+    {
+      "name": "ppo_frac_1000000",
+      "checkpoint": "pend-eval/cheetah-policies/ppo_frac_1000000.zip",
+      "timesteps": 1000000,
+      "true_env": {
+        "mean": 11.49487490644842,
+        "std": 11.988373019478987,
+        "stderr": 2.6806817011179422,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 25.572403240203858,
+        "std": 0.537661440950103,
+        "stderr": 0.12022475308449194,
+        "n": 20
+      },
+      "delta_mean": 14.077528333755438
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "config": {
+    "env_id": "Walker2d-v5",
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
+    "gamma": 0.97,
+    "seed": 42,
+    "device": "cpu",
+    "deterministic_policy": true,
+    "respect_env_done": true,
+    "env_kwargs": {}
+  },
+  "artifacts": {
+    "policy_dir": "pend-eval/walker-policies",
+    "policy_snapshots": null,
+    "nsdt_run_dir": "logs/run-20260327-170223_NSDT_Dataset-Walker_0_1-runs_log_MAIN_TABLE/Dataset-Walker/0",
+    "state_diff_file": "best_state_differential.py",
+    "state_dict_file": "best_state_dict.pt"
+  },
+  "metrics": {
+    "spearman_rank_corr": 0.6571428571428573,
+    "regret": 3.3327711965353686
+  },
+  "policy_selection": {
+    "real_optimal_policy": "ppo_frac_800000",
+    "simulator_optimal_policy": "ppo_frac_600000",
+    "real_optimal_true_value": 44.62401721916386,
+    "simulator_optimal_true_value": 41.29124602262849,
+    "simulator_optimal_sim_value": 6.454686284065247,
+    "env_rank_vector": {
+      "ppo_frac_0": 6.0,
+      "ppo_frac_200000": 5.0,
+      "ppo_frac_400000": 3.0,
+      "ppo_frac_600000": 4.0,
+      "ppo_frac_800000": 1.0,
+      "ppo_frac_1000000": 2.0
+    },
+    "sim_rank_vector": {
+      "ppo_frac_0": 6.0,
+      "ppo_frac_200000": 5.0,
+      "ppo_frac_400000": 4.0,
+      "ppo_frac_600000": 1.0,
+      "ppo_frac_800000": 2.0,
+      "ppo_frac_1000000": 3.0
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_0.zip",
+      "timesteps": 0,
+      "true_env": {
+        "mean": 29.406108459582946,
+        "std": 0.4309536408716078,
+        "stderr": 0.09636416361399468,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 3.62243937253952,
+        "std": 0.08413039753995678,
+        "stderr": 0.018812128787342442,
+        "n": 20
+      },
+      "delta_mean": -25.783669087043425
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_200000.zip",
+      "timesteps": 200000,
+      "true_env": {
+        "mean": 36.247186380297435,
+        "std": 0.6509409578367439,
+        "stderr": 0.14555482310617837,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 4.76171612739563,
+        "std": 0.03271185314767795,
+        "stderr": 0.007314592730819836,
+        "n": 20
+      },
+      "delta_mean": -31.485470252901806
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_400000.zip",
+      "timesteps": 400000,
+      "true_env": {
+        "mean": 41.507828004994806,
+        "std": 0.44789882526183544,
+        "stderr": 0.1001532220327764,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 4.898114728927612,
+        "std": 0.02954429701634085,
+        "stderr": 0.006606305647598235,
+        "n": 20
+      },
+      "delta_mean": -36.6097132760672
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_600000.zip",
+      "timesteps": 600000,
+      "true_env": {
+        "mean": 41.29124602262849,
+        "std": 0.5762779888024961,
+        "stderr": 0.1288596756899244,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 6.454686284065247,
+        "std": 0.18023835979071745,
+        "stderr": 0.040302522464510895,
+        "n": 20
+      },
+      "delta_mean": -34.836559738563246
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_800000.zip",
+      "timesteps": 800000,
+      "true_env": {
+        "mean": 44.62401721916386,
+        "std": 0.6325536058784463,
+        "stderr": 0.14144328621568164,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 6.263517546653747,
+        "std": 0.03736795009489253,
+        "stderr": 0.008355727659199941,
+        "n": 20
+      },
+      "delta_mean": -38.360499672510116
+    },
+    {
+      "name": "ppo_frac_1000000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_1000000.zip",
+      "timesteps": 1000000,
+      "true_env": {
+        "mean": 44.170330879193834,
+        "std": 0.8124019652163003,
+        "stderr": 0.1816586019278067,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 5.338571786880493,
+        "std": 0.4327273336141538,
+        "stderr": 0.09676077336834775,
+        "n": 20
+      },
+      "delta_mean": -38.83175909231334
+    }
+  ]
+}
