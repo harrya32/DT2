@@ -187,7 +187,6 @@ class DatasetEnv:
         if bool(config.setup.cuda) and not torch.cuda.is_available() and logger is not None:
             logger.info("[WARNING] CUDA requested but not available. Falling back to CPU.")
         device = "cuda:0" if use_cuda else "cpu"
-        config.run.pytorch_as_optimizer.batch_size = 1
 
         # Wrap in try
         f_model = StateDifferential()
@@ -198,6 +197,13 @@ class DatasetEnv:
         if actions_train is not None:
             actions_train = torch.tensor(actions_train, dtype=torch.float32, device=device)
         states_train = torch.tensor(states_train, dtype=torch.float32, device=device)
+        requested_batch_size = int(config.run.pytorch_as_optimizer.batch_size)
+        if requested_batch_size < 1:
+            if logger is not None:
+                logger.info(f"[WARNING] Invalid batch_size={requested_batch_size}; using 1.")
+            requested_batch_size = 1
+        batch_size = min(requested_batch_size, states_train.shape[0])
+        config.run.pytorch_as_optimizer.batch_size = batch_size
 
         states_val, actions_val = val_data
         if actions_val is not None:
@@ -271,7 +277,7 @@ class DatasetEnv:
             # if clip_grad_norm:
             #     torch.nn.utils.clip_grad_norm_(f_model.parameters(), clip_grad_norm)
             optimizer.step()
-            return loss.item()
+            return loss.detach()
         
         # train_opt = torch.compile(train)
         # train_opt = torch.compile(train)
@@ -303,11 +309,11 @@ class DatasetEnv:
 
             for epoch in range(config.run.pytorch_as_optimizer.epochs):
                 iters = 0 
-                cum_loss = 0
+                cum_loss = torch.zeros((), device=device)
                 t0 = time.perf_counter()
                 permutation = torch.randperm(states_train.shape[0])
-                for iter_i in range(int(permutation.shape[0]/config.run.pytorch_as_optimizer.batch_size)):
-                    indices = permutation[iter_i*config.run.pytorch_as_optimizer.batch_size:iter_i*config.run.pytorch_as_optimizer.batch_size+config.run.pytorch_as_optimizer.batch_size]
+                for batch_start in range(0, permutation.shape[0], batch_size):
+                    indices = permutation[batch_start:batch_start + batch_size]
                     states_train_batch = states_train[indices]
                     if actions_train is not None:
                         actions_train_batch = actions_train[indices]
@@ -319,7 +325,8 @@ class DatasetEnv:
                 if epoch % config.run.pytorch_as_optimizer.log_interval == 0:
                     # Collect validation loss
                     val_loss, _ = compute_eval_loss(f_model, (states_val, actions_val))
-                    print(f'[EPOCH {epoch} COMPLETE] MSE TRAIN LOSS {cum_loss/iters:.4f} | MSE VAL LOSS {val_loss:.4f} | s/epoch: {time_taken:.2f}s')
+                    train_loss_epoch = (cum_loss / max(iters, 1)).item()
+                    print(f'[EPOCH {epoch} COMPLETE] MSE TRAIN LOSS {train_loss_epoch:.4f} | MSE VAL LOSS {val_loss:.4f} | s/epoch: {time_taken:.2f}s')
                     # Early stopping check
                     if val_loss < best_val_loss:
                         best_val_loss = val_loss
@@ -331,7 +338,7 @@ class DatasetEnv:
                         logger.info(f"Early stopping triggered at epoch {epoch}")
                         break  # Exit the loop if no improvement for 'patience' generations
         else:
-            cum_loss, iters = 1, 1
+            cum_loss, iters = torch.tensor(1.0, device=device), 1
 
         # Save model after training
         f_model.eval()
@@ -345,7 +352,7 @@ class DatasetEnv:
         print('')
 
         val_loss, loss_per_dim = compute_eval_loss(f_model, (states_val, actions_val))
-        train_loss = cum_loss/iters
+        train_loss = float((cum_loss / max(iters, 1)).item())
         optimized_parameters = get_model_parameters(f_model)
 
         states_test, actions_test = test_data

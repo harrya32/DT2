@@ -157,10 +157,9 @@ def run_exp_wrapper(args, logger, **kwargs):
     if 'GP' == method_name:
         trajectories = 24
     if 'Dataset' in env_name:
-        config.run.pytorch_as_optimizer.batch_size = 1
         trajectories = 1
     config.run.trajectories = trajectories
-    if config.run.pytorch_as_optimizer.batch_size > trajectories:
+    if ('Dataset' not in env_name) and (config.run.pytorch_as_optimizer.batch_size > trajectories):
         config.run.pytorch_as_optimizer.batch_size = trajectories
     kwargs['config'] = config
     result = run_exp(env_name=env_name,
