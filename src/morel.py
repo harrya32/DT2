@@ -15,18 +15,6 @@ from .policies import GaussianLinearPolicy, TorchPolicy
 from .utils import DEVICE, set_seed
 
 
-# -----------------------------------------------------------------------------
-# Paper-faithful defaults (MOReL Appendix C.2/C.5, arXiv:2005.05951)
-# -----------------------------------------------------------------------------
-# - Dynamics network: 2-layer ReLU MLP
-# - Ensemble size: 4
-# - Optimizer: Adam, stepsize 5e-4
-# - Batch size: 256
-# - Epochs: 300 (Ant/Hopper/Walker), 3000 (HalfCheetah)
-# - Negative reward offset (r_min(D) - offset):
-#       Walker=30, Hopper=50, Ant=100, HalfCheetah=200
-
-
 @dataclass(frozen=True)
 class MorelEnvDefaults:
     hidden_dim: int
@@ -45,18 +33,19 @@ def get_morel_env_defaults(env_name: Optional[str] = None) -> MorelEnvDefaults:
         MorelEnvDefaults with paper-aligned values when recognized.
     """
     if not env_name:
-        return MorelEnvDefaults(hidden_dim=64, epochs=300, horizon=500, reward_offset=50.0)
+        return MorelEnvDefaults(hidden_dim=64, epochs=2000, horizon=500, reward_offset=100.0)
 
     name = env_name.lower()
     if "halfcheetah" in name:
-        return MorelEnvDefaults(hidden_dim=64, epochs=300, horizon=500, reward_offset=200.0)
+        return MorelEnvDefaults(hidden_dim=64, epochs=2000, horizon=500, reward_offset=200.0)
     if "ant" in name:
-        return MorelEnvDefaults(hidden_dim=64, epochs=300, horizon=500, reward_offset=100.0)
+        return MorelEnvDefaults(hidden_dim=64, epochs=2000, horizon=500, reward_offset=100.0)
     if "hopper" in name:
-        return MorelEnvDefaults(hidden_dim=64, epochs=300, horizon=400, reward_offset=50.0)
+        return MorelEnvDefaults(hidden_dim=64, epochs=2000, horizon=400, reward_offset=50.0)
     if "walker" in name:
-        return MorelEnvDefaults(hidden_dim=64, epochs=300, horizon=400, reward_offset=30.0)
-    return MorelEnvDefaults(hidden_dim=64, epochs=300, horizon=500, reward_offset=50.0)
+        return MorelEnvDefaults(hidden_dim=64, epochs=2000, horizon=400, reward_offset=30.0)
+    
+    return MorelEnvDefaults(hidden_dim=64, epochs=2000, horizon=500, reward_offset=50.0)
 
 
 class MorelDynamicsModel(nn.Module):
@@ -83,6 +72,10 @@ class MorelDynamicsModel(nn.Module):
 
         self.net = nn.Sequential(
             nn.Linear(state_dim + act_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),

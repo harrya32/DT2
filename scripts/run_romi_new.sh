@@ -15,9 +15,11 @@ ROMI_NEW_ARGS=(
     --romi-rollout-freq 250
     --romi-rollout-batch-size 50000
     --romi-dynamics-update-freq 1000
-    --romi-adv-train-steps 1000
+    --romi-adv-train-steps 500
     --romi-model-retain-epochs 5
     --romi-weight-input-mode sa_snext
+    --romi-real-data-ratio 0.05
+    --romi-epochs 500
 )
 
 while [[ $# -gt 0 ]]; do

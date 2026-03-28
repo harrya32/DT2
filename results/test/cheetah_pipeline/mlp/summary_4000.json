@@ -71,8 +71,8 @@
     "mopo_no_bootstrap": false,
     "mopo_deterministic_dynamics_eval": false,
     "romi_ensemble_size": 4,
-    "romi_hidden_dim": 64,
-    "romi_hidden_layers": 2,
+    "romi_hidden_dim": 200,
+    "romi_hidden_layers": 4,
     "romi_weight_hidden_dim": 64,
     "romi_weight_hidden_layers": 2,
     "romi_epochs": 300,
@@ -89,7 +89,7 @@
     "romi_dynamics_updates_per_epoch": 1,
     "romi_weight_updates_per_epoch": 1,
     "romi_uncertainty_scale": 0.1,
-    "romi_uncertainty_samples": 20,
+    "romi_uncertainty_samples": 10,
     "romi_weight_min": 0.5,
     "romi_weight_max": 2.0,
     "romi_model_buffer_capacity": 200000,
@@ -132,13 +132,13 @@
     "mopo_info": null,
     "romi": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_romi.pt",
     "romi_info": {
-      "uncertainty_mean": 12.503129005432129,
-      "uncertainty_std": 2.422274589538574,
-      "uncertainty_max": 20.87666130065918,
+      "uncertainty_mean": 6.802196979522705,
+      "uncertainty_std": 1.664950966835022,
+      "uncertainty_max": 13.916952133178711,
       "model_buffer_size": 200000,
       "ensemble_size": 4,
       "uncertainty_scale": 0.1,
-      "uncertainty_samples": 20,
+      "uncertainty_samples": 10,
       "real_data_ratio": 0.5,
       "rollout_horizon": 5,
       "rollouts_per_epoch": 512,
@@ -148,24 +148,24 @@
       "batch_size": 256,
       "automatic_entropy_tuning": true,
       "epoch_dynamics_loss_epochs": 300,
-      "epoch_dynamics_loss_final": 11.138180255889893,
+      "epoch_dynamics_loss_final": 3.920879065990448,
       "epoch_weight_loss_epochs": 300,
-      "epoch_weight_loss_final": 8.004931449890137,
+      "epoch_weight_loss_final": 12.43420124053955,
       "epoch_actor_loss_epochs": 300,
-      "epoch_actor_loss_final": 10.756995778083802,
+      "epoch_actor_loss_final": -12.740597729682923,
       "epoch_critic1_loss_epochs": 300,
-      "epoch_critic1_loss_final": 10.161861927509309,
+      "epoch_critic1_loss_final": 10.444053084850312,
       "epoch_critic2_loss_epochs": 300,
-      "epoch_critic2_loss_final": 10.199000158309936,
+      "epoch_critic2_loss_final": 10.458901267051697,
       "epoch_alpha_loss_epochs": 300,
-      "epoch_alpha_loss_final": -0.9039277411997318,
+      "epoch_alpha_loss_final": 0.32787725813686847,
       "epoch_alpha_epochs": 300,
-      "epoch_alpha_final": 0.007469833362847567,
+      "epoch_alpha_final": 0.018570415675640106,
       "pretrain_member_final_losses": [
-        25.38507843017578,
-        25.254953384399414,
-        25.688974380493164,
-        25.798458099365234
+        22.72574806213379,
+        22.823827743530273,
+        22.91213607788086,
+        22.795875549316406
       ],
       "pretrain_member_steps": [
         50,
@@ -178,13 +178,13 @@
   "morel_info": null,
   "mopo_info": null,
   "romi_info": {
-    "uncertainty_mean": 12.503129005432129,
-    "uncertainty_std": 2.422274589538574,
-    "uncertainty_max": 20.87666130065918,
+    "uncertainty_mean": 6.802196979522705,
+    "uncertainty_std": 1.664950966835022,
+    "uncertainty_max": 13.916952133178711,
     "model_buffer_size": 200000,
     "ensemble_size": 4,
     "uncertainty_scale": 0.1,
-    "uncertainty_samples": 20,
+    "uncertainty_samples": 10,
     "real_data_ratio": 0.5,
     "rollout_horizon": 5,
     "rollouts_per_epoch": 512,
@@ -194,24 +194,24 @@
     "batch_size": 256,
     "automatic_entropy_tuning": true,
     "epoch_dynamics_loss_epochs": 300,
-    "epoch_dynamics_loss_final": 11.138180255889893,
+    "epoch_dynamics_loss_final": 3.920879065990448,
     "epoch_weight_loss_epochs": 300,
-    "epoch_weight_loss_final": 8.004931449890137,
+    "epoch_weight_loss_final": 12.43420124053955,
     "epoch_actor_loss_epochs": 300,
-    "epoch_actor_loss_final": 10.756995778083802,
+    "epoch_actor_loss_final": -12.740597729682923,
     "epoch_critic1_loss_epochs": 300,
-    "epoch_critic1_loss_final": 10.161861927509309,
+    "epoch_critic1_loss_final": 10.444053084850312,
     "epoch_critic2_loss_epochs": 300,
-    "epoch_critic2_loss_final": 10.199000158309936,
+    "epoch_critic2_loss_final": 10.458901267051697,
     "epoch_alpha_loss_epochs": 300,
-    "epoch_alpha_loss_final": -0.9039277411997318,
+    "epoch_alpha_loss_final": 0.32787725813686847,
     "epoch_alpha_epochs": 300,
-    "epoch_alpha_final": 0.007469833362847567,
+    "epoch_alpha_final": 0.018570415675640106,
     "pretrain_member_final_losses": [
-      25.38507843017578,
-      25.254953384399414,
-      25.688974380493164,
-      25.798458099365234
+      22.72574806213379,
+      22.823827743530273,
+      22.91213607788086,
+      22.795875549316406
     ],
     "pretrain_member_steps": [
       50,
@@ -245,9 +245,9 @@
         "mopo_uncertainty_mean": null,
         "mopo_penalty_mean": null,
         "mopo_model_reward_mean": null,
-        "romi_model_return": -1.7958183288574219,
-        "romi_model_stderr": 4.922291947231251,
-        "romi_uncertainty_mean": 15.663026663208008
+        "romi_model_return": 11.988241195678711,
+        "romi_model_stderr": 7.302394914880977,
+        "romi_uncertainty_mean": 9.673667698669433
       },
       "env_mc": -0.3474927262702035
     },
@@ -275,9 +275,9 @@
         "mopo_uncertainty_mean": null,
         "mopo_penalty_mean": null,
         "mopo_model_reward_mean": null,
-        "romi_model_return": -4.539633274078369,
-        "romi_model_stderr": 3.398098666242229,
-        "romi_uncertainty_mean": 14.915226403808594
+        "romi_model_return": 13.926795959472656,
+        "romi_model_stderr": 4.401309023843524,
+        "romi_uncertainty_mean": 9.672031095886231
       },
       "env_mc": 5.653942829007251
     },
@@ -305,9 +305,9 @@
         "mopo_uncertainty_mean": null,
         "mopo_penalty_mean": null,
         "mopo_model_reward_mean": null,
-        "romi_model_return": -10.219913482666016,
-        "romi_model_stderr": 4.942739877207381,
-        "romi_uncertainty_mean": 13.584613836669922
+        "romi_model_return": 10.893841743469238,
+        "romi_model_stderr": 5.977316678704251,
+        "romi_uncertainty_mean": 8.754021156311035
       },
       "env_mc": 7.661161084708579
     },
@@ -335,9 +335,9 @@
         "mopo_uncertainty_mean": null,
         "mopo_penalty_mean": null,
         "mopo_model_reward_mean": null,
-        "romi_model_return": -11.838194847106934,
-        "romi_model_stderr": 3.2023906856843602,
-        "romi_uncertainty_mean": 12.540143176269531
+        "romi_model_return": 11.7259521484375,
+        "romi_model_stderr": 3.9302939593760655,
+        "romi_uncertainty_mean": 7.912597524261475
       },
       "env_mc": 12.555979652726473
     },
@@ -365,9 +365,9 @@
         "mopo_uncertainty_mean": null,
         "mopo_penalty_mean": null,
         "mopo_model_reward_mean": null,
-        "romi_model_return": -5.01411247253418,
-        "romi_model_stderr": 3.830569783611036,
-        "romi_uncertainty_mean": 11.988268797302245
+        "romi_model_return": 22.382299423217773,
+        "romi_model_stderr": 5.326187611313607,
+        "romi_uncertainty_mean": 7.513358919525147
       },
       "env_mc": 11.97249074847668
     },
@@ -395,9 +395,9 @@
         "mopo_uncertainty_mean": null,
         "mopo_penalty_mean": null,
         "mopo_model_reward_mean": null,
-        "romi_model_return": -11.281150817871094,
-        "romi_model_stderr": 4.175452885556791,
-        "romi_uncertainty_mean": 11.993089610290527
+        "romi_model_return": 8.85013484954834,
+        "romi_model_stderr": 5.607596148715573,
+        "romi_uncertainty_mean": 7.535630113220215
       },
       "env_mc": 14.716458723506733
     }

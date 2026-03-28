@@ -4,52 +4,102 @@
   "q_aware": {},
   "ranking_new": {},
   "value_aware": null,
-  "morel": null,
-  "morel_info": null,
-  "mopo": null,
-  "mopo_info": null,
-  "romi": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_romi.pt",
-  "romi_info": {
-    "uncertainty_mean": 12.657722473144531,
-    "uncertainty_std": 2.154474973678589,
-    "uncertainty_max": 20.108402252197266,
-    "model_buffer_size": 200000,
-    "ensemble_size": 4,
-    "uncertainty_scale": 0.1,
-    "uncertainty_samples": 20,
-    "real_data_ratio": 0.5,
-    "rollout_horizon": 5,
-    "rollouts_per_epoch": 512,
-    "policy_updates_per_epoch": 200,
-    "dynamics_updates_per_epoch": 1,
-    "weight_updates_per_epoch": 1,
-    "batch_size": 256,
-    "automatic_entropy_tuning": true,
-    "epoch_dynamics_loss_epochs": 300,
-    "epoch_dynamics_loss_final": 12.131539344787598,
-    "epoch_weight_loss_epochs": 300,
-    "epoch_weight_loss_final": 18.346393585205078,
-    "epoch_actor_loss_epochs": 300,
-    "epoch_actor_loss_final": 0.19409847009927034,
-    "epoch_critic1_loss_epochs": 300,
-    "epoch_critic1_loss_final": 18.477391867637635,
-    "epoch_critic2_loss_epochs": 300,
-    "epoch_critic2_loss_final": 18.281753554344178,
-    "epoch_alpha_loss_epochs": 300,
-    "epoch_alpha_loss_final": -1.6343171199411153,
-    "epoch_alpha_epochs": 300,
-    "epoch_alpha_final": 0.024911565706133842,
-    "pretrain_member_final_losses": [
-      25.565013885498047,
-      25.775104522705078,
-      26.029346466064453,
-      25.18404197692871
+  "morel": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 3.242213010787964,
+    "disagreement_std": 1.1715831756591797,
+    "disagreement_max": 19.07769012451172,
+    "threshold": 9.100128889083862,
+    "beta_effective": 5.0,
+    "halt_reward": -203.85147619247437,
+    "reward_min": -3.8514761924743652,
+    "reward_offset": 200.0,
+    "val_fraction": 0.1,
+    "early_stop_patience": 20.0,
+    "min_epochs": 50.0,
+    "min_delta": 0.0,
+    "member_final_losses": [
+      0.016982840953992225,
+      0.01522260965814568,
+      0.01584114577129202,
+      0.01788759853620574
     ],
-    "pretrain_member_steps": [
-      50,
-      50,
-      50,
-      50
+    "member_epochs": [
+      753,
+      686,
+      702,
+      703
+    ],
+    "member_best_val_loss": [
+      0.02913866926729679,
+      0.027233350212375322,
+      0.02928499681750933,
+      0.030995123858253162
     ]
-  }
+  },
+  "mopo": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_mopo.pt",
+  "mopo_info": {
+    "uncertainty_mean": 6.136563777923584,
+    "uncertainty_std": 0.8810205459594727,
+    "uncertainty_max": 10.087120056152344,
+    "penalty_coef": 1.0,
+    "holdout_size": 6000,
+    "holdout_fraction": 0.1,
+    "ensemble_size": 7,
+    "elite_size": 5,
+    "hidden_dim": 200,
+    "hidden_layers": 4,
+    "epochs": 2000,
+    "batch_size": 1024,
+    "lr": 0.0003,
+    "early_stop_patience": 20,
+    "min_epochs": 50,
+    "min_delta": 0.0,
+    "bootstrap": true,
+    "elite_indices": [
+      3,
+      4,
+      2,
+      0,
+      5
+    ],
+    "member_holdout_nll": [
+      -0.6170517101287841,
+      0.585628088315328,
+      -0.8386338828404745,
+      -1.5937177174886068,
+      -1.0160363766352336,
+      -0.6153538020451864,
+      0.009762255335847536
+    ],
+    "member_best_holdout_nll": [
+      -0.7992469649314881,
+      0.18812978529930116,
+      -1.1197834777832032,
+      -1.8150570084253947,
+      -1.252032948811849,
+      -0.7539742385546366,
+      -0.23835122998555502
+    ],
+    "member_final_losses": [
+      0.07107901573181152,
+      1.4115533839981511,
+      -0.19071534444700997,
+      -1.2423505816819533,
+      -0.10205119004789388,
+      0.6876298880802011,
+      0.6864005934517339
+    ],
+    "member_epochs": [
+      244,
+      161,
+      268,
+      384,
+      267,
+      222,
+      203
+    ]
+  },
+  "romi": null,
+  "romi_info": null
 }
