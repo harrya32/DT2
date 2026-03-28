@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(3009)
+DEFAULT_SEEDS=(3010 3011 3012 3013 3014 3015 3016 3017 3018 3019)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -38,12 +38,12 @@ fi
 for seed in "${SEEDS[@]}"; do
     echo "Running seed ${seed}..."
 
-    python exps/lunarlander_runner.py --dynamics-models mopo morel --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py --dynamics-models mopo morel --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/walker_runner.py --dynamics-models mopo morel --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/cheetah_runner.py --dynamics-models mopo morel --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/ant_runner.py --dynamics-models mopo morel --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
-    python exps/pendulum_runner.py --dynamics-models mopo morel --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --dynamics-models mopo --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --dynamics-models mopo --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/walker_runner.py --dynamics-models mopo --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/cheetah_runner.py --dynamics-models mopo --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/ant_runner.py --dynamics-models mopo --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --dynamics-models mopo --force-dynamics-training --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
 
     echo "Completed seed ${seed}"
     echo
