@@ -46,10 +46,10 @@ def get_mopo_defaults(env_name: Optional[str] = None) -> MopoDefaults:
 
 
 class MopoDynamicsModel(nn.Module):
-    """MOPO-style probabilistic dynamics model for (next_state, reward).
+    """MOPO-style probabilistic dynamics model for state deltas only.
 
-    Outputs Gaussian statistics for concatenated target [delta_state, reward]
-    in normalized space, then converts to original units for rollout/sampling.
+    Outputs Gaussian statistics for delta_state in normalized space, then
+    converts to next_state statistics in original units for rollout/sampling.
     """
 
     def __init__(
@@ -67,7 +67,7 @@ class MopoDynamicsModel(nn.Module):
 
         self.state_dim = int(state_dim)
         self.act_dim = int(act_dim)
-        self.target_dim = self.state_dim + 1  # delta_state + reward
+        self.target_dim = self.state_dim  # delta_state only
 
         in_dim = self.state_dim + self.act_dim
         trunk_layers: List[nn.Module] = []
@@ -89,8 +89,6 @@ class MopoDynamicsModel(nn.Module):
         self.register_buffer("action_std", torch.ones(self.act_dim))
         self.register_buffer("delta_mean", torch.zeros(self.state_dim))
         self.register_buffer("delta_std", torch.ones(self.state_dim))
-        self.register_buffer("reward_mean", torch.zeros(1))
-        self.register_buffer("reward_std", torch.ones(1))
 
         if state_low is not None:
             self.register_buffer("state_low", state_low.detach().to(torch.float32))
@@ -105,7 +103,6 @@ class MopoDynamicsModel(nn.Module):
         self,
         states: torch.Tensor,
         actions: torch.Tensor,
-        rewards: torch.Tensor,
         next_states: torch.Tensor,
     ) -> None:
         with torch.no_grad():
@@ -117,10 +114,6 @@ class MopoDynamicsModel(nn.Module):
             deltas = next_states - states
             self.delta_mean = deltas.mean(dim=0)
             self.delta_std = deltas.std(dim=0).clamp(min=1e-6)
-
-            rewards_flat = rewards.reshape(-1, 1)
-            self.reward_mean = rewards_flat.mean(dim=0)
-            self.reward_std = rewards_flat.std(dim=0).clamp(min=1e-6)
 
     def _clamp_logvar(self, raw_logvar: torch.Tensor) -> torch.Tensor:
         # Soft bounds keep variance numerically stable during training.
@@ -142,14 +135,14 @@ class MopoDynamicsModel(nn.Module):
         self,
         states: torch.Tensor,
         actions: torch.Tensor,
-        rewards: torch.Tensor,
         next_states: torch.Tensor,
     ) -> torch.Tensor:
         mean_norm, logvar_norm = self._normalized_outputs(states, actions)
+        mean_norm = mean_norm[..., : self.state_dim]
+        logvar_norm = logvar_norm[..., : self.state_dim]
 
         delta_target_norm = (next_states - states - self.delta_mean) / (self.delta_std + 1e-8)
-        reward_target_norm = (rewards.reshape(-1, 1) - self.reward_mean) / (self.reward_std + 1e-8)
-        target = torch.cat([delta_target_norm, reward_target_norm], dim=-1)
+        target = delta_target_norm
 
         inv_var = torch.exp(-logvar_norm)
         nll = 0.5 * (logvar_norm + (target - mean_norm) ** 2 * inv_var + math.log(2.0 * math.pi))
@@ -164,24 +157,21 @@ class MopoDynamicsModel(nn.Module):
         states: torch.Tensor,
         actions: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Return mean/logvar in original units for [next_state, reward]."""
+        """Return mean/logvar in original units for next_state."""
         mean_norm, logvar_norm = self._normalized_outputs(states, actions)
 
+        # Slice defensively so old checkpoints with extra heads still work.
         delta_mean_norm = mean_norm[..., : self.state_dim]
-        reward_mean_norm = mean_norm[..., self.state_dim :]
+        delta_logvar_norm = logvar_norm[..., : self.state_dim]
         delta_mean = delta_mean_norm * (self.delta_std + 1e-8) + self.delta_mean
-        reward_mean = reward_mean_norm * (self.reward_std + 1e-8) + self.reward_mean
 
         next_state_mean = states + delta_mean
         if self.state_low is not None and self.state_high is not None:
             next_state_mean = torch.max(torch.min(next_state_mean, self.state_high), self.state_low)
 
-        logvar_state = logvar_norm[..., : self.state_dim] + 2.0 * torch.log(self.delta_std + 1e-8)
-        logvar_reward = logvar_norm[..., self.state_dim :] + 2.0 * torch.log(self.reward_std + 1e-8)
+        logvar_state = delta_logvar_norm + 2.0 * torch.log(self.delta_std + 1e-8)
 
-        mean = torch.cat([next_state_mean, reward_mean], dim=-1)
-        logvar = torch.cat([logvar_state, logvar_reward], dim=-1)
-        return mean, logvar
+        return next_state_mean, logvar_state
 
     @torch.no_grad()
     def uncertainty(self, states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
@@ -231,20 +221,19 @@ class MopoDynamicsEnsemble(nn.Module):
         return torch.stack(per_member, dim=0).max(dim=0).values
 
     @torch.no_grad()
-    def sample_next_reward(
+    def sample_next(
         self,
         states: torch.Tensor,
         actions: torch.Tensor,
         deterministic: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         means, logvars = self.member_distributions(states, actions)
         ensemble_size = means.size(0)
 
         if deterministic or ensemble_size == 1:
             mean = means.mean(dim=0)
             next_states = mean[:, : self.state_dim]
-            rewards = mean[:, self.state_dim]
-            return next_states, rewards
+            return next_states
 
         batch_size = states.size(0)
         member_idx = torch.randint(0, ensemble_size, (batch_size,), device=states.device)
@@ -256,7 +245,6 @@ class MopoDynamicsEnsemble(nn.Module):
         sample = chosen_mean + torch.exp(0.5 * chosen_logvar) * noise
 
         next_states = sample[:, : self.state_dim]
-        rewards = sample[:, self.state_dim]
 
         # Keep sampled states in valid range when bounds are provided.
         state_low = self.models[0].state_low
@@ -264,7 +252,7 @@ class MopoDynamicsEnsemble(nn.Module):
         if state_low is not None and state_high is not None:
             next_states = torch.max(torch.min(next_states, state_high), state_low)
 
-        return next_states, rewards
+        return next_states
 
 
 @dataclass
@@ -299,44 +287,40 @@ def _as_dict(dataset: OfflineDataset | Mapping[str, np.ndarray]) -> Mapping[str,
 def _flatten_with_optional_mask(
     states: np.ndarray,
     actions: np.ndarray,
-    rewards: np.ndarray,
     next_states: np.ndarray,
     mask: Optional[np.ndarray],
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     if states.ndim != 3:
-        return states, actions, rewards, next_states
+        return states, actions, next_states
 
     bsz, tsz = states.shape[:2]
     flat_s = states.reshape(bsz * tsz, -1)
     flat_a = actions.reshape(bsz * tsz, -1)
-    flat_r = rewards.reshape(bsz * tsz)
     flat_sn = next_states.reshape(bsz * tsz, -1)
 
     if mask is None:
-        return flat_s, flat_a, flat_r, flat_sn
+        return flat_s, flat_a, flat_sn
 
     keep = mask.reshape(bsz * tsz) > 0.5
-    return flat_s[keep], flat_a[keep], flat_r[keep], flat_sn[keep]
+    return flat_s[keep], flat_a[keep], flat_sn[keep]
 
 
 def _dataset_tensors(
     dataset: OfflineDataset | Mapping[str, np.ndarray],
     device: torch.device,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     data = _as_dict(dataset)
     states = np.asarray(data["s"], dtype=np.float32)
     actions = np.asarray(data["a"], dtype=np.float32)
-    rewards = np.asarray(data["r"], dtype=np.float32)
     next_states = np.asarray(data["s_next"], dtype=np.float32)
     mask = np.asarray(data["mask"], dtype=np.float32) if "mask" in data else None
 
-    states, actions, rewards, next_states = _flatten_with_optional_mask(
-        states, actions, rewards, next_states, mask
+    states, actions, next_states = _flatten_with_optional_mask(
+        states, actions, next_states, mask
     )
     return (
         torch.tensor(states, dtype=torch.float32, device=device),
         torch.tensor(actions, dtype=torch.float32, device=device),
-        torch.tensor(rewards, dtype=torch.float32, device=device),
         torch.tensor(next_states, dtype=torch.float32, device=device),
     )
 
@@ -346,7 +330,6 @@ def _mean_holdout_nll(
     model: MopoDynamicsModel,
     states: torch.Tensor,
     actions: torch.Tensor,
-    rewards: torch.Tensor,
     next_states: torch.Tensor,
     holdout_idx: torch.Tensor,
     batch_size: int = 4096,
@@ -355,7 +338,7 @@ def _mean_holdout_nll(
     count = 0
     for start in range(0, holdout_idx.numel(), batch_size):
         idx = holdout_idx[start : start + batch_size]
-        loss = model.nll_loss(states[idx], actions[idx], rewards[idx], next_states[idx])
+        loss = model.nll_loss(states[idx], actions[idx], next_states[idx])
         bsz = int(idx.numel())
         total += float(loss.item()) * bsz
         count += bsz
@@ -421,7 +404,7 @@ def train_mopo_dynamics_ensemble(
     if elite_size > ensemble_size:
         raise ValueError("elite_size must be <= ensemble_size.")
 
-    states, actions, rewards, next_states = _dataset_tensors(dataset, device)
+    states, actions, next_states = _dataset_tensors(dataset, device)
     n_samples = int(states.size(0))
     if n_samples < 2:
         raise ValueError("Dataset is too small for MOPO dynamics training.")
@@ -457,7 +440,6 @@ def train_mopo_dynamics_ensemble(
         model.fit_normalizer(
             states=states[train_idx],
             actions=actions[train_idx],
-            rewards=rewards[train_idx],
             next_states=next_states[train_idx],
         )
 
@@ -471,7 +453,6 @@ def train_mopo_dynamics_ensemble(
         train_ds = TensorDataset(
             states[bootstrap_idx],
             actions[bootstrap_idx],
-            rewards[bootstrap_idx],
             next_states[bootstrap_idx],
         )
         loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, drop_last=False)
@@ -484,8 +465,8 @@ def train_mopo_dynamics_ensemble(
         for epoch in range(epochs):
             total = 0.0
             batches = 0
-            for sb, ab, rb, snb in loader:
-                loss = model.nll_loss(sb, ab, rb, snb) + model.logvar_regularizer()
+            for sb, ab, snb in loader:
+                loss = model.nll_loss(sb, ab, snb) + model.logvar_regularizer()
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 optimizer.step()
@@ -500,7 +481,6 @@ def train_mopo_dynamics_ensemble(
                 model=model,
                 states=states,
                 actions=actions,
-                rewards=rewards,
                 next_states=next_states,
                 holdout_idx=holdout_idx,
                 batch_size=4096,
@@ -532,7 +512,6 @@ def train_mopo_dynamics_ensemble(
             model=model,
             states=states,
             actions=actions,
-            rewards=rewards,
             next_states=next_states,
             holdout_idx=holdout_idx,
             batch_size=4096,
@@ -583,6 +562,7 @@ def train_mopo_dynamics_ensemble(
 def rollout_in_penalized_mdp(
     ensemble: MopoDynamicsEnsemble,
     policy: TorchPolicy | GaussianLinearPolicy,
+    reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     initial_states: np.ndarray | torch.Tensor,
     horizon: int,
     gamma: float = 0.99,
@@ -611,7 +591,7 @@ def rollout_in_penalized_mdp(
 
     uncertainty_sum = 0.0
     penalty_sum = 0.0
-    model_reward_sum = 0.0
+    reward_sum = 0.0
     step_count = 0.0
 
     for _ in range(horizon):
@@ -623,7 +603,8 @@ def rollout_in_penalized_mdp(
             act_high=act_high,
         )
 
-        next_states, model_rewards = ensemble.sample_next_reward(
+        model_rewards = reward_fn_torch(states, actions).reshape(-1).to(torch.float32)
+        next_states = ensemble.sample_next(
             states=states,
             actions=actions,
             deterministic=deterministic_dynamics,
@@ -638,7 +619,7 @@ def rollout_in_penalized_mdp(
 
         uncertainty_sum += float(uncertainty.sum().item())
         penalty_sum += float(penalties.sum().item())
-        model_reward_sum += float(model_rewards.sum().item())
+        reward_sum += float(model_rewards.sum().item())
         step_count += float(rollouts)
 
     mean = float(returns.mean().item())
@@ -646,7 +627,9 @@ def rollout_in_penalized_mdp(
     metrics = {
         "uncertainty_mean": float(uncertainty_sum / max(1.0, step_count)),
         "penalty_mean": float(penalty_sum / max(1.0, step_count)),
-        "model_reward_mean": float(model_reward_sum / max(1.0, step_count)),
+        "reward_mean": float(reward_sum / max(1.0, step_count)),
+        # Backward-compatible alias retained for existing dashboards.
+        "model_reward_mean": float(reward_sum / max(1.0, step_count)),
     }
     return mean, stderr, metrics
 
@@ -655,6 +638,7 @@ def rollout_in_penalized_mdp(
 def evaluate_policies_in_penalized_mdp(
     ensemble: MopoDynamicsEnsemble,
     policies: Sequence[TorchPolicy | GaussianLinearPolicy],
+    reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     initial_states: np.ndarray | torch.Tensor,
     horizon: int,
     gamma: float = 0.99,
@@ -670,6 +654,7 @@ def evaluate_policies_in_penalized_mdp(
         mean, stderr, metrics = rollout_in_penalized_mdp(
             ensemble=ensemble,
             policy=policy,
+            reward_fn_torch=reward_fn_torch,
             initial_states=initial_states,
             horizon=horizon,
             gamma=gamma,

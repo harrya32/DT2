@@ -1477,6 +1477,7 @@ def evaluate_in_mopo_penalized_mdp(
     gamma: float,
     rollouts: int,
     seed: int,
+    reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     act_low: float = -1.0,
     act_high: float = 1.0,
     deterministic_policy: bool = True,
@@ -1486,6 +1487,7 @@ def evaluate_in_mopo_penalized_mdp(
     return rollout_in_penalized_mdp(
         ensemble=mopo_model,
         policy=policy,
+        reward_fn_torch=reward_fn_torch,
         initial_states=initial_states,
         horizon=horizon,
         gamma=gamma,
@@ -2453,7 +2455,7 @@ def run_pipeline(
         dyn_mopo_penalized_stderr: Optional[float] = None
         dyn_mopo_uncertainty_mean: Optional[float] = None
         dyn_mopo_penalty_mean: Optional[float] = None
-        dyn_mopo_model_reward_mean: Optional[float] = None
+        dyn_mopo_reward_mean: Optional[float] = None
         if mopo_model is not None:
             mopo_seed = int(args.seed + snap["timesteps"] + 17)
             dyn_mopo_penalized, dyn_mopo_penalized_stderr, mopo_metrics = evaluate_in_mopo_penalized_mdp(
@@ -2464,6 +2466,7 @@ def run_pipeline(
                 gamma=args.gamma,
                 rollouts=args.eval_rollouts,
                 seed=mopo_seed,
+                reward_fn_torch=reward_fn_torch,
                 act_low=act_low,
                 act_high=act_high,
                 deterministic_policy=True,
@@ -2471,7 +2474,9 @@ def run_pipeline(
             )
             dyn_mopo_uncertainty_mean = float(mopo_metrics.get("uncertainty_mean", 0.0))
             dyn_mopo_penalty_mean = float(mopo_metrics.get("penalty_mean", 0.0))
-            dyn_mopo_model_reward_mean = float(mopo_metrics.get("model_reward_mean", 0.0))
+            dyn_mopo_reward_mean = float(
+                mopo_metrics.get("reward_mean", mopo_metrics.get("model_reward_mean", 0.0))
+            )
 
         # ROMI learned-model evaluation on fixed policy set
         dyn_romi_model: Optional[float] = None
@@ -2551,8 +2556,8 @@ def run_pipeline(
             wandb_payload["eval/mopo_uncertainty_mean"] = dyn_mopo_uncertainty_mean
         if dyn_mopo_penalty_mean is not None:
             wandb_payload["eval/mopo_penalty_mean"] = dyn_mopo_penalty_mean
-        if dyn_mopo_model_reward_mean is not None:
-            wandb_payload["eval/mopo_model_reward_mean"] = dyn_mopo_model_reward_mean
+        if dyn_mopo_reward_mean is not None:
+            wandb_payload["eval/mopo_reward_mean"] = dyn_mopo_reward_mean
         if dyn_romi_model is not None:
             wandb_payload["eval/romi_model_return"] = dyn_romi_model
         if dyn_romi_model_stderr is not None:
@@ -2585,7 +2590,7 @@ def run_pipeline(
                 "mopo_penalized_stderr": dyn_mopo_penalized_stderr,
                 "mopo_uncertainty_mean": dyn_mopo_uncertainty_mean,
                 "mopo_penalty_mean": dyn_mopo_penalty_mean,
-                "mopo_model_reward_mean": dyn_mopo_model_reward_mean,
+                "mopo_reward_mean": dyn_mopo_reward_mean,
                 "romi_model_return": dyn_romi_model,
                 "romi_model_stderr": dyn_romi_model_stderr,
                 "romi_uncertainty_mean": dyn_romi_uncertainty_mean,
