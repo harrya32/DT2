@@ -27,6 +27,9 @@ RewardFnNp = Callable[[np.ndarray, np.ndarray], float]
 RewardFnTorch = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 TerminationFnTorch = Callable[[torch.Tensor], torch.Tensor]
 
+INVALID_REWARD_PENALTY = -1e6
+REWARD_ABS_CLIP = 1e6
+
 
 @dataclass(frozen=True)
 class PolicySnapshot:
@@ -450,6 +453,7 @@ def rollout_learned_model(
     alive = torch.ones_like(total, dtype=torch.bool)
     repaired_state_entries = 0
     repaired_dx_entries = 0
+    repaired_reward_entries = 0
 
     with torch.no_grad():
         for _ in range(horizon):
@@ -472,6 +476,17 @@ def rollout_learned_model(
             actions = torch.tensor(actions_np, dtype=torch.float32, device=device)
 
             rewards = reward_fn_torch(states, actions)
+            bad_rewards = ~torch.isfinite(rewards)
+            repaired_reward_entries += int(bad_rewards.sum().item())
+            if bad_rewards.any():
+                rewards = torch.where(
+                    bad_rewards,
+                    torch.full_like(rewards, INVALID_REWARD_PENALTY),
+                    rewards,
+                )
+                if respect_termination:
+                    alive = alive & ~bad_rewards
+            rewards = torch.clamp(rewards, min=-REWARD_ABS_CLIP, max=REWARD_ABS_CLIP)
             total += discount * rewards * alive.float()
             discount *= gamma
 
@@ -494,13 +509,24 @@ def rollout_learned_model(
                 )
                 alive = alive & ~terminated
 
-    if repaired_state_entries > 0 or repaired_dx_entries > 0:
+    if repaired_state_entries > 0 or repaired_dx_entries > 0 or repaired_reward_entries > 0:
         print(
             "[WARN] Non-finite simulator outputs repaired minimally: "
-            f"state_entries={repaired_state_entries}, dx_entries={repaired_dx_entries}"
+            f"state_entries={repaired_state_entries}, "
+            f"dx_entries={repaired_dx_entries}, "
+            f"reward_entries={repaired_reward_entries}"
         )
 
-    return total.detach().cpu().numpy().astype(np.float64)
+    total_np = total.detach().cpu().numpy().astype(np.float64)
+    bad_total = ~np.isfinite(total_np)
+    if bad_total.any():
+        repaired_total = int(bad_total.sum())
+        total_np[bad_total] = INVALID_REWARD_PENALTY
+        print(
+            "[WARN] Non-finite rollout returns repaired: "
+            f"returns={repaired_total}"
+        )
+    return total_np
 
 
 def summarize_returns(values: np.ndarray) -> Dict[str, float]:
@@ -555,13 +581,30 @@ def make_policy_metrics(
     if env_means.size == 0 or sim_means.size == 0:
         raise ValueError("Need at least one policy result to compute metrics.")
 
-    env_ranks = rankdata(-env_means)
-    sim_ranks = rankdata(-sim_means)
-    env_best_idx = int(np.argmax(env_means))
-    sim_best_idx = int(np.argmax(sim_means))
-    regret = float(env_means[env_best_idx] - env_means[sim_best_idx])
+    finite_env = np.isfinite(env_means)
+    finite_sim = np.isfinite(sim_means)
+
+    env_for_select = np.where(finite_env, env_means, -np.inf)
+    sim_for_select = np.where(finite_sim, sim_means, -np.inf)
+
+    env_best_idx = int(np.argmax(env_for_select))
+    sim_best_idx = int(np.argmax(sim_for_select))
+
+    if np.isfinite(env_means[env_best_idx]) and np.isfinite(env_means[sim_best_idx]):
+        regret = float(env_means[env_best_idx] - env_means[sim_best_idx])
+    else:
+        regret = float("nan")
+
+    valid_pairs = finite_env & finite_sim
+    if int(valid_pairs.sum()) >= 2:
+        env_ranks = rankdata(-env_means[valid_pairs])
+        sim_ranks = rankdata(-sim_means[valid_pairs])
+        spearman = spearman_corr(env_ranks, sim_ranks)
+    else:
+        spearman = None
+
     return {
-        "spearman_rank_corr": spearman_corr(env_ranks, sim_ranks),
+        "spearman_rank_corr": spearman,
         "regret": regret,
     }
 
@@ -571,10 +614,19 @@ def get_policy_selection_summary(
     env_means: np.ndarray,
     sim_means: np.ndarray,
 ) -> Dict[str, Any]:
-    env_best_idx = int(np.argmax(env_means))
-    sim_best_idx = int(np.argmax(sim_means))
-    env_ranks = rankdata(-env_means)
-    sim_ranks = rankdata(-sim_means)
+    finite_env = np.isfinite(env_means)
+    finite_sim = np.isfinite(sim_means)
+
+    env_for_select = np.where(finite_env, env_means, -np.inf)
+    sim_for_select = np.where(finite_sim, sim_means, -np.inf)
+
+    env_best_idx = int(np.argmax(env_for_select))
+    sim_best_idx = int(np.argmax(sim_for_select))
+
+    env_for_rank = np.where(finite_env, env_means, -np.inf)
+    sim_for_rank = np.where(finite_sim, sim_means, -np.inf)
+    env_ranks = rankdata(-env_for_rank)
+    sim_ranks = rankdata(-sim_for_rank)
     return {
         "real_optimal_policy": str(policy_names[env_best_idx]),
         "simulator_optimal_policy": str(policy_names[sim_best_idx]),

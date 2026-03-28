@@ -29,25 +29,34 @@ def lunarlander_reward_fn(state: np.ndarray, action: np.ndarray) -> float:
 
 
 def lunarlander_reward_torch(states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
-    x, y, xdot, ydot, theta, thetadot, leg1, leg2 = states.unbind(-1)
+    reward_dtype = states.dtype
+    states64 = states.to(torch.float64)
+    actions64 = actions.to(torch.float64)
+    x, y, xdot, ydot, theta, thetadot, leg1, leg2 = states64.unbind(-1)
+    leg1 = torch.clamp(leg1, min=0.0, max=1.0)
+    leg2 = torch.clamp(leg2, min=0.0, max=1.0)
     shaping = (
-        -100.0 * torch.sqrt(x * x + y * y)
-        - 100.0 * torch.sqrt(xdot * xdot + ydot * ydot)
+        -100.0 * torch.hypot(x, y)
+        - 100.0 * torch.hypot(xdot, ydot)
         - 100.0 * torch.abs(theta)
         - 10.0 * torch.abs(thetadot)
         + (leg1 + leg2) * 10.0
     )
-    return shaping - 0.3 * torch.sum(actions * actions, dim=-1)
+    reward = shaping - 0.3 * torch.sum(actions64 * actions64, dim=-1)
+    reward = torch.nan_to_num(reward, nan=-1e6, posinf=-1e6, neginf=-1e6)
+    return reward.to(dtype=reward_dtype)
 
 
 def lunarlander_termination_torch(states: torch.Tensor) -> torch.Tensor:
     x, y, xdot, ydot, theta, thetadot, leg1, leg2 = states.unbind(-1)
+    non_finite = ~torch.isfinite(states).all(dim=-1)
+    numerically_unstable = torch.any(torch.abs(states) > 1e6, dim=-1)
     out_of_bounds = torch.abs(x) >= 1.0
     crashed = y < 0.0
     legs_contact = (leg1 > 0.5) & (leg2 > 0.5)
     low_velocity = (torch.abs(xdot) < 0.1) & (torch.abs(ydot) < 0.1)
     landed = legs_contact & low_velocity & (y < 0.5)
-    return out_of_bounds | crashed | landed
+    return out_of_bounds | crashed | landed | non_finite | numerically_unstable
 
 
 SPEC = AlignmentEnvSpec(
