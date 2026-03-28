@@ -306,6 +306,7 @@ class DatasetEnv:
         if config.run.optimize_params:
             best_val_loss = float('inf')  # Initialize with a very high value
             patience_counter = 0  # Counter for tracking patience
+            min_delta = float(getattr(config.run.optimization, 'min_delta', 0.0))
 
             for epoch in range(config.run.pytorch_as_optimizer.epochs):
                 iters = 0 
@@ -326,16 +327,30 @@ class DatasetEnv:
                     # Collect validation loss
                     val_loss, _ = compute_eval_loss(f_model, (states_val, actions_val))
                     train_loss_epoch = (cum_loss / max(iters, 1)).item()
-                    print(f'[EPOCH {epoch} COMPLETE] MSE TRAIN LOSS {train_loss_epoch:.4f} | MSE VAL LOSS {val_loss:.4f} | s/epoch: {time_taken:.2f}s')
+                    improved = val_loss < (best_val_loss - min_delta)
+                    prev_best = best_val_loss
                     # Early stopping check
-                    if val_loss < best_val_loss:
+                    if improved:
                         best_val_loss = val_loss
                         best_model = deepcopy(f_model.state_dict())
                         patience_counter = 0  # Reset counter on improvement
                     else:
                         patience_counter += 1  # Increment counter if no improvement
+                    delta_to_prev_best = float(prev_best - val_loss) if np.isfinite(prev_best) else float('inf')
+                    print(
+                        f'[EPOCH {epoch} COMPLETE] '
+                        f'MSE TRAIN LOSS {train_loss_epoch:.6g} | '
+                        f'MSE VAL LOSS {val_loss:.6g} | '
+                        f'BEST VAL {best_val_loss:.6g} | '
+                        f'DELTA_TO_PREV_BEST {delta_to_prev_best:.3e} | '
+                        f'PATIENCE {patience_counter}/{config.run.optimization.patience} | '
+                        f's/epoch: {time_taken:.2f}s'
+                    )
                     if patience_counter >= config.run.optimization.patience:
-                        logger.info(f"Early stopping triggered at epoch {epoch}")
+                        if logger is not None:
+                            logger.info(f"Early stopping triggered at epoch {epoch}")
+                        else:
+                            print(f"Early stopping triggered at epoch {epoch}")
                         break  # Exit the loop if no improvement for 'patience' generations
         else:
             cum_loss, iters = torch.tensor(1.0, device=device), 1

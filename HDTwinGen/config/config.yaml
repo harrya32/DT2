@@ -23,6 +23,7 @@ run:
   dataset_max_windows: 0 # 0 uses the full dataset; set >0 for a smaller/faster subset
   optimization:
     patience: 100
+    min_delta: 0.0 # improvement threshold for early stopping; only val_loss decreases > min_delta reset patience
     log_optimization: true
   pytorch_as_optimizer:
     batch_size: 1000
