@@ -5,7 +5,7 @@
     "eval_horizon": 500,
     "gamma": 0.97,
     "seed": 42,
-    "device": "mps",
+    "device": "cuda",
     "deterministic_policy": true,
     "respect_env_done": true,
     "env_kwargs": {}
@@ -13,20 +13,20 @@
   "artifacts": {
     "policy_dir": "pend-eval/policies",
     "policy_snapshots": null,
-    "nsdt_run_dir": "logs/run-20260327-153110_NSDT_Dataset-Pendulum_0_1-runs_log_MAIN_TABLE/Dataset-Pendulum/0",
+    "nsdt_run_dir": "logs/run-20260328-210250_NSDT_Dataset-Pendulum_0_1-runs_log_MAIN_TABLE/Dataset-Pendulum/0",
     "state_diff_file": "best_state_differential.py",
     "state_dict_file": "best_state_dict.pt"
   },
   "metrics": {
-    "spearman_rank_corr": 0.7142857142857143,
-    "regret": 0.3987518150926661
+    "spearman_rank_corr": null,
+    "regret": 105.28854460145583
   },
   "policy_selection": {
     "real_optimal_policy": "ppo_frac_4000000",
-    "simulator_optimal_policy": "ppo_frac_3000000",
-    "real_optimal_true_value": -101.17208115223808,
-    "simulator_optimal_true_value": -101.57083296733074,
-    "simulator_optimal_sim_value": -153.8666919708252,
+    "simulator_optimal_policy": "ppo_frac_0",
+    "real_optimal_true_value": -101.71531830532633,
+    "simulator_optimal_true_value": -207.00386290678216,
+    "simulator_optimal_sim_value": -Infinity,
     "env_rank_vector": {
       "ppo_frac_0": 6.0,
       "ppo_frac_1000000": 5.0,
@@ -36,12 +36,12 @@
       "ppo_frac_5000000": 2.0
     },
     "sim_rank_vector": {
-      "ppo_frac_0": 6.0,
-      "ppo_frac_1000000": 5.0,
-      "ppo_frac_2000000": 3.0,
-      "ppo_frac_3000000": 1.0,
-      "ppo_frac_4000000": 2.0,
-      "ppo_frac_5000000": 4.0
+      "ppo_frac_0": 3.5,
+      "ppo_frac_1000000": 3.5,
+      "ppo_frac_2000000": 3.5,
+      "ppo_frac_3000000": 3.5,
+      "ppo_frac_4000000": 3.5,
+      "ppo_frac_5000000": 3.5
     }
   },
   "results": [
@@ -50,108 +50,108 @@
       "checkpoint": "pend-eval/policies/ppo_frac_0.zip",
       "timesteps": 0,
       "true_env": {
-        "mean": -207.01585880359167,
-        "std": 51.29522054115002,
-        "stderr": 11.469960005085499,
+        "mean": -207.00386290678216,
+        "std": 51.15483834175673,
+        "stderr": 11.438569591018066,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -122887348.61446992,
-        "std": 444017158.91104156,
-        "stderr": 99285255.05014154,
+        "mean": -Infinity,
+        "std": NaN,
+        "stderr": NaN,
         "n": 20
       },
-      "delta_mean": -122887141.59861112
+      "delta_mean": -Infinity
     },
     {
       "name": "ppo_frac_1000000",
       "checkpoint": "pend-eval/policies/ppo_frac_1000000.zip",
       "timesteps": 1000000,
       "true_env": {
-        "mean": -109.68068078958188,
-        "std": 42.861814168303894,
-        "stderr": 9.584193011929111,
+        "mean": -105.6371732086886,
+        "std": 41.338394949361586,
+        "stderr": 9.243546118750649,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -25856858.639969252,
-        "std": 92636982.48074059,
-        "stderr": 20714259.005739305,
+        "mean": -Infinity,
+        "std": NaN,
+        "stderr": NaN,
         "n": 20
       },
-      "delta_mean": -25856748.959288463
+      "delta_mean": -Infinity
     },
     {
       "name": "ppo_frac_2000000",
       "checkpoint": "pend-eval/policies/ppo_frac_2000000.zip",
       "timesteps": 2000000,
       "true_env": {
-        "mean": -102.08859263679015,
-        "std": 39.494408438746326,
-        "stderr": 8.831218200017812,
+        "mean": -102.37178602651662,
+        "std": 39.81829053280501,
+        "stderr": 8.903640437918831,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -157.38574562072753,
-        "std": 25.60514013721947,
-        "stderr": 5.7254833920231025,
+        "mean": -Infinity,
+        "std": NaN,
+        "stderr": NaN,
         "n": 20
       },
-      "delta_mean": -55.29715298393738
+      "delta_mean": -Infinity
     },
     {
       "name": "ppo_frac_3000000",
       "checkpoint": "pend-eval/policies/ppo_frac_3000000.zip",
       "timesteps": 3000000,
       "true_env": {
-        "mean": -101.57083296733074,
-        "std": 39.01114051376951,
-        "stderr": 8.72315620685847,
+        "mean": -101.82720836355496,
+        "std": 39.21859311265133,
+        "stderr": 8.769544018179342,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -153.8666919708252,
-        "std": 24.252599730251514,
-        "stderr": 5.423046162793544,
+        "mean": -Infinity,
+        "std": NaN,
+        "stderr": NaN,
         "n": 20
       },
-      "delta_mean": -52.295859003494456
+      "delta_mean": -Infinity
     },
     {
       "name": "ppo_frac_4000000",
       "checkpoint": "pend-eval/policies/ppo_frac_4000000.zip",
       "timesteps": 4000000,
       "true_env": {
-        "mean": -101.17208115223808,
-        "std": 38.78327883348528,
-        "stderr": 8.672204786200183,
+        "mean": -101.71531830532633,
+        "std": 39.01151452070687,
+        "stderr": 8.723239837352068,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -156.8488426208496,
-        "std": 26.39347520108019,
-        "stderr": 5.901760471207023,
+        "mean": -Infinity,
+        "std": NaN,
+        "stderr": NaN,
         "n": 20
       },
-      "delta_mean": -55.67676146861153
+      "delta_mean": -Infinity
     },
     {
       "name": "ppo_frac_5000000",
       "checkpoint": "pend-eval/policies/ppo_frac_5000000.zip",
       "timesteps": 5000000,
       "true_env": {
-        "mean": -101.1764965969559,
-        "std": 38.68408054435343,
-        "stderr": 8.650023374425134,
+        "mean": -101.79692052276826,
+        "std": 38.93968340196023,
+        "stderr": 8.707177910910334,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -157.5952522277832,
-        "std": 26.106146277499164,
-        "stderr": 5.837511770704122,
+        "mean": -Infinity,
+        "std": NaN,
+        "stderr": NaN,
         "n": 20
       },
-      "delta_mean": -56.41875563082729
+      "delta_mean": -Infinity
     }
   ]
 }
