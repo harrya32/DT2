@@ -1,0 +1,69 @@
+{
+  "aggregate_over_env_seeds": {
+    "num_seeds": 2,
+    "spearman_rank_corr_mean": 0.4,
+    "spearman_rank_corr_std": 0.028571428571428553,
+    "regret_mean": 31.623956439961148,
+    "regret_std": 26.909932091340124
+  },
+  "per_seed": [
+    {
+      "env_seed": 0,
+      "file": "pend-eval/results/nsdt_lunarlander_alignment_seed0.json",
+      "spearman_rank_corr": 0.3714285714285715,
+      "regret": 4.714024348621024,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_600000",
+        "real_optimal_true_value": -6067.985863043394,
+        "simulator_optimal_true_value": -6072.699887392015,
+        "simulator_optimal_sim_value": -1805.6943725585938,
+        "env_rank_vector": {
+          "ppo_frac_0": 5.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 2.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 1.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 4.0
+        }
+      }
+    },
+    {
+      "env_seed": 1,
+      "file": "pend-eval/results/nsdt_lunarlander_alignment_seed1.json",
+      "spearman_rank_corr": 0.4285714285714286,
+      "regret": 58.53388853130127,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_400000",
+        "real_optimal_true_value": -6067.985863043394,
+        "simulator_optimal_true_value": -6126.519751574695,
+        "simulator_optimal_sim_value": -5971.856591796875,
+        "env_rank_vector": {
+          "ppo_frac_0": 5.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 1.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 4.0
+        }
+      }
+    }
+  ]
+}

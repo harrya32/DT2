@@ -5,7 +5,7 @@
     "eval_horizon": 500,
     "gamma": 0.97,
     "seed": 42,
-    "device": "cpu",
+    "device": "cuda",
     "deterministic_policy": true,
     "respect_env_done": true,
     "env_kwargs": {}
@@ -13,20 +13,20 @@
   "artifacts": {
     "policy_dir": "pend-eval/lunarlander-policies",
     "policy_snapshots": null,
-    "nsdt_run_dir": "logs/run-20260327-163034_NSDT_Dataset-LunarLander_0_1-runs_log_MAIN_TABLE/Dataset-LunarLander/0",
+    "nsdt_run_dir": "logs/run-20260328-194854_NSDT_Dataset-LunarLander_0_2-runs_log_MAIN_TABLE/Dataset-LunarLander/0",
     "state_diff_file": "best_state_differential.py",
     "state_dict_file": "best_state_dict.pt"
   },
   "metrics": {
-    "spearman_rank_corr": 0.6,
-    "regret": 58.5337804327728
+    "spearman_rank_corr": 0.3714285714285715,
+    "regret": 4.714024348621024
   },
   "policy_selection": {
     "real_optimal_policy": "ppo_frac_800000",
-    "simulator_optimal_policy": "ppo_frac_400000",
-    "real_optimal_true_value": -6067.986176208187,
-    "simulator_optimal_true_value": -6126.51995664096,
-    "simulator_optimal_sim_value": -6898.445727539062,
+    "simulator_optimal_policy": "ppo_frac_600000",
+    "real_optimal_true_value": -6067.985863043394,
+    "simulator_optimal_true_value": -6072.699887392015,
+    "simulator_optimal_sim_value": -1805.6943725585938,
     "env_rank_vector": {
       "ppo_frac_0": 5.0,
       "ppo_frac_200000": 6.0,
@@ -36,12 +36,12 @@
       "ppo_frac_1000000": 2.0
     },
     "sim_rank_vector": {
-      "ppo_frac_0": 6.0,
-      "ppo_frac_200000": 5.0,
-      "ppo_frac_400000": 1.0,
-      "ppo_frac_600000": 4.0,
-      "ppo_frac_800000": 2.0,
-      "ppo_frac_1000000": 3.0
+      "ppo_frac_0": 2.0,
+      "ppo_frac_200000": 6.0,
+      "ppo_frac_400000": 5.0,
+      "ppo_frac_600000": 1.0,
+      "ppo_frac_800000": 3.0,
+      "ppo_frac_1000000": 4.0
     }
   },
   "results": [
@@ -50,108 +50,108 @@
       "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_0.zip",
       "timesteps": 0,
       "true_env": {
-        "mean": -6381.4249986732775,
-        "std": 725.0921331578074,
-        "stderr": 162.13552996911866,
+        "mean": -6381.424962793348,
+        "std": 725.0925678422107,
+        "stderr": 162.1356271675061,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -7180.475268554687,
-        "std": 657.8358479407749,
-        "stderr": 147.09656740317877,
+        "mean": -1869.2533264160156,
+        "std": 346.11868993227864,
+        "stderr": 77.3944918971747,
         "n": 20
       },
-      "delta_mean": -799.0502698814098
+      "delta_mean": 4512.171636377332
     },
     {
       "name": "ppo_frac_200000",
       "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_200000.zip",
       "timesteps": 200000,
       "true_env": {
-        "mean": -6425.416603236135,
-        "std": 689.8372090369296,
-        "stderr": 154.25228928153066,
+        "mean": -6425.41787595927,
+        "std": 689.8374144600887,
+        "stderr": 154.25233521554546,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -7074.106884765625,
-        "std": 676.2599581006855,
-        "stderr": 151.21632367742922,
+        "mean": -1994.2858093261718,
+        "std": 669.1468924068569,
+        "stderr": 149.62579383544698,
         "n": 20
       },
-      "delta_mean": -648.6902815294898
+      "delta_mean": 4431.132066633098
     },
     {
       "name": "ppo_frac_400000",
       "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_400000.zip",
       "timesteps": 400000,
       "true_env": {
-        "mean": -6126.51995664096,
-        "std": 739.70708996188,
-        "stderr": 165.4035336593316,
+        "mean": -6126.519751574695,
+        "std": 739.7070141173486,
+        "stderr": 165.4035166999788,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -6898.445727539062,
-        "std": 626.3489161495698,
-        "stderr": 140.0558754143754,
+        "mean": -1966.168115234375,
+        "std": 604.1501648279233,
+        "stderr": 135.0920837172939,
         "n": 20
       },
-      "delta_mean": -771.9257708981022
+      "delta_mean": 4160.35163634032
     },
     {
       "name": "ppo_frac_600000",
       "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_600000.zip",
       "timesteps": 600000,
       "true_env": {
-        "mean": -6072.699961615211,
-        "std": 743.7781515568599,
-        "stderr": 166.31385070602798,
+        "mean": -6072.699887392015,
+        "std": 743.7781244877143,
+        "stderr": 166.313844653183,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -6911.86416015625,
-        "std": 636.8982285237312,
-        "stderr": 142.41477337282583,
+        "mean": -1805.6943725585938,
+        "std": 492.50049775534876,
+        "stderr": 110.12645919334423,
         "n": 20
       },
-      "delta_mean": -839.1641985410397
+      "delta_mean": 4267.005514833421
     },
     {
       "name": "ppo_frac_800000",
       "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_800000.zip",
       "timesteps": 800000,
       "true_env": {
-        "mean": -6067.986176208187,
-        "std": 748.4104476836445,
-        "stderr": 167.34966360916792,
+        "mean": -6067.985863043394,
+        "std": 748.4100781435664,
+        "stderr": 167.34958097749438,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -6898.570263671875,
-        "std": 631.5099680564267,
-        "stderr": 141.2099217042891,
+        "mean": -1875.35791015625,
+        "std": 584.0154449359994,
+        "stderr": 130.589823478668,
         "n": 20
       },
-      "delta_mean": -830.5840874636879
+      "delta_mean": 4192.627952887144
     },
     {
       "name": "ppo_frac_1000000",
       "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_1000000.zip",
       "timesteps": 1000000,
       "true_env": {
-        "mean": -6071.534588603111,
-        "std": 750.0839652018601,
-        "stderr": 167.72387350239458,
+        "mean": -6071.53423223366,
+        "std": 750.0836487855516,
+        "stderr": 167.7238027495571,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -6905.647387695312,
-        "std": 635.0430532374756,
-        "stderr": 141.99994356780132,
+        "mean": -1920.4605041503905,
+        "std": 579.1759550144697,
+        "stderr": 129.50768063457141,
         "n": 20
       },
-      "delta_mean": -834.1127990922014
+      "delta_mean": 4151.073728083269
     }
   ]
 }
