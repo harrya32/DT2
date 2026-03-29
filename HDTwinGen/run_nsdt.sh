@@ -20,6 +20,7 @@ OPTIMIZATION_MIN_DELTA="${OPTIMIZATION_MIN_DELTA:-1e-6}"
 CUDA="${CUDA:-true}"
 DATASET_MAX_WINDOWS="${DATASET_MAX_WINDOWS:-0}"
 DATASET_WINDOW_LENGTH="${DATASET_WINDOW_LENGTH:-${PENDULUM_WINDOW_LENGTH:-200}}"
+DATASET_USE_WINDOWS="${DATASET_USE_WINDOWS:-false}"
 
 python run.py \
   "run.model=${MODEL}" \
@@ -35,6 +36,7 @@ python run.py \
   "run.optimization.patience=${OPTIMIZATION_PATIENCE}" \
   "run.optimization.min_delta=${OPTIMIZATION_MIN_DELTA}" \
   "run.dataset_max_windows=${DATASET_MAX_WINDOWS}" \
+  "run.dataset_use_windows=${DATASET_USE_WINDOWS}" \
   "run.dataset_window_length=${DATASET_WINDOW_LENGTH}" \
   "run.pendulum_window_length=${DATASET_WINDOW_LENGTH}" \
   "setup.cuda=${CUDA}" \

@@ -193,10 +193,58 @@ class DatasetEnv:
         f_model.to(device)
 
         f_model.train()
-        states_train, actions_train = train_data
-        if actions_train is not None:
-            actions_train = torch.tensor(actions_train, dtype=torch.float32, device=device)
-        states_train = torch.tensor(states_train, dtype=torch.float32, device=device)
+
+        def to_tensor(array):
+            if array is None:
+                return None
+            return torch.tensor(array, dtype=torch.float32, device=device)
+
+        def to_one_step_transitions(dataset, split_name):
+            if len(dataset) != 2:
+                raise ValueError(f"{split_name} dataset must be a (states, actions) tuple.")
+
+            states_raw, actions_raw = dataset
+            states = to_tensor(states_raw)
+            actions = to_tensor(actions_raw)
+
+            if states.ndim == 3:
+                if states.shape[1] < 2:
+                    raise ValueError(f"{split_name} states need at least 2 timesteps, got {tuple(states.shape)}")
+                states_now = states[:, :-1, :].reshape(-1, states.shape[-1])
+                next_states = states[:, 1:, :].reshape(-1, states.shape[-1])
+                if actions is not None:
+                    if actions.ndim != 3:
+                        raise ValueError(f"{split_name} actions must be 3D to match 3D states, got {tuple(actions.shape)}")
+                    if actions.shape[0] != states.shape[0] or actions.shape[1] != states.shape[1]:
+                        raise ValueError(
+                            f"{split_name} actions shape {tuple(actions.shape)} does not match states shape {tuple(states.shape)}"
+                        )
+                    actions_now = actions[:, :-1, :].reshape(-1, actions.shape[-1])
+                else:
+                    actions_now = None
+                return states_now, actions_now, next_states
+
+            if states.ndim == 2:
+                if states.shape[0] < 2:
+                    raise ValueError(f"{split_name} states need at least 2 rows, got {tuple(states.shape)}")
+                states_now = states[:-1, :]
+                next_states = states[1:, :]
+                if actions is not None:
+                    if actions.ndim != 2 or actions.shape[0] != states.shape[0]:
+                        raise ValueError(
+                            f"{split_name} actions shape {tuple(actions.shape)} is invalid for states shape {tuple(states.shape)}"
+                        )
+                    actions_now = actions[:-1, :]
+                else:
+                    actions_now = None
+                return states_now, actions_now, next_states
+
+            raise ValueError(f"{split_name} states must be 2D or 3D, got shape {tuple(states.shape)}")
+
+        states_train, actions_train, next_states_train = to_one_step_transitions(train_data, "train")
+        states_val, actions_val, next_states_val = to_one_step_transitions(val_data, "val")
+        states_test, actions_test, next_states_test = to_one_step_transitions(test_data, "test")
+
         requested_batch_size = int(config.run.pytorch_as_optimizer.batch_size)
         if requested_batch_size < 1:
             if logger is not None:
@@ -204,11 +252,6 @@ class DatasetEnv:
             requested_batch_size = 1
         batch_size = min(requested_batch_size, states_train.shape[0])
         config.run.pytorch_as_optimizer.batch_size = batch_size
-
-        states_val, actions_val = val_data
-        if actions_val is not None:
-            actions_val = torch.tensor(actions_val, dtype=torch.float32, device=device)
-        states_val = torch.tensor(states_val, dtype=torch.float32, device=device)
 
         MSE = torch.nn.MSELoss()
         optimizer = optim.Adam(f_model.parameters(), lr=config.run.pytorch_as_optimizer.learning_rate, weight_decay=config.run.pytorch_as_optimizer.weight_decay)
@@ -246,9 +289,13 @@ class DatasetEnv:
                 prey_population, intermediate_population, top_predators_population = states_at_t[:,0], states_at_t[:,1], states_at_t[:,2]
                 model_output = model(prey_population, intermediate_population, top_predators_population)
             elif env_name == 'Dataset-HL':
+                if actions_at_t is None:
+                    raise ValueError(f'Actions are required for {env_name}.')
                 hare, lynx, time = states_at_t[:,0], states_at_t[:,1], actions_at_t[:,0]
                 model_output = model(hare, lynx, time)
             elif env_name == 'Dataset-Pendulum':
+                if actions_at_t is None:
+                    raise ValueError(f'Actions are required for {env_name}.')
                 cos_theta, sin_theta, theta_dot = states_at_t[:,0], states_at_t[:,1], states_at_t[:,2]
                 torque = actions_at_t[:,0]
                 model_output = model(cos_theta, sin_theta, theta_dot, torque)
@@ -260,19 +307,11 @@ class DatasetEnv:
                 raise NotImplementedError(f'Unsupported dataset env for pytorch simulator evaluation: {env_name}')
             return coerce_model_output_to_dx_dt(model_output, expected_state_dim=states_at_t.shape[1])
 
-        def train(model, states_train_batch_i, actions_train_batch_i):
+        def train(model, states_train_batch_i, actions_train_batch_i, next_states_train_batch_i):
             optimizer.zero_grad(True)
-            pred_states = []
-            pred_state = states_train_batch_i[:,0]
-            for t in range(states_train_batch_i.shape[1]):
-                pred_states.append(pred_state)
-                states_at_t = states_train_batch_i[:,t]
-                actions_at_t = actions_train_batch_i[:,t] if actions_train_batch_i is not None else None
-                dx_dt = compute_dx_dt(model, states_at_t, actions_at_t)
-                pred_state = states_train_batch_i[:,t] + dx_dt
-                # pred_state[pred_state<=0] = 0
-            pred_states = torch.stack(pred_states, dim=1)
-            loss = MSE(pred_states, states_train_batch_i)
+            dx_dt = compute_dx_dt(model, states_train_batch_i, actions_train_batch_i)
+            pred_next_states = states_train_batch_i + dx_dt
+            loss = MSE(pred_next_states, next_states_train_batch_i)
             loss.backward()
             # if clip_grad_norm:
             #     torch.nn.utils.clip_grad_norm_(f_model.parameters(), clip_grad_norm)
@@ -284,21 +323,14 @@ class DatasetEnv:
         train_opt = train
 
         def compute_eval_loss(model, dataset):
-            states, actions = dataset
+            states, actions, next_states = dataset
             model.eval()
             with torch.no_grad():
-                pred_states = []
-                # pred_sates_per_dim_per_bb = []
-                pred_state = states[:,0]
-                for t in range(states.shape[1]):
-                    pred_states.append(pred_state)
-                    states_at_t = states[:,t]
-                    actions_at_t = actions[:,t] if actions is not None else None
-                    dx_dt = compute_dx_dt(model, states_at_t, actions_at_t)
-                    pred_state = states[:,t] + dx_dt
-                pred_states = torch.stack(pred_states, dim=1)
-                val_loss = MSE(pred_states, states).item()
-                loss_per_dim = torch.mean(torch.square(pred_states - states), dim=(0,1)).cpu().tolist()
+                dx_dt = compute_dx_dt(model, states, actions)
+                pred_next_states = states + dx_dt
+                squared_error = torch.square(pred_next_states - next_states)
+                val_loss = torch.mean(squared_error).item()
+                loss_per_dim = torch.mean(squared_error, dim=0).cpu().tolist()
             model.train()
             return val_loss, loss_per_dim
                 
@@ -312,20 +344,21 @@ class DatasetEnv:
                 iters = 0 
                 cum_loss = torch.zeros((), device=device)
                 t0 = time.perf_counter()
-                permutation = torch.randperm(states_train.shape[0])
+                permutation = torch.randperm(states_train.shape[0], device=states_train.device)
                 for batch_start in range(0, permutation.shape[0], batch_size):
                     indices = permutation[batch_start:batch_start + batch_size]
-                    states_train_batch = states_train[indices]
+                    states_train_batch = states_train.index_select(0, indices)
                     if actions_train is not None:
-                        actions_train_batch = actions_train[indices]
+                        actions_train_batch = actions_train.index_select(0, indices)
                     else:
                         actions_train_batch = None
-                    cum_loss += train_opt(f_model, states_train_batch, actions_train_batch)
+                    next_states_train_batch = next_states_train.index_select(0, indices)
+                    cum_loss += train_opt(f_model, states_train_batch, actions_train_batch, next_states_train_batch)
                     iters += 1
                 time_taken = time.perf_counter() - t0
                 if epoch % config.run.pytorch_as_optimizer.log_interval == 0:
                     # Collect validation loss
-                    val_loss, _ = compute_eval_loss(f_model, (states_val, actions_val))
+                    val_loss, _ = compute_eval_loss(f_model, (states_val, actions_val, next_states_val))
                     train_loss_epoch = (cum_loss / max(iters, 1)).item()
                     improved = val_loss < (best_val_loss - min_delta)
                     prev_best = best_val_loss
@@ -361,22 +394,16 @@ class DatasetEnv:
             f_model.load_state_dict(best_model)
             print('Loaded best model')
             
-        val_loss, _ = compute_eval_loss(f_model, (states_val, actions_val))
+        val_loss, _ = compute_eval_loss(f_model, (states_val, actions_val, next_states_val))
         # torch.save(f_model.state_dict(), f'{folder_path}dynode_model_{env.env_name}_{env.seed}.pt')
         print(f'[Train Run completed successfully] MSE VAL LOSS {val_loss:.4f}')
         print('')
 
-        val_loss, loss_per_dim = compute_eval_loss(f_model, (states_val, actions_val))
+        val_loss, loss_per_dim = compute_eval_loss(f_model, (states_val, actions_val, next_states_val))
         train_loss = float((cum_loss / max(iters, 1)).item())
         optimized_parameters = get_model_parameters(f_model)
 
-        states_test, actions_test = test_data
-        if actions_test is not None:
-            actions_test = torch.tensor(actions_test, dtype=torch.float32, device=device)
-        states_test = torch.tensor(states_test, dtype=torch.float32, device=device)
-        test_data = (states_test, actions_test)
-
-        test_loss, _ = compute_eval_loss(f_model, test_data)
+        test_loss, _ = compute_eval_loss(f_model, (states_test, actions_test, next_states_test))
 
         # Save full model weights so NN parameters can be restored later.
         base_log_folder = config.run.log_path.split('.txt')[0]
@@ -435,39 +462,46 @@ def load_data(config={}, seed=0, env_name='', train_ratio=0.7, val_ratio=0.15):
         if not (states.shape[0] == actions.shape[0] == next_states.shape[0] == done.shape[0]):
             raise ValueError(f'Inconsistent transition lengths in {npz_path}.')
 
-        # Backward-compatible fallback to pendulum_window_length if dataset_window_length is not set.
-        window_length = int(cfg_get('run.dataset_window_length', cfg_get('run.pendulum_window_length', 25)))
-        state_windows, action_windows = build_transition_windows(
-            states=states,
-            actions=actions,
-            next_states=next_states,
-            done=done,
-            window_length=window_length,
-        )
+        dataset_use_windows = bool(cfg_get('run.dataset_use_windows', True))
+        if dataset_use_windows:
+            # Backward-compatible fallback to pendulum_window_length if dataset_window_length is not set.
+            window_length = int(cfg_get('run.dataset_window_length', cfg_get('run.pendulum_window_length', 25)))
+            state_samples, action_samples = build_transition_windows(
+                states=states,
+                actions=actions,
+                next_states=next_states,
+                done=done,
+                window_length=window_length,
+            )
+        else:
+            # One-step transition mode: each sample is [state_t, state_{t+1}] with action_t duplicated
+            # along the length-2 time axis to keep (states, actions) dataset compatibility.
+            state_samples = np.stack([states, next_states], axis=1)
+            action_samples = np.stack([actions, actions], axis=1)
 
         rng = np.random.default_rng(seed)
-        permutation = rng.permutation(state_windows.shape[0])
-        state_windows = state_windows[permutation]
-        action_windows = action_windows[permutation]
+        permutation = rng.permutation(state_samples.shape[0])
+        state_samples = state_samples[permutation]
+        action_samples = action_samples[permutation]
 
         dataset_max_windows = int(cfg_get('run.dataset_max_windows', 0))
         if dataset_max_windows > 0:
-            max_n = min(dataset_max_windows, state_windows.shape[0])
-            state_windows = state_windows[:max_n]
-            action_windows = action_windows[:max_n]
+            max_n = min(dataset_max_windows, state_samples.shape[0])
+            state_samples = state_samples[:max_n]
+            action_samples = action_samples[:max_n]
 
-        num_samples = state_windows.shape[0]
+        num_samples = state_samples.shape[0]
         if num_samples < 3:
-            raise ValueError(f'{env_name} produced only {num_samples} windows; need at least 3 for train/val/test.')
+            raise ValueError(f'{env_name} produced only {num_samples} samples; need at least 3 for train/val/test.')
 
         train_end = int(num_samples * train_ratio)
         val_end = int(num_samples * (train_ratio + val_ratio))
         train_end = min(max(train_end, 1), num_samples - 2)
         val_end = min(max(val_end, train_end + 1), num_samples - 1)
 
-        train_data = (state_windows[:train_end], action_windows[:train_end])
-        val_data = (state_windows[train_end:val_end], action_windows[train_end:val_end])
-        test_data = (state_windows[val_end:], action_windows[val_end:])
+        train_data = (state_samples[:train_end], action_samples[:train_end])
+        val_data = (state_samples[train_end:val_end], action_samples[train_end:val_end])
+        test_data = (state_samples[val_end:], action_samples[val_end:])
     else:
         raise NotImplementedError
     

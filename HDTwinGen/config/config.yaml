@@ -18,6 +18,7 @@ run:
   generations: 20
   nsdt_patience: 20
   optimize_params: true
+  dataset_use_windows: true # if false, use one-step transition samples (state_t -> state_{t+1}) instead of rolling windows
   dataset_window_length: 25
   pendulum_window_length: 25 # legacy alias; dataset_window_length is preferred
   dataset_max_windows: 0 # 0 uses the full dataset; set >0 for a smaller/faster subset
