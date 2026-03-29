@@ -4,71 +4,41 @@
   "q_aware": {},
   "ranking_new": {},
   "value_aware": null,
-  "morel": null,
-  "morel_info": null,
-  "mopo": "results/test/ant_pipeline/mlp/dynamics/dynamics_mopo.pt",
-  "mopo_info": {
-    "uncertainty_mean": 8.35732650756836,
-    "uncertainty_std": 4.190694808959961,
-    "uncertainty_max": 28.79499626159668,
-    "penalty_coef": 1.0,
-    "holdout_size": 6000,
-    "holdout_fraction": 0.1,
-    "ensemble_size": 7,
-    "elite_size": 5,
-    "hidden_dim": 200,
-    "hidden_layers": 4,
-    "epochs": 2000,
-    "batch_size": 1024,
-    "lr": 0.0003,
-    "early_stop_patience": 20,
-    "min_epochs": 50,
+  "morel": "results/test/ant_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 2.6819562911987305,
+    "disagreement_std": 0.8599889278411865,
+    "disagreement_max": 12.283406257629395,
+    "threshold": 6.981900930404663,
+    "beta_effective": 5.0,
+    "halt_reward": -105.54471063613892,
+    "reward_min": -5.544710636138916,
+    "reward_offset": 100.0,
+    "val_fraction": 0.1,
+    "early_stop_patience": 20.0,
+    "min_epochs": 50.0,
     "min_delta": 0.0,
-    "bootstrap": true,
-    "elite_indices": [
-      1,
-      6,
-      4,
-      5,
-      2
-    ],
-    "member_holdout_nll": [
-      13.445871828715006,
-      9.128227498372397,
-      12.381819170633952,
-      13.259146237691244,
-      11.781790084838867,
-      12.258340443929036,
-      11.516429364522299
-    ],
-    "member_best_holdout_nll": [
-      13.253260602315267,
-      8.910143923441568,
-      12.074703872680663,
-      13.114129155476888,
-      11.565127606709797,
-      11.947949434916179,
-      11.276944109598796
-    ],
     "member_final_losses": [
-      17.704170946804982,
-      18.202763071599996,
-      17.36242045996324,
-      18.280447402090395,
-      12.861593858251032,
-      16.670251846313477,
-      12.78728821592511
+      0.08048203334493458,
+      0.08469234477236585,
+      0.08456264351898769,
+      0.08757766687645102
     ],
     "member_epochs": [
-      756,
-      912,
-      721,
-      698,
-      744,
-      742,
-      752
+      634,
+      613,
+      552,
+      526
+    ],
+    "member_best_val_loss": [
+      0.12705536945660909,
+      0.1288732811609904,
+      0.12807913647095362,
+      0.13173675008614857
     ]
   },
+  "mopo": null,
+  "mopo_info": null,
   "romi": null,
   "romi_info": null
 }

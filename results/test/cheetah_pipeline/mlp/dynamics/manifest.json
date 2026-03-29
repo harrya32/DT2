@@ -4,71 +4,41 @@
   "q_aware": {},
   "ranking_new": {},
   "value_aware": null,
-  "morel": null,
-  "morel_info": null,
-  "mopo": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_mopo.pt",
-  "mopo_info": {
-    "uncertainty_mean": 6.328277111053467,
-    "uncertainty_std": 0.8175947666168213,
-    "uncertainty_max": 10.407354354858398,
-    "penalty_coef": 1.0,
-    "holdout_size": 6000,
-    "holdout_fraction": 0.1,
-    "ensemble_size": 7,
-    "elite_size": 5,
-    "hidden_dim": 200,
-    "hidden_layers": 4,
-    "epochs": 2000,
-    "batch_size": 1024,
-    "lr": 0.0003,
-    "early_stop_patience": 20,
-    "min_epochs": 50,
+  "morel": "results/test/cheetah_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 3.3217661380767822,
+    "disagreement_std": 1.174939751625061,
+    "disagreement_max": 16.83725357055664,
+    "threshold": 9.196464896202087,
+    "beta_effective": 5.0,
+    "halt_reward": -203.85147619247437,
+    "reward_min": -3.8514761924743652,
+    "reward_offset": 200.0,
+    "val_fraction": 0.1,
+    "early_stop_patience": 20.0,
+    "min_epochs": 50.0,
     "min_delta": 0.0,
-    "bootstrap": true,
-    "elite_indices": [
-      2,
-      1,
-      4,
-      0,
-      5
-    ],
-    "member_holdout_nll": [
-      0.48542851638793943,
-      0.32502610139052074,
-      0.002574247459570567,
-      1.096036592801412,
-      0.4840402059555054,
-      0.6732432471911113,
-      0.9189865248998006
-    ],
-    "member_best_holdout_nll": [
-      0.38647862335046135,
-      0.1642117581690351,
-      -0.22681278157234191,
-      0.8734764475822449,
-      0.32917745407422383,
-      0.3825045406023661,
-      0.5992206520239513
-    ],
     "member_final_losses": [
-      1.6750200492031169,
-      1.3314274909361354,
-      1.061405117781657,
-      2.519681651637239,
-      1.3476487218209032,
-      1.4486546876295558,
-      1.8418877934509854
+      0.01567991854587816,
+      0.019295848660030455,
+      0.01709937778705696,
+      0.015869690597338497
     ],
     "member_epochs": [
-      176,
-      188,
-      237,
-      149,
-      201,
-      184,
-      184
+      708,
+      491,
+      762,
+      690
+    ],
+    "member_best_val_loss": [
+      0.028948543190956116,
+      0.031076284805933635,
+      0.030861718306938807,
+      0.029515914931893348
     ]
   },
+  "mopo": null,
+  "mopo_info": null,
   "romi": null,
   "romi_info": null
 }

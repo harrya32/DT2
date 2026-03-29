@@ -47,7 +47,7 @@ AZURE_MODEL_DETAILS_MAP = {
                                                  'tokens_per_minute_rate_limit_(thousands)': 20,
                                                  'rate_limit_(Tokens per minute)': 20000,
                                                  'rate_limit_(Requests per minute)': 120,
-                                                 'max_tokens': 128000
+                                                 'max_tokens': 256000
                                              }},
                             "gpt4o-mini-202409":   {'engine': "gpt4o-mini-202409",
                                              'api_key': O1_KEY,

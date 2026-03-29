@@ -24,7 +24,6 @@ from .utils import DEVICE, set_seed
 # - Dynamics architecture: 4-layer feedforward, hidden size 200.
 # - Two-head output: mean + variance.
 # - Spectral normalization on all layers except variance head.
-# - Batch size 256 for SAC updates; we mirror this for dynamics minibatches.
 
 
 @dataclass(frozen=True)

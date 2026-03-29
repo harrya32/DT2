@@ -4,71 +4,41 @@
   "q_aware": {},
   "ranking_new": {},
   "value_aware": null,
-  "morel": null,
-  "morel_info": null,
-  "mopo": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_mopo.pt",
-  "mopo_info": {
-    "uncertainty_mean": 0.05597001686692238,
-    "uncertainty_std": 0.01928933896124363,
-    "uncertainty_max": 0.21970726549625397,
-    "penalty_coef": 1.0,
-    "holdout_size": 600,
-    "holdout_fraction": 0.1,
-    "ensemble_size": 7,
-    "elite_size": 5,
-    "hidden_dim": 200,
-    "hidden_layers": 4,
-    "epochs": 2000,
-    "batch_size": 1024,
-    "lr": 0.0003,
-    "early_stop_patience": 20,
-    "min_epochs": 50,
+  "morel": "results/test/lunarlander_pipeline/mlp/dynamics/dynamics_morel.pt",
+  "morel_info": {
+    "disagreement_mean": 0.029324091970920563,
+    "disagreement_std": 0.03553267568349838,
+    "disagreement_max": 0.9058631062507629,
+    "threshold": 0.20698747038841248,
+    "beta_effective": 5.0,
+    "halt_reward": -150.0,
+    "reward_min": -100.0,
+    "reward_offset": 50.0,
+    "val_fraction": 0.1,
+    "early_stop_patience": 20.0,
+    "min_epochs": 50.0,
     "min_delta": 0.0,
-    "bootstrap": true,
-    "elite_indices": [
-      6,
-      3,
-      4,
-      1,
-      0
-    ],
-    "member_holdout_nll": [
-      6.690220832824707,
-      6.635955810546875,
-      7.226370811462402,
-      5.874345779418945,
-      6.4130144119262695,
-      6.9582905769348145,
-      4.714156627655029
-    ],
-    "member_best_holdout_nll": [
-      6.662631034851074,
-      6.574183940887451,
-      7.195348262786865,
-      5.735604286193848,
-      6.34891939163208,
-      6.784906387329102,
-      4.526546955108643
-    ],
     "member_final_losses": [
-      4.898563981056213,
-      5.784956852595012,
-      7.0691712697347,
-      4.7623222668965655,
-      5.9493567943573,
-      5.926788806915283,
-      1.393577218055725
+      0.29298023879528046,
+      0.3037200793623924,
+      0.3662202109893163,
+      0.3379066785176595
     ],
     "member_epochs": [
-      97,
-      112,
-      87,
-      116,
-      95,
-      80,
-      121
+      50,
+      50,
+      50,
+      50
+    ],
+    "member_best_val_loss": [
+      0.1315467208623886,
+      0.12547512352466583,
+      0.1979600042104721,
+      0.14309033751487732
     ]
   },
+  "mopo": null,
+  "mopo_info": null,
   "romi": null,
   "romi_info": null
 }
