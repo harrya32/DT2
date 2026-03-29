@@ -263,6 +263,66 @@ self.re_tries)
         #     write_files_from_dict(self.file_dict, base_dir=f'{self.folder_path}/{self.name}')
         #     raise e
 
+    def _remaining_token_budget(self, messages):
+        try:
+            used_tokens = num_tokens_consumed_by_chat_request(messages=messages, functions=self.functions)
+        except Exception:
+            return -1
+        return self.max_tokens - used_tokens
+
+    def _is_token_limit_error(self, err, messages):
+        err_text = f"{type(err).__name__}: {err}".lower()
+        token_markers = (
+            "selfgeneratederrorovertokenlimit",
+            "maximum context length",
+            "context_length_exceeded",
+            "too many tokens",
+            "token limit",
+            "context length",
+        )
+        if any(marker in err_text for marker in token_markers):
+            return True
+        return self._remaining_token_budget(messages) < 700
+
+    def _shrink_message_content(self, message, aggressive=False):
+        content = message.get('content', None)
+        if not isinstance(content, str) or len(content) == 0:
+            return False
+
+        new_content = content
+
+        # Remove huge parameter dumps that don't help follow-up generation as much as code + metrics.
+        new_content = re.sub(
+            r"\noptimized_parameters\s*=\s*.*?(?=\n###|\Z)",
+            "\noptimized_parameters = [omitted for token budget]",
+            new_content,
+            flags=re.DOTALL,
+        )
+
+        # In aggressive mode, collapse large code blocks to a short marker.
+        if aggressive:
+            new_content = re.sub(
+                r"```.*?```",
+                "```[code omitted for token budget]```",
+                new_content,
+                flags=re.DOTALL,
+            )
+
+        # Progressively truncate very long messages while preserving both head and tail.
+        max_chars = 20000 if aggressive else 50000
+        if len(new_content) > max_chars:
+            keep_head = max_chars // 3
+            keep_tail = max_chars - keep_head
+            new_content = (
+                new_content[:keep_head]
+                + "\n...[truncated for token budget]...\n"
+                + new_content[-keep_tail:]
+            )
+
+        if new_content != content:
+            message['content'] = new_content
+            return True
+        return False
 
     def get_llm_response_with_retries(self, messages, n=None, print_=True):
             has_returned_successfully = False
@@ -271,10 +331,46 @@ self.re_tries)
                     response_message = self.get_llm_response(messages, n=n, print_=print_)
                     has_returned_successfully = True
                 except InvalidRequestError as e:
-                    # Calculate exactly where the token limit overflowed, and undo messages till just before it overflowed.
-                    while (self.max_tokens - num_tokens_consumed_by_chat_request(messages=messages, functions=self.functions)) < 700:
-                        messages.pop(3)
+                    if not self._is_token_limit_error(e, messages):
+                        raise e
+
+                    changed = False
+                    safety_counter = 0
+                    while self._remaining_token_budget(messages) < 700 and safety_counter < 64:
+                        safety_counter += 1
+
+                        # First try shrinking older context messages.
+                        for idx in range(1, max(len(messages) - 1, 1)):
+                            if self._shrink_message_content(messages[idx], aggressive=False):
+                                changed = True
+                                break
+                        if self._remaining_token_budget(messages) >= 700:
+                            break
+
+                        # If still too large, remove oldest non-system context message.
+                        if len(messages) > 2:
+                            messages.pop(1)
+                            changed = True
+                            continue
+
+                        # Last resort: aggressively shrink the final user message.
+                        if len(messages) >= 2 and self._shrink_message_content(messages[-1], aggressive=True):
+                            changed = True
+                            continue
+
+                        break
+
                     self.re_tries += 1
+                    remaining_budget = self._remaining_token_budget(messages)
+                    if self.logger is not None:
+                        self.logger.warning(
+                            f"[Retry Token Handling] retries={self.re_tries}/{self.max_re_tries} "
+                            f"| remaining_token_budget={remaining_budget} | messages={len(messages)}"
+                        )
+                    if not changed:
+                        raise ValueError(
+                            "Token limit hit and retry logic could not shrink context further."
+                        )
                     if self.re_tries > self.max_re_tries:
                         self.logger.warning(f'[WARNING] Maximum re-tries reached: {self.re_tries}/{self.max_re_tries}, exiting run!')
                         raise ValueError(f'[ERROR] Maximum re-tries reached: {self.re_tries}/{self.max_re_tries}, stopping run.')
