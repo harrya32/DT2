@@ -4,10 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(0 1 2 3 4)
+DEFAULT_SEEDS=(5 6 7 8 9)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
-OUTPUT_DIR="results/ood/pendulum_pipeline"
+OUTPUT_DIR="results/ood/hopper_pipeline"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -38,7 +38,7 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "Running seed ${seed}..."
-    python exps/pendulum_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --eval-ood-policies --ood-policy-types random const_zero const_min const_max const_mid --ood-eval-rollouts 50 --seed "$seed"  --output-dir "$OUTPUT_DIR" "${EXTRA_ARGS[@]}"
+    python exps/hopper_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --eval-ood-policies --ood-policy-types random const_zero const_min const_max const_mid --ood-eval-rollouts 100 --seed "$seed"  --output-dir "$OUTPUT_DIR" "${EXTRA_ARGS[@]}"
     echo "Completed seed ${seed}"
     echo
 done
