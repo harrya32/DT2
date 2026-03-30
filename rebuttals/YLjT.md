@@ -25,7 +25,7 @@ We appreciate the suggestion to compare against offline MBRL baselines. As you n
 
 To empirically validate this, we have run additional experiments comparing $\text{DT}^2$ against prominent offline MBRL models. Specifically, we compare to the dynamics models of the two papers you references, **MOReL** (Kidambi et al., 2020) and **MOPO** (Yu et al., 2020), as well as very recent offline MBRL baseline, **ROMI** (Qiao et al., ICLR 2026). Note that we already included an adapted version of **VaGraM** (Voelcker et al., 2022) in our original submission; because VaGraM is an online value-aware MBRL method, we adapted it to see if encoding pre-defined policy values via value-gradients (rather than our ranking loss) could benefit model training.
 
-The table HERE(link) reports the **Regret (std) / Spearman's Rank (std)**. As shown, $\text{DT}^2$ significantly outperforms the offline MBRL models in both regret and ranking correlation across almost all environments.
+The table [here](https://anonymous.4open.science/r/DT2-r/mbrl-results.pdf) reports the **Regret (std) / Spearman's Rank (std)**. As shown, $\text{DT}^2$ significantly outperforms the offline MBRL models in both regret and ranking correlation across almost all environments.
 
 
 **Update:** We will update our empirical section to include these additional offline MBRL baselines.
@@ -33,7 +33,3 @@ The table HERE(link) reports the **Regret (std) / Spearman's Rank (std)**. As sh
 ---
 
 Thank you once again. We hope that we have addressed all your comments, and we would greatly appreciate any further feedback. 
-
----
-
-[1] ...
