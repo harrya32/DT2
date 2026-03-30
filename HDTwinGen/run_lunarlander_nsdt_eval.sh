@@ -33,7 +33,7 @@ IGNORE_ENV_DONE="${IGNORE_ENV_DONE:-false}"
 
 ALL_SEEDS="${ALL_SEEDS:-true}"
 SEED_START="${SEED_START:-0}"
-SEED_RUNS="${SEED_RUNS:-5}"
+SEED_RUNS="${SEED_RUNS:-10}"
 PER_SEED_OUTPUT_DIR="${PER_SEED_OUTPUT_DIR:-pend-eval/results}"
 AGG_OUTPUT_JSON="${AGG_OUTPUT_JSON:-pend-eval/results/nsdt_lunarlander_alignment_summary_all_seeds.json}"
 

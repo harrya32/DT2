@@ -1,0 +1,243 @@
+{
+  "aggregate_over_env_seeds": {
+    "num_seeds": 8,
+    "spearman_rank_corr_mean": 0.15714285714285717,
+    "spearman_rank_corr_stderr": 0.22490684822612392,
+    "regret_mean": 5.319579106374932,
+    "regret_stderr": 2.0353745422410845
+  },
+  "per_seed": [
+    {
+      "env_seed": 0,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed0.json",
+      "spearman_rank_corr": 0.8857142857142858,
+      "regret": 0.7976971515510485,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_600000",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": 11.291861379075089,
+        "simulator_optimal_sim_value": 6.638605320453644,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 1.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 2.0
+        }
+      }
+    },
+    {
+      "env_seed": 1,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed1.json",
+      "spearman_rank_corr": 0.3714285714285715,
+      "regret": 2.1538681013944156,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_800000",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": 9.935690429231721,
+        "simulator_optimal_sim_value": 10.469920441508293,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 5.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 4.0
+        }
+      }
+    },
+    {
+      "env_seed": 2,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed2.json",
+      "spearman_rank_corr": -0.6,
+      "regret": 2.1538681013944156,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_800000",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": 9.935690429231721,
+        "simulator_optimal_sim_value": 355436.7231757164,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 2.0,
+          "ppo_frac_200000": 3.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 5.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 6.0
+        }
+      }
+    },
+    {
+      "env_seed": 3,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed3.json",
+      "spearman_rank_corr": -0.2,
+      "regret": 12.217834115036178,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_0",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": -0.1282755844100411,
+        "simulator_optimal_sim_value": -55.88491630554199,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 1.0,
+          "ppo_frac_200000": 2.0,
+          "ppo_frac_400000": 6.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 5.0,
+          "ppo_frac_1000000": 3.0
+        }
+      }
+    },
+    {
+      "env_seed": 4,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed4.json",
+      "spearman_rank_corr": -0.7714285714285715,
+      "regret": 12.217834115036178,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_0",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": -0.1282755844100411,
+        "simulator_optimal_sim_value": 15.355304765701295,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 1.0,
+          "ppo_frac_200000": 2.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 6.0,
+          "ppo_frac_1000000": 5.0
+        }
+      }
+    },
+    {
+      "env_seed": 5,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed5.json",
+      "spearman_rank_corr": 0.7142857142857143,
+      "regret": 0.0,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_1000000",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_sim_value": 13.992976522445678,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 4.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 2.0,
+          "ppo_frac_1000000": 1.0
+        }
+      }
+    },
+    {
+      "env_seed": 6,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed6.json",
+      "spearman_rank_corr": 0.7714285714285715,
+      "regret": 0.7976971515510485,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_600000",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": 11.291861379075089,
+        "simulator_optimal_sim_value": 4640961.876562071,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 1.0,
+          "ppo_frac_800000": 4.0,
+          "ppo_frac_1000000": 2.0
+        }
+      }
+    },
+    {
+      "env_seed": 9,
+      "file": "pend-eval/results/nsdt_cheetah_alignment_seed9.json",
+      "spearman_rank_corr": 0.08571428571428573,
+      "regret": 12.217834115036178,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_1000000",
+        "simulator_optimal_policy": "ppo_frac_0",
+        "real_optimal_true_value": 12.089558530626137,
+        "simulator_optimal_true_value": -0.1282755844100411,
+        "simulator_optimal_sim_value": 13642405.65,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 4.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 1.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 5.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 4.0,
+          "ppo_frac_1000000": 2.0
+        }
+      }
+    }
+  ]
+}

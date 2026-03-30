@@ -1,0 +1,157 @@
+{
+  "config": {
+    "env_id": "LunarLanderContinuous-v3",
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
+    "gamma": 0.97,
+    "seed": 42,
+    "device": "cuda",
+    "deterministic_policy": true,
+    "respect_env_done": true,
+    "env_kwargs": {}
+  },
+  "artifacts": {
+    "policy_dir": "pend-eval/lunarlander-policies",
+    "policy_snapshots": null,
+    "nsdt_run_dir": "logs/run-20260329-095506_NSDT_Dataset-Pendulum-Dataset-LunarLander-Dataset-Hopper-Dataset-Cheetah-Dataset-Walker-Dataset-Ant_0_5-runs_log_MAIN_TABLE/Dataset-LunarLander/9",
+    "state_diff_file": "best_state_differential.py",
+    "state_dict_file": "best_state_dict.pt"
+  },
+  "metrics": {
+    "spearman_rank_corr": 0.3714285714285715,
+    "regret": 3.548369190266385
+  },
+  "policy_selection": {
+    "real_optimal_policy": "ppo_frac_800000",
+    "simulator_optimal_policy": "ppo_frac_1000000",
+    "real_optimal_true_value": -6067.985863043394,
+    "simulator_optimal_true_value": -6071.53423223366,
+    "simulator_optimal_sim_value": -8067.948413085937,
+    "env_rank_vector": {
+      "ppo_frac_0": 5.0,
+      "ppo_frac_200000": 6.0,
+      "ppo_frac_400000": 4.0,
+      "ppo_frac_600000": 3.0,
+      "ppo_frac_800000": 1.0,
+      "ppo_frac_1000000": 2.0
+    },
+    "sim_rank_vector": {
+      "ppo_frac_0": 3.0,
+      "ppo_frac_200000": 6.0,
+      "ppo_frac_400000": 2.0,
+      "ppo_frac_600000": 5.0,
+      "ppo_frac_800000": 4.0,
+      "ppo_frac_1000000": 1.0
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_0.zip",
+      "timesteps": 0,
+      "true_env": {
+        "mean": -6381.424962793348,
+        "std": 725.0925678422107,
+        "stderr": 162.1356271675061,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": -8394.215454101562,
+        "std": 755.2051941946669,
+        "stderr": 168.86901511802046,
+        "n": 20
+      },
+      "delta_mean": -2012.7904913082148
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_200000.zip",
+      "timesteps": 200000,
+      "true_env": {
+        "mean": -6425.41787595927,
+        "std": 689.8374144600887,
+        "stderr": 154.25233521554546,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": -8514.241235351563,
+        "std": 1166.346057513148,
+        "stderr": 260.80290698882783,
+        "n": 20
+      },
+      "delta_mean": -2088.8233593922932
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_400000.zip",
+      "timesteps": 400000,
+      "true_env": {
+        "mean": -6126.519751574695,
+        "std": 739.7070141173486,
+        "stderr": 165.4035166999788,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": -8209.746655273437,
+        "std": 1018.4130764066862,
+        "stderr": 227.72408680200374,
+        "n": 20
+      },
+      "delta_mean": -2083.226903698742
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_600000.zip",
+      "timesteps": 600000,
+      "true_env": {
+        "mean": -6072.699887392015,
+        "std": 743.7781244877143,
+        "stderr": 166.313844653183,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": -8473.498120117187,
+        "std": 1264.6014959564093,
+        "stderr": 282.7734909406457,
+        "n": 20
+      },
+      "delta_mean": -2400.798232725172
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_800000.zip",
+      "timesteps": 800000,
+      "true_env": {
+        "mean": -6067.985863043394,
+        "std": 748.4100781435664,
+        "stderr": 167.34958097749438,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": -8436.385888671875,
+        "std": 845.4450930187626,
+        "stderr": 189.04726992335858,
+        "n": 20
+      },
+      "delta_mean": -2368.4000256284817
+    },
+    {
+      "name": "ppo_frac_1000000",
+      "checkpoint": "pend-eval/lunarlander-policies/ppo_frac_1000000.zip",
+      "timesteps": 1000000,
+      "true_env": {
+        "mean": -6071.53423223366,
+        "std": 750.0836487855516,
+        "stderr": 167.7238027495571,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": -8067.948413085937,
+        "std": 1109.0675044325724,
+        "stderr": 247.9950331547281,
+        "n": 20
+      },
+      "delta_mean": -1996.4141808522772
+    }
+  ]
+}

@@ -26,16 +26,16 @@ DEVICE="${DEVICE:-auto}"
 SIM_BATCH_SIZE="${SIM_BATCH_SIZE:-2048}"
 ENV_KWARGS="${ENV_KWARGS:-{}}"
 
-OUTPUT_JSON="${OUTPUT_JSON:-pend-eval/results/nsdt_alignment_summary.json}"
+OUTPUT_JSON="${OUTPUT_JSON:-pend-eval/results/nsdt_pendulum_alignment_summary.json}"
 SAVE_ROLLOUT_RETURNS="${SAVE_ROLLOUT_RETURNS:-false}"
 STOCHASTIC_POLICY="${STOCHASTIC_POLICY:-false}"
 IGNORE_ENV_DONE="${IGNORE_ENV_DONE:-false}"
 
-ALL_SEEDS="${ALL_SEEDS:-false}"
+ALL_SEEDS="${ALL_SEEDS:-true}"
 SEED_START="${SEED_START:-0}"
-SEED_RUNS="${SEED_RUNS:-1}"
+SEED_RUNS="${SEED_RUNS:-10}"
 PER_SEED_OUTPUT_DIR="${PER_SEED_OUTPUT_DIR:-pend-eval/results}"
-AGG_OUTPUT_JSON="${AGG_OUTPUT_JSON:-pend-eval/results/nsdt_alignment_summary_all_seeds.json}"
+AGG_OUTPUT_JSON="${AGG_OUTPUT_JSON:-pend-eval/results/nsdt_pendulum_alignment_summary_all_seeds.json}"
 
 EXTRA_ARGS=("$@")
 

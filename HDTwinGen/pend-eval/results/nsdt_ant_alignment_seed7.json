@@ -1,0 +1,159 @@
+{
+  "config": {
+    "env_id": "Ant-v5",
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
+    "gamma": 0.97,
+    "seed": 42,
+    "device": "cuda",
+    "deterministic_policy": true,
+    "respect_env_done": true,
+    "env_kwargs": {
+      "include_cfrc_ext_in_observation": false
+    }
+  },
+  "artifacts": {
+    "policy_dir": "pend-eval/ant-policies",
+    "policy_snapshots": null,
+    "nsdt_run_dir": "logs/run-20260329-095506_NSDT_Dataset-Pendulum-Dataset-LunarLander-Dataset-Hopper-Dataset-Cheetah-Dataset-Walker-Dataset-Ant_0_5-runs_log_MAIN_TABLE/Dataset-Ant/7",
+    "state_diff_file": "best_state_differential.py",
+    "state_dict_file": "best_state_dict.pt"
+  },
+  "metrics": {
+    "spearman_rank_corr": -0.028571428571428574,
+    "regret": 13.76958151503802
+  },
+  "policy_selection": {
+    "real_optimal_policy": "ppo_frac_1000000",
+    "simulator_optimal_policy": "ppo_frac_0",
+    "real_optimal_true_value": 47.98041250592305,
+    "simulator_optimal_true_value": 34.21083099088503,
+    "simulator_optimal_sim_value": 47.76423292160034,
+    "env_rank_vector": {
+      "ppo_frac_0": 6.0,
+      "ppo_frac_200000": 4.0,
+      "ppo_frac_400000": 3.0,
+      "ppo_frac_600000": 5.0,
+      "ppo_frac_800000": 2.0,
+      "ppo_frac_1000000": 1.0
+    },
+    "sim_rank_vector": {
+      "ppo_frac_0": 1.0,
+      "ppo_frac_200000": 4.0,
+      "ppo_frac_400000": 6.0,
+      "ppo_frac_600000": 5.0,
+      "ppo_frac_800000": 3.0,
+      "ppo_frac_1000000": 2.0
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "pend-eval/ant-policies/ppo_frac_0.zip",
+      "timesteps": 0,
+      "true_env": {
+        "mean": 34.21083099088503,
+        "std": 2.724500996258584,
+        "stderr": 0.6092169432400094,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 47.76423292160034,
+        "std": 13.366457876227415,
+        "stderr": 2.9888308429631967,
+        "n": 20
+      },
+      "delta_mean": 13.55340193071531
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "pend-eval/ant-policies/ppo_frac_200000.zip",
+      "timesteps": 200000,
+      "true_env": {
+        "mean": 41.68427941991946,
+        "std": 4.823606410537944,
+        "stderr": 1.07859118306666,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 34.78482246398926,
+        "std": 10.598114685953988,
+        "stderr": 2.369810487113195,
+        "n": 20
+      },
+      "delta_mean": -6.899456955930205
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "pend-eval/ant-policies/ppo_frac_400000.zip",
+      "timesteps": 400000,
+      "true_env": {
+        "mean": 41.72133323043875,
+        "std": 8.979305566592377,
+        "stderr": 2.007833763764282,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 26.636649131774902,
+        "std": 8.226494752797935,
+        "stderr": 1.839500148380151,
+        "n": 20
+      },
+      "delta_mean": -15.08468409866385
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "pend-eval/ant-policies/ppo_frac_600000.zip",
+      "timesteps": 600000,
+      "true_env": {
+        "mean": 38.633312604631136,
+        "std": 11.815404690245039,
+        "stderr": 2.642004806905775,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 27.117362642288207,
+        "std": 6.250348817939712,
+        "stderr": 1.3976204839998654,
+        "n": 20
+      },
+      "delta_mean": -11.51594996234293
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "pend-eval/ant-policies/ppo_frac_800000.zip",
+      "timesteps": 800000,
+      "true_env": {
+        "mean": 45.99050068561585,
+        "std": 10.95135586544148,
+        "stderr": 2.448797616091819,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 34.87770490646362,
+        "std": 7.966156002076082,
+        "stderr": 1.7812866340010074,
+        "n": 20
+      },
+      "delta_mean": -11.11279577915223
+    },
+    {
+      "name": "ppo_frac_1000000",
+      "checkpoint": "pend-eval/ant-policies/ppo_frac_1000000.zip",
+      "timesteps": 1000000,
+      "true_env": {
+        "mean": 47.98041250592305,
+        "std": 8.258746083524555,
+        "stderr": 1.846711765167106,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 46.6575909614563,
+        "std": 10.815892670763603,
+        "stderr": 2.4185071249169168,
+        "n": 20
+      },
+      "delta_mean": -1.3228215444667484
+    }
+  ]
+}

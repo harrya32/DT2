@@ -1,0 +1,157 @@
+{
+  "config": {
+    "env_id": "Walker2d-v5",
+    "eval_rollouts": 20,
+    "eval_horizon": 500,
+    "gamma": 0.97,
+    "seed": 42,
+    "device": "cuda",
+    "deterministic_policy": true,
+    "respect_env_done": true,
+    "env_kwargs": {}
+  },
+  "artifacts": {
+    "policy_dir": "pend-eval/walker-policies",
+    "policy_snapshots": null,
+    "nsdt_run_dir": "logs/run-20260329-095506_NSDT_Dataset-Pendulum-Dataset-LunarLander-Dataset-Hopper-Dataset-Cheetah-Dataset-Walker-Dataset-Ant_0_5-runs_log_MAIN_TABLE/Dataset-Walker/6",
+    "state_diff_file": "best_state_differential.py",
+    "state_dict_file": "best_state_dict.pt"
+  },
+  "metrics": {
+    "spearman_rank_corr": -0.942857142857143,
+    "regret": 8.376893609078529
+  },
+  "policy_selection": {
+    "real_optimal_policy": "ppo_frac_800000",
+    "simulator_optimal_policy": "ppo_frac_200000",
+    "real_optimal_true_value": 44.624079875924494,
+    "simulator_optimal_true_value": 36.247186266845965,
+    "simulator_optimal_sim_value": 42.145228958129884,
+    "env_rank_vector": {
+      "ppo_frac_0": 6.0,
+      "ppo_frac_200000": 5.0,
+      "ppo_frac_400000": 3.0,
+      "ppo_frac_600000": 4.0,
+      "ppo_frac_800000": 1.0,
+      "ppo_frac_1000000": 2.0
+    },
+    "sim_rank_vector": {
+      "ppo_frac_0": 2.0,
+      "ppo_frac_200000": 1.0,
+      "ppo_frac_400000": 4.0,
+      "ppo_frac_600000": 3.0,
+      "ppo_frac_800000": 6.0,
+      "ppo_frac_1000000": 5.0
+    }
+  },
+  "results": [
+    {
+      "name": "ppo_frac_0",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_0.zip",
+      "timesteps": 0,
+      "true_env": {
+        "mean": 29.406108422953018,
+        "std": 0.4309536463896052,
+        "stderr": 0.0963641648478564,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 22.096809768676756,
+        "std": 0.46664671599775487,
+        "stderr": 0.10434537784480184,
+        "n": 20
+      },
+      "delta_mean": -7.309298654276262
+    },
+    {
+      "name": "ppo_frac_200000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_200000.zip",
+      "timesteps": 200000,
+      "true_env": {
+        "mean": 36.247186266845965,
+        "std": 0.6509408400080692,
+        "stderr": 0.14555479675888575,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 42.145228958129884,
+        "std": 2.5880077680233273,
+        "stderr": 0.5786961295597666,
+        "n": 20
+      },
+      "delta_mean": 5.898042691283919
+    },
+    {
+      "name": "ppo_frac_400000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_400000.zip",
+      "timesteps": 400000,
+      "true_env": {
+        "mean": 41.50782802215836,
+        "std": 0.4478987762314502,
+        "stderr": 0.10015321106924896,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 18.295644760131836,
+        "std": 2.584878591261616,
+        "stderr": 0.5779964243644867,
+        "n": 20
+      },
+      "delta_mean": -23.21218326202652
+    },
+    {
+      "name": "ppo_frac_600000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_600000.zip",
+      "timesteps": 600000,
+      "true_env": {
+        "mean": 41.29124601664661,
+        "std": 0.5762780521971352,
+        "stderr": 0.12885968986539664,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 18.6075749874115,
+        "std": 2.519194425859554,
+        "stderr": 0.5633089984760516,
+        "n": 20
+      },
+      "delta_mean": -22.68367102923511
+    },
+    {
+      "name": "ppo_frac_800000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_800000.zip",
+      "timesteps": 800000,
+      "true_env": {
+        "mean": 44.624079875924494,
+        "std": 0.632614396631478,
+        "stderr": 0.14145687944129987,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 14.928349256515503,
+        "std": 1.943200338647262,
+        "stderr": 0.43451280511158896,
+        "n": 20
+      },
+      "delta_mean": -29.69573061940899
+    },
+    {
+      "name": "ppo_frac_1000000",
+      "checkpoint": "pend-eval/walker-policies/ppo_frac_1000000.zip",
+      "timesteps": 1000000,
+      "true_env": {
+        "mean": 44.17033084723191,
+        "std": 0.8124020472462801,
+        "stderr": 0.1816586202702678,
+        "n": 20
+      },
+      "nsdt_sim": {
+        "mean": 17.098262786865234,
+        "std": 2.4430082699325726,
+        "stderr": 0.5462732561163388,
+        "n": 20
+      },
+      "delta_mean": -27.072068060366675
+    }
+  ]
+}

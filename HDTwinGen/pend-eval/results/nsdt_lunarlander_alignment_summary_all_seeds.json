@@ -1,10 +1,10 @@
 {
   "aggregate_over_env_seeds": {
-    "num_seeds": 5,
-    "spearman_rank_corr_mean": 0.7942857142857145,
-    "spearman_rank_corr_std": 0.1282853961179637,
-    "regret_mean": 3.781500221937313,
-    "regret_std": 0.46626206334185555
+    "num_seeds": 9,
+    "spearman_rank_corr_mean": 0.5365079365079368,
+    "spearman_rank_corr_stderr": 0.18404486400807296,
+    "regret_mean": 49.1077934374885,
+    "regret_stderr": 39.01165230949529
   },
   "per_seed": [
     {
@@ -148,6 +148,122 @@
           "ppo_frac_400000": 2.0,
           "ppo_frac_600000": 4.0,
           "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 1.0
+        }
+      }
+    },
+    {
+      "env_seed": 6,
+      "file": "pend-eval/results/nsdt_lunarlander_alignment_seed6.json",
+      "spearman_rank_corr": 0.4285714285714286,
+      "regret": 58.53388853130127,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_400000",
+        "real_optimal_true_value": -6067.985863043394,
+        "simulator_optimal_true_value": -6126.519751574695,
+        "simulator_optimal_sim_value": -4382.437719726562,
+        "env_rank_vector": {
+          "ppo_frac_0": 5.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 1.0,
+          "ppo_frac_600000": 2.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 4.0
+        }
+      }
+    },
+    {
+      "env_seed": 7,
+      "file": "pend-eval/results/nsdt_lunarlander_alignment_seed7.json",
+      "spearman_rank_corr": 0.8857142857142858,
+      "regret": 3.548369190266385,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_1000000",
+        "real_optimal_true_value": -6067.985863043394,
+        "simulator_optimal_true_value": -6071.53423223366,
+        "simulator_optimal_sim_value": -5934.380688476563,
+        "env_rank_vector": {
+          "ppo_frac_0": 5.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 2.0,
+          "ppo_frac_1000000": 1.0
+        }
+      }
+    },
+    {
+      "env_seed": 8,
+      "file": "pend-eval/results/nsdt_lunarlander_alignment_seed8.json",
+      "spearman_rank_corr": -0.8285714285714287,
+      "regret": 357.43201291587593,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_200000",
+        "real_optimal_true_value": -6067.985863043394,
+        "simulator_optimal_true_value": -6425.41787595927,
+        "simulator_optimal_sim_value": -6937.709399414062,
+        "env_rank_vector": {
+          "ppo_frac_0": 5.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 2.0,
+          "ppo_frac_200000": 1.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 6.0,
+          "ppo_frac_800000": 5.0,
+          "ppo_frac_1000000": 4.0
+        }
+      }
+    },
+    {
+      "env_seed": 9,
+      "file": "pend-eval/results/nsdt_lunarlander_alignment_seed9.json",
+      "spearman_rank_corr": 0.3714285714285715,
+      "regret": 3.548369190266385,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_1000000",
+        "real_optimal_true_value": -6067.985863043394,
+        "simulator_optimal_true_value": -6071.53423223366,
+        "simulator_optimal_sim_value": -8067.948413085937,
+        "env_rank_vector": {
+          "ppo_frac_0": 5.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 4.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 3.0,
+          "ppo_frac_200000": 6.0,
+          "ppo_frac_400000": 2.0,
+          "ppo_frac_600000": 5.0,
+          "ppo_frac_800000": 4.0,
           "ppo_frac_1000000": 1.0
         }
       }
