@@ -254,6 +254,161 @@ class SB3PolicyAdapter:
             return action_tensor.clamp_(min=low, max=high)
 
 
+class ConstantActionPolicy:
+    """Simple policy that always returns a fixed action vector."""
+
+    def __init__(self, name: str, action: np.ndarray, act_low: float = -1.0, act_high: float = 1.0):
+        action = np.asarray(action, dtype=np.float32).reshape(-1)
+        if action.size == 0:
+            raise ValueError("ConstantActionPolicy action must be non-empty.")
+        self.name = name
+        self._action = action
+        self.act_low = float(act_low)
+        self.act_high = float(act_high)
+        self._cache: Dict[torch.device, torch.Tensor] = {}
+
+    def _get_action_tensor(self, device: torch.device) -> torch.Tensor:
+        cached = self._cache.get(device)
+        if cached is None:
+            cached = torch.tensor(self._action, dtype=torch.float32, device=device)
+            self._cache[device] = cached
+        return cached
+
+    def sample_torch_actions(
+        self,
+        states: torch.Tensor,
+        repeats: int = 1,
+        deterministic: bool = False,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+    ) -> torch.Tensor:
+        del deterministic  # policy is deterministic by construction
+        base = states if repeats <= 1 else states.repeat_interleave(repeats, dim=0)
+        action = self._get_action_tensor(base.device).unsqueeze(0).expand(base.shape[0], -1).clone()
+        low = max(float(act_low), self.act_low)
+        high = min(float(act_high), self.act_high)
+        return action.clamp_(min=low, max=high)
+
+
+class UniformRandomPolicy:
+    """Simple policy that samples actions uniformly from the action box."""
+
+    def __init__(
+        self,
+        name: str,
+        action_dim: int,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+        seed: int = 0,
+    ):
+        if action_dim <= 0:
+            raise ValueError("UniformRandomPolicy action_dim must be positive.")
+        self.name = name
+        self.action_dim = int(action_dim)
+        self.act_low = float(act_low)
+        self.act_high = float(act_high)
+        self._generator = torch.Generator(device="cpu")
+        self._generator.manual_seed(int(seed))
+
+    def sample_torch_actions(
+        self,
+        states: torch.Tensor,
+        repeats: int = 1,
+        deterministic: bool = False,
+        act_low: float = -1.0,
+        act_high: float = 1.0,
+    ) -> torch.Tensor:
+        del deterministic  # stochastic policy by design
+        base = states if repeats <= 1 else states.repeat_interleave(repeats, dim=0)
+        low = max(float(act_low), self.act_low)
+        high = min(float(act_high), self.act_high)
+        if high < low:
+            raise ValueError(f"Invalid action bounds: low={low} > high={high}")
+        noise = torch.rand(
+            (base.shape[0], self.action_dim),
+            dtype=torch.float32,
+            device="cpu",
+            generator=self._generator,
+        )
+        action = low + (high - low) * noise
+        return action.to(base.device)
+
+
+def build_ood_policies(
+    action_dim: int,
+    act_low: float,
+    act_high: float,
+    policy_types: Sequence[str],
+    seed: int,
+) -> Dict[str, Tuple[TorchPolicy, bool]]:
+    """Create OOD policies and indicate whether to evaluate them deterministically."""
+    policies: Dict[str, Tuple[TorchPolicy, bool]] = {}
+
+    for idx, policy_type in enumerate(policy_types):
+        key = str(policy_type).lower()
+        if key == "random":
+            name = "ood_random_uniform"
+            policies[name] = (
+                UniformRandomPolicy(
+                    name=name,
+                    action_dim=action_dim,
+                    act_low=act_low,
+                    act_high=act_high,
+                    seed=int(seed + idx),
+                ),
+                False,
+            )
+        elif key == "const_zero":
+            name = "ood_const_zero"
+            policies[name] = (
+                ConstantActionPolicy(
+                    name=name,
+                    action=np.zeros(action_dim, dtype=np.float32),
+                    act_low=act_low,
+                    act_high=act_high,
+                ),
+                True,
+            )
+        elif key == "const_min":
+            name = "ood_const_min"
+            policies[name] = (
+                ConstantActionPolicy(
+                    name=name,
+                    action=np.full(action_dim, act_low, dtype=np.float32),
+                    act_low=act_low,
+                    act_high=act_high,
+                ),
+                True,
+            )
+        elif key == "const_max":
+            name = "ood_const_max"
+            policies[name] = (
+                ConstantActionPolicy(
+                    name=name,
+                    action=np.full(action_dim, act_high, dtype=np.float32),
+                    act_low=act_low,
+                    act_high=act_high,
+                ),
+                True,
+            )
+        elif key == "const_mid":
+            mid = 0.5 * (float(act_low) + float(act_high))
+            name = "ood_const_mid"
+            policies[name] = (
+                ConstantActionPolicy(
+                    name=name,
+                    action=np.full(action_dim, mid, dtype=np.float32),
+                    act_low=act_low,
+                    act_high=act_high,
+                ),
+                True,
+            )
+        else:
+            raise ValueError(f"Unsupported OOD policy type: {policy_type}")
+
+    return policies
+
+
 # =============================================================================
 # Model Loading/Saving Utilities
 # =============================================================================
@@ -1394,6 +1549,7 @@ def evaluate_in_dynamics(
     rollouts: int,
     reward_fn_torch: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     termination_fn_torch: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+    deterministic_policy: bool = True,
 ) -> float:
     """Evaluate a policy by rolling out in a learned dynamics model.
     
@@ -1422,7 +1578,7 @@ def evaluate_in_dynamics(
     alive = torch.ones_like(total, dtype=torch.bool)  # Track which rollouts are still alive
     
     for _ in range(horizon):
-        actions = policy.sample_torch_actions(states, deterministic=True)
+        actions = policy.sample_torch_actions(states, deterministic=deterministic_policy)
         rewards = reward_fn_torch(states, actions)
         # Only accumulate rewards for alive rollouts
         total += discount * rewards * alive.float()
@@ -1590,6 +1746,134 @@ def evaluate_sb3_policy_fixed_horizon(
         returns.append(total)
     env.close()
     return float(np.mean(returns))
+
+
+def evaluate_torch_policy_fixed_horizon(
+    policy: TorchPolicy,
+    env_id: str,
+    horizon: int,
+    gamma: float,
+    rollouts: int,
+    seed: int,
+    reward_fn: Callable[[np.ndarray, np.ndarray], float],
+    deterministic_policy: bool = True,
+    respect_termination: bool = True,
+    termination_fn: Optional[Callable[[np.ndarray], bool]] = None,
+    env_kwargs: Optional[Dict[str, Any]] = None,
+    act_low: float = -1.0,
+    act_high: float = 1.0,
+) -> float:
+    """Roll out a TorchPolicy in the true env for a fixed horizon."""
+    if env_kwargs is None:
+        env_kwargs = {}
+    env = gym.make(env_id, **env_kwargs)
+    rng = np.random.default_rng(seed)
+    returns: List[float] = []
+
+    for ep in range(rollouts):
+        obs, _ = env.reset(seed=seed + ep)
+        total = 0.0
+        discount = 1.0
+        for _ in range(horizon):
+            obs_t = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+            with torch.no_grad():
+                action_t = policy.sample_torch_actions(
+                    obs_t,
+                    deterministic=deterministic_policy,
+                    act_low=act_low,
+                    act_high=act_high,
+                )
+            action = action_t.squeeze(0).detach().cpu().numpy().astype(np.float32, copy=False)
+            total += discount * reward_fn(obs, action)
+            discount = discount * gamma
+            obs, _, terminated, truncated, _ = env.step(action)
+            # Use user-defined termination if provided, otherwise use env's signal
+            if termination_fn is not None:
+                should_terminate = termination_fn(obs)
+            else:
+                should_terminate = terminated or truncated
+            if should_terminate:
+                if respect_termination:
+                    break
+                obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
+        returns.append(total)
+
+    env.close()
+    return float(np.mean(returns))
+
+
+def _ordinal_ranks(values: np.ndarray) -> np.ndarray:
+    """Compute ordinal ranks (1..n), ties broken by stable sort order."""
+    order = np.argsort(values, kind="stable")
+    ranks = np.empty(values.shape[0], dtype=np.float64)
+    ranks[order] = np.arange(1, values.shape[0] + 1, dtype=np.float64)
+    return ranks
+
+
+def _spearman_rank_corr(x: np.ndarray, y: np.ndarray) -> Optional[float]:
+    if x.size < 2 or y.size < 2:
+        return None
+    rx = _ordinal_ranks(x)
+    ry = _ordinal_ranks(y)
+    sx = float(np.std(rx))
+    sy = float(np.std(ry))
+    if sx <= 0.0 or sy <= 0.0:
+        return None
+    corr = np.corrcoef(rx, ry)[0, 1]
+    if not np.isfinite(corr):
+        return None
+    return float(corr)
+
+
+def _kendall_tau(x: np.ndarray, y: np.ndarray) -> Optional[float]:
+    n = x.size
+    if n < 2:
+        return None
+    i_idx, j_idx = np.triu_indices(n, k=1)
+    dx = np.sign(x[i_idx] - x[j_idx])
+    dy = np.sign(y[i_idx] - y[j_idx])
+    valid = (dx != 0) & (dy != 0)
+    if not np.any(valid):
+        return None
+    tau = np.mean(dx[valid] * dy[valid])
+    if not np.isfinite(tau):
+        return None
+    return float(tau)
+
+
+def compute_ranking_metrics(
+    reference: Mapping[str, float],
+    estimate: Mapping[str, float],
+) -> Dict[str, float]:
+    """Compute rank-alignment metrics between reference and estimated values."""
+    shared = [
+        name
+        for name, ref_val in reference.items()
+        if name in estimate
+        and np.isfinite(ref_val)
+        and np.isfinite(estimate[name])
+    ]
+    if len(shared) < 2:
+        return {}
+
+    ref_vals = np.asarray([reference[name] for name in shared], dtype=np.float64)
+    est_vals = np.asarray([estimate[name] for name in shared], dtype=np.float64)
+
+    metrics: Dict[str, float] = {"n_policies": float(len(shared))}
+
+    spear = _spearman_rank_corr(ref_vals, est_vals)
+    if spear is not None:
+        metrics["spearman"] = float(spear)
+
+    kendall = _kendall_tau(ref_vals, est_vals)
+    if kendall is not None:
+        metrics["kendall"] = float(kendall)
+
+    ref_top = int(np.argmax(ref_vals))
+    est_top = int(np.argmax(est_vals))
+    metrics["top1_match"] = float(ref_top == est_top)
+
+    return metrics
 
 
 def calc_dynamics_mse(
@@ -1789,6 +2073,12 @@ class BasePipelineConfig:
     eval_episodes: int = 20
     eval_rollouts: int = 500
     eval_horizon: int = 500
+    eval_ood_policies: bool = False
+    ood_policy_types: List[str] = field(
+        default_factory=lambda: ["random", "const_zero", "const_min", "const_max"]
+    )
+    ood_eval_rollouts: int = 200
+    ood_seed_offset: int = 10_000
     
     # Paths and misc
     output_dir: Path = Path("results/pipeline")
@@ -1933,6 +2223,31 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--eval-rollouts", type=int, default=500)
     parser.add_argument("--eval-horizon", type=int, default=500)
+    parser.add_argument(
+        "--eval-ood-policies",
+        action="store_true",
+        help="Evaluate unseen simple policies in learned dynamics (and true environment) after training.",
+    )
+    parser.add_argument(
+        "--ood-policy-types",
+        type=str,
+        nargs="+",
+        default=["random", "const_zero", "const_min", "const_max"],
+        choices=["random", "const_zero", "const_min", "const_max", "const_mid"],
+        help="OOD policy set used when --eval-ood-policies is enabled.",
+    )
+    parser.add_argument(
+        "--ood-eval-rollouts",
+        type=int,
+        default=200,
+        help="Number of rollouts per OOD policy for model/env evaluation.",
+    )
+    parser.add_argument(
+        "--ood-seed-offset",
+        type=int,
+        default=10_000,
+        help="Seed offset used for OOD policy sampling/evaluation.",
+    )
     
     # General
     parser.add_argument("--device", type=str, default="auto")
@@ -2364,6 +2679,8 @@ def run_pipeline(
     print("[Step 5-7] Evaluating policies across true env, Q, and dynamics...")
     results = []
     initial_states = dataset.initial_states
+    ood_results: List[Dict[str, Any]] = []
+    ood_ranking_metrics: Dict[str, Dict[str, float]] = {}
 
     # Generate test/train transitions for MSE evaluation
     test_states, test_actions, test_next_states = generate_test_transitions(
@@ -2599,6 +2916,150 @@ def run_pipeline(
         })
 
     # =========================================================================
+    # Step 8: OOD policy ranking/evaluation (optional)
+    # =========================================================================
+    if getattr(args, "eval_ood_policies", False):
+        print("[Step 8] Evaluating unseen OOD policies in learned dynamics...")
+        ood_rollouts = int(max(1, getattr(args, "ood_eval_rollouts", args.eval_rollouts)))
+        ood_seed_offset = int(getattr(args, "ood_seed_offset", 10_000))
+        policy_types = list(getattr(args, "ood_policy_types", ["random", "const_zero", "const_min", "const_max"]))
+        action_dim = int(dataset.actions.shape[-1])
+        ood_policy_specs = build_ood_policies(
+            action_dim=action_dim,
+            act_low=act_low,
+            act_high=act_high,
+            policy_types=policy_types,
+            seed=int(args.seed + ood_seed_offset),
+        )
+
+        env_values: Dict[str, float] = {}
+        sup_values: Dict[str, float] = {}
+        value_aware_values: Dict[str, float] = {}
+        ranking_values: Dict[str, Dict[str, float]] = {
+            loss_name: {} for loss_name in ranking_new_models.keys()
+        }
+
+        termination_fn_np_ood: Optional[Callable[[np.ndarray], bool]] = None
+        if termination_fn_torch is not None:
+            def _termination_fn_np_ood(state: np.ndarray) -> bool:
+                with torch.no_grad():
+                    state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+                    return bool(termination_fn_torch(state_t).item())
+            termination_fn_np_ood = _termination_fn_np_ood
+
+        for idx, (policy_name, (ood_policy, deterministic_policy)) in enumerate(ood_policy_specs.items()):
+            ood_seed = int(args.seed + ood_seed_offset + idx)
+            env_mc = evaluate_torch_policy_fixed_horizon(
+                policy=ood_policy,
+                env_id=env_id,
+                horizon=args.eval_horizon,
+                gamma=args.gamma,
+                rollouts=ood_rollouts,
+                seed=ood_seed,
+                reward_fn=reward_fn,
+                deterministic_policy=deterministic_policy,
+                termination_fn=termination_fn_np_ood,
+                env_kwargs=env_kwargs,
+                act_low=act_low,
+                act_high=act_high,
+            )
+            env_values[policy_name] = env_mc
+
+            dyn_sup_ood: Optional[float] = None
+            if sup_model is not None:
+                dyn_sup_ood = evaluate_in_dynamics(
+                    dynamics=sup_model,
+                    policy=ood_policy,
+                    initial_states=initial_states,
+                    horizon=args.eval_horizon,
+                    gamma=args.gamma,
+                    device=device,
+                    rollouts=ood_rollouts,
+                    reward_fn_torch=reward_fn_torch,
+                    termination_fn_torch=termination_fn_torch,
+                    deterministic_policy=deterministic_policy,
+                )
+                sup_values[policy_name] = dyn_sup_ood
+
+            dyn_rank_new_ood: Dict[str, float] = {}
+            for loss_name, dyn_model in ranking_new_models.items():
+                val = evaluate_in_dynamics(
+                    dynamics=dyn_model,
+                    policy=ood_policy,
+                    initial_states=initial_states,
+                    horizon=args.eval_horizon,
+                    gamma=args.gamma,
+                    device=device,
+                    rollouts=ood_rollouts,
+                    reward_fn_torch=reward_fn_torch,
+                    termination_fn_torch=termination_fn_torch,
+                    deterministic_policy=deterministic_policy,
+                )
+                dyn_rank_new_ood[loss_name] = val
+                ranking_values[loss_name][policy_name] = val
+
+            dyn_value_aware_ood: Optional[float] = None
+            if value_aware_model is not None:
+                dyn_value_aware_ood = evaluate_in_dynamics(
+                    dynamics=value_aware_model,
+                    policy=ood_policy,
+                    initial_states=initial_states,
+                    horizon=args.eval_horizon,
+                    gamma=args.gamma,
+                    device=device,
+                    rollouts=ood_rollouts,
+                    reward_fn_torch=reward_fn_torch,
+                    termination_fn_torch=termination_fn_torch,
+                    deterministic_policy=deterministic_policy,
+                )
+                value_aware_values[policy_name] = dyn_value_aware_ood
+
+            ood_entry = {
+                "name": policy_name,
+                "deterministic_policy": bool(deterministic_policy),
+                "env_mc": env_mc,
+                "dynamics": {
+                    "supervised": dyn_sup_ood,
+                    "ranking_new": dyn_rank_new_ood,
+                    "value_aware": dyn_value_aware_ood,
+                },
+            }
+            ood_results.append(ood_entry)
+
+            ood_payload: Dict[str, Any] = {
+                "ood_eval/policy_name": policy_name,
+                "ood_eval/env_mc": env_mc,
+            }
+            if dyn_sup_ood is not None:
+                ood_payload["ood_eval/dynamics_supervised"] = dyn_sup_ood
+            if dyn_value_aware_ood is not None:
+                ood_payload["ood_eval/dynamics_value_aware"] = dyn_value_aware_ood
+            for loss_name, val in dyn_rank_new_ood.items():
+                ood_payload[f"ood_eval/dynamics_ranking_new_{loss_name}"] = val
+            wandb_log(wandb_run, ood_payload)
+
+        if sup_values:
+            metrics = compute_ranking_metrics(env_values, sup_values)
+            if metrics:
+                ood_ranking_metrics["supervised"] = metrics
+        for loss_name, vals in ranking_values.items():
+            if vals:
+                metrics = compute_ranking_metrics(env_values, vals)
+                if metrics:
+                    ood_ranking_metrics[f"ranking_new_{loss_name}"] = metrics
+        if value_aware_values:
+            metrics = compute_ranking_metrics(env_values, value_aware_values)
+            if metrics:
+                ood_ranking_metrics["value_aware"] = metrics
+
+        if ood_ranking_metrics:
+            ood_rank_payload: Dict[str, Any] = {}
+            for model_name, metrics in ood_ranking_metrics.items():
+                for metric_name, metric_val in metrics.items():
+                    ood_rank_payload[f"ood_ranking/{model_name}_{metric_name}"] = metric_val
+            wandb_log(wandb_run, ood_rank_payload)
+
+    # =========================================================================
     # Save summary
     # =========================================================================
     config = args_to_config(args)
@@ -2611,6 +3072,8 @@ def run_pipeline(
         "mopo_info": mopo_info,
         "romi_info": romi_info,
         "results": results,
+        "ood_results": ood_results,
+        "ood_ranking_metrics": ood_ranking_metrics,
     }
 
     if value_aware_only:
@@ -2635,6 +3098,8 @@ def run_pipeline(
             "mopo_info": mopo_info,
             "romi_info": romi_info,
             "results": results,
+            "ood_results": ood_results,
+            "ood_ranking_metrics": ood_ranking_metrics,
         })
         wandb_run.finish()
 
