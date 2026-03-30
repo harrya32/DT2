@@ -1,0 +1,15 @@
+{
+  "supervised": "results/ood/hopper_pipeline/resnet/dynamics/dynamics_supervised.pt",
+  "ranking": "results/ood/hopper_pipeline/resnet/dynamics/dynamics_ranking.pt",
+  "q_aware": {},
+  "ranking_new": {
+    "kendall": "results/ood/hopper_pipeline/resnet/dynamics/dynamics_ranking_new_kendall.pt"
+  },
+  "value_aware": null,
+  "morel": null,
+  "morel_info": null,
+  "mopo": null,
+  "mopo_info": null,
+  "romi": null,
+  "romi_info": null
+}
