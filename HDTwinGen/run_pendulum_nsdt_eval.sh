@@ -114,19 +114,27 @@ seed_files=()
 for ((offset=0; offset<SEED_RUNS; offset++)); do
   seed=$((SEED_START + offset))
   per_seed_json="${PER_SEED_OUTPUT_DIR}/nsdt_pendulum_alignment_seed${seed}.json"
-  run_cmd_lines "$seed" "$per_seed_json"
-  seed_files+=("$per_seed_json")
+  if run_cmd_lines "$seed" "$per_seed_json"; then
+    seed_files+=("$per_seed_json")
+  else
+    echo "[WARN] Seed ${seed} failed; skipping." >&2
+  fi
 done
+
+if (( ${#seed_files[@]} == 0 )); then
+  echo "[WARN] No seed evaluations succeeded; writing empty aggregate summary." >&2
+fi
 
 "$PYTHON_BIN" - "${seed_files[@]}" "$AGG_OUTPUT_JSON" <<'PY'
 import json
+import math
 import re
 import statistics
 import sys
 from pathlib import Path
 
-if len(sys.argv) < 3:
-    raise SystemExit("Usage: aggregate <seed_json...> <output_json>")
+if len(sys.argv) < 2:
+    raise SystemExit("Usage: aggregate [seed_json...] <output_json>")
 
 *seed_jsons, output_json = sys.argv[1:]
 
@@ -151,11 +159,13 @@ def mean_or_none(values):
     vals = [float(v) for v in values if v is not None]
     return None if not vals else float(sum(vals) / len(vals))
 
-def pstdev_or_none(values):
+def stderr_or_none(values):
     vals = [float(v) for v in values if v is not None]
     if not vals:
         return None
-    return float(statistics.pstdev(vals))
+    if len(vals) == 1:
+        return 0.0
+    return float(statistics.stdev(vals) / math.sqrt(len(vals)))
 
 spearman_values = [row["spearman_rank_corr"] for row in per_seed]
 regret_values = [row["regret"] for row in per_seed]
@@ -164,9 +174,9 @@ summary = {
     "aggregate_over_env_seeds": {
         "num_seeds": len(per_seed),
         "spearman_rank_corr_mean": mean_or_none(spearman_values),
-        "spearman_rank_corr_std": pstdev_or_none(spearman_values),
+        "spearman_rank_corr_stderr": stderr_or_none(spearman_values),
         "regret_mean": mean_or_none(regret_values),
-        "regret_std": pstdev_or_none(regret_values),
+        "regret_stderr": stderr_or_none(regret_values),
     },
     "per_seed": per_seed,
 }
