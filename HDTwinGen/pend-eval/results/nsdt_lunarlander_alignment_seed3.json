@@ -13,20 +13,20 @@
   "artifacts": {
     "policy_dir": "pend-eval/lunarlander-policies",
     "policy_snapshots": null,
-    "nsdt_run_dir": "logs/run-20260329-095506_NSDT_Dataset-Pendulum-Dataset-LunarLander-Dataset-Hopper-Dataset-Cheetah-Dataset-Walker-Dataset-Ant_0_5-runs_log_MAIN_TABLE/Dataset-LunarLander/1",
+    "nsdt_run_dir": "logs/run-20260329-095506_NSDT_Dataset-Pendulum-Dataset-LunarLander-Dataset-Hopper-Dataset-Cheetah-Dataset-Walker-Dataset-Ant_0_5-runs_log_MAIN_TABLE/Dataset-LunarLander/3",
     "state_diff_file": "best_state_differential.py",
     "state_dict_file": "best_state_dict.pt"
   },
   "metrics": {
-    "spearman_rank_corr": 0.942857142857143,
-    "regret": 3.548369190266385
+    "spearman_rank_corr": 0.6571428571428573,
+    "regret": 4.714024348621024
   },
   "policy_selection": {
     "real_optimal_policy": "ppo_frac_800000",
-    "simulator_optimal_policy": "ppo_frac_1000000",
+    "simulator_optimal_policy": "ppo_frac_600000",
     "real_optimal_true_value": -6067.985863043394,
-    "simulator_optimal_true_value": -6071.53423223366,
-    "simulator_optimal_sim_value": -6975.093725585937,
+    "simulator_optimal_true_value": -6072.699887392015,
+    "simulator_optimal_sim_value": -7149.420654296875,
     "env_rank_vector": {
       "ppo_frac_0": 5.0,
       "ppo_frac_200000": 6.0,
@@ -36,12 +36,12 @@
       "ppo_frac_1000000": 2.0
     },
     "sim_rank_vector": {
-      "ppo_frac_0": 5.0,
-      "ppo_frac_200000": 6.0,
-      "ppo_frac_400000": 4.0,
-      "ppo_frac_600000": 3.0,
+      "ppo_frac_0": 6.0,
+      "ppo_frac_200000": 4.0,
+      "ppo_frac_400000": 5.0,
+      "ppo_frac_600000": 1.0,
       "ppo_frac_800000": 2.0,
-      "ppo_frac_1000000": 1.0
+      "ppo_frac_1000000": 3.0
     }
   },
   "results": [
@@ -56,12 +56,12 @@
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -8060.193603515625,
-        "std": 981.0743970479897,
-        "stderr": 219.3749042783924,
+        "mean": -8887.297827148437,
+        "std": 1257.5362476352302,
+        "stderr": 281.1936533882384,
         "n": 20
       },
-      "delta_mean": -1678.7686407222773
+      "delta_mean": -2505.8728643550894
     },
     {
       "name": "ppo_frac_200000",
@@ -74,12 +74,12 @@
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -8323.661328125,
-        "std": 2919.3701878059014,
-        "stderr": 652.7910191420323,
+        "mean": -7445.610498046875,
+        "std": 1132.7010366906918,
+        "stderr": 253.27965162248702,
         "n": 20
       },
-      "delta_mean": -1898.2434521657297
+      "delta_mean": -1020.1926220876057
     },
     {
       "name": "ppo_frac_400000",
@@ -92,12 +92,12 @@
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -7815.709985351563,
-        "std": 1742.001781314282,
-        "stderr": 389.5234399944457,
+        "mean": -7607.9508056640625,
+        "std": 1930.3994040386726,
+        "stderr": 431.65042911555537,
         "n": 20
       },
-      "delta_mean": -1689.190233776868
+      "delta_mean": -1481.4310540893675
     },
     {
       "name": "ppo_frac_600000",
@@ -110,12 +110,12 @@
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -7793.043017578125,
-        "std": 2279.5404342251054,
-        "stderr": 509.72073683867234,
+        "mean": -7149.420654296875,
+        "std": 2015.924334726882,
+        "stderr": 450.7743849945348,
         "n": 20
       },
-      "delta_mean": -1720.34313018611
+      "delta_mean": -1076.7207669048603
     },
     {
       "name": "ppo_frac_800000",
@@ -128,12 +128,12 @@
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -7360.650463867188,
-        "std": 1783.3812311392192,
-        "stderr": 398.77616626245583,
+        "mean": -7239.5072021484375,
+        "std": 2154.079908006268,
+        "stderr": 481.6669103268508,
         "n": 20
       },
-      "delta_mean": -1292.664600823794
+      "delta_mean": -1171.5213391050438
     },
     {
       "name": "ppo_frac_1000000",
@@ -146,12 +146,12 @@
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -6975.093725585937,
-        "std": 1363.5425478278748,
-        "stderr": 304.8973827156386,
+        "mean": -7403.908837890625,
+        "std": 2348.1513318344505,
+        "stderr": 525.0625999438497,
         "n": 20
       },
-      "delta_mean": -903.5594933522771
+      "delta_mean": -1332.3746056569653
     }
   ]
 }

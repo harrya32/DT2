@@ -1,0 +1,156 @@
+{
+  "aggregate_over_env_seeds": {
+    "num_seeds": 5,
+    "spearman_rank_corr_mean": -0.04000000000000002,
+    "spearman_rank_corr_std": 0.414275861951814,
+    "regret_mean": 8.69298082679464,
+    "regret_std": 3.8464306076652846
+  },
+  "per_seed": [
+    {
+      "env_seed": 0,
+      "file": "pend-eval/results/nsdt_walker_alignment_seed0.json",
+      "spearman_rank_corr": 0.3714285714285715,
+      "regret": 3.116251853766137,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_400000",
+        "real_optimal_true_value": 44.624079875924494,
+        "simulator_optimal_true_value": 41.50782802215836,
+        "simulator_optimal_sim_value": 39.017100143432614,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 3.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 1.0,
+          "ppo_frac_600000": 6.0,
+          "ppo_frac_800000": 2.0,
+          "ppo_frac_1000000": 4.0
+        }
+      }
+    },
+    {
+      "env_seed": 1,
+      "file": "pend-eval/results/nsdt_walker_alignment_seed1.json",
+      "spearman_rank_corr": 0.14285714285714288,
+      "regret": 8.376893609078529,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_200000",
+        "real_optimal_true_value": 44.624079875924494,
+        "simulator_optimal_true_value": 36.247186266845965,
+        "simulator_optimal_sim_value": 9.054709529876709,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 1.0,
+          "ppo_frac_400000": 2.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 5.0
+        }
+      }
+    },
+    {
+      "env_seed": 2,
+      "file": "pend-eval/results/nsdt_walker_alignment_seed2.json",
+      "spearman_rank_corr": -0.8285714285714287,
+      "regret": 15.217971452971476,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_0",
+        "real_optimal_true_value": 44.624079875924494,
+        "simulator_optimal_true_value": 29.406108422953018,
+        "simulator_optimal_sim_value": 24.706218814849855,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 1.0,
+          "ppo_frac_200000": 2.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 5.0,
+          "ppo_frac_800000": 6.0,
+          "ppo_frac_1000000": 4.0
+        }
+      }
+    },
+    {
+      "env_seed": 3,
+      "file": "pend-eval/results/nsdt_walker_alignment_seed3.json",
+      "spearman_rank_corr": -0.028571428571428574,
+      "regret": 8.376893609078529,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_200000",
+        "real_optimal_true_value": 44.624079875924494,
+        "simulator_optimal_true_value": 36.247186266845965,
+        "simulator_optimal_sim_value": 47.93443260192871,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 1.0,
+          "ppo_frac_400000": 2.0,
+          "ppo_frac_600000": 3.0,
+          "ppo_frac_800000": 4.0,
+          "ppo_frac_1000000": 5.0
+        }
+      }
+    },
+    {
+      "env_seed": 4,
+      "file": "pend-eval/results/nsdt_walker_alignment_seed4.json",
+      "spearman_rank_corr": 0.14285714285714288,
+      "regret": 8.376893609078529,
+      "policy_selection": {
+        "real_optimal_policy": "ppo_frac_800000",
+        "simulator_optimal_policy": "ppo_frac_200000",
+        "real_optimal_true_value": 44.624079875924494,
+        "simulator_optimal_true_value": 36.247186266845965,
+        "simulator_optimal_sim_value": 52.98532295227051,
+        "env_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 5.0,
+          "ppo_frac_400000": 3.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 1.0,
+          "ppo_frac_1000000": 2.0
+        },
+        "sim_rank_vector": {
+          "ppo_frac_0": 6.0,
+          "ppo_frac_200000": 1.0,
+          "ppo_frac_400000": 2.0,
+          "ppo_frac_600000": 4.0,
+          "ppo_frac_800000": 3.0,
+          "ppo_frac_1000000": 5.0
+        }
+      }
+    }
+  ]
+}

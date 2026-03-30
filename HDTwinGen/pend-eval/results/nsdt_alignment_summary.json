@@ -13,7 +13,7 @@
   "artifacts": {
     "policy_dir": "pend-eval/policies",
     "policy_snapshots": null,
-    "nsdt_run_dir": "logs/run-20260328-210250_NSDT_Dataset-Pendulum_0_1-runs_log_MAIN_TABLE/Dataset-Pendulum/0",
+    "nsdt_run_dir": "logs/run-20260329-095506_NSDT_Dataset-Pendulum-Dataset-LunarLander-Dataset-Hopper-Dataset-Cheetah-Dataset-Walker-Dataset-Ant_0_5-runs_log_MAIN_TABLE/Dataset-Pendulum/0",
     "state_diff_file": "best_state_differential.py",
     "state_dict_file": "best_state_dict.pt"
   },

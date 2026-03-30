@@ -14,7 +14,7 @@ MAX_POLICIES="${MAX_POLICIES:-0}"
 NSDT_RUN_DIR="${NSDT_RUN_DIR:-}"
 LOGS_DIR="${LOGS_DIR:-logs}"
 ENV_NAME="${ENV_NAME:-Dataset-LunarLander}"
-ENV_SEED="${ENV_SEED:-0}"
+ENV_SEED="${ENV_SEED:-4}"
 STATE_DIFF_FILE="${STATE_DIFF_FILE:-best_state_differential.py}"
 STATE_DICT_FILE="${STATE_DICT_FILE:-best_state_dict.pt}"
 
@@ -33,7 +33,7 @@ IGNORE_ENV_DONE="${IGNORE_ENV_DONE:-false}"
 
 ALL_SEEDS="${ALL_SEEDS:-true}"
 SEED_START="${SEED_START:-0}"
-SEED_RUNS="${SEED_RUNS:-2}"
+SEED_RUNS="${SEED_RUNS:-5}"
 PER_SEED_OUTPUT_DIR="${PER_SEED_OUTPUT_DIR:-pend-eval/results}"
 AGG_OUTPUT_JSON="${AGG_OUTPUT_JSON:-pend-eval/results/nsdt_lunarlander_alignment_summary_all_seeds.json}"
 
