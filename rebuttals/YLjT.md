@@ -1,17 +1,39 @@
-- (A) Decision-focused learning:
+Thank you for your thoughtful comments and suggestions. We give answers to each of your questions/concerns below.
 
-Discuss how the existing decision-focused learning (non-MDP) papers assume some ground truth, which we do not have for policy rankings, and we get around by using an OPE proxy (part of our contribution). This is similar for some of the MDP decision-focussed papers too, but some do use OPE to estimate policy value. But all have the 'task' of maximising the model for its optimal policy value, not ranking amongst a set of candidate policies, which is our unique setting. We are the first to port this literature stream with DTs, where this is the primary use case (human-in-the-loop decision making, not really for learning RL optimal policies). Then go into specific differences in each paper they cited to ours, and why it sholdn't be compared with. But acknowledge thanks for related work stream, it is indeed important to incorporate to place our work well and elucidate its contribution.
+---
 
-- (B) Comparison with offlime MBRL baselines. 
+**(A) Connection to decision-focused learning**
 
-Report table below, comparing with MOReL, MOPO, and ROMI. Also describe how we already compared to an adapted version of VaGraM. We adapted it because VaGraM is an online MBRL method, and we also wanted to see whether encoding the pre-defined policy values in some way other than our ranking loss can benefit the model training (doesn't appear to much).
+We thank the reviewer for pointing us toward the rich literature on decision-focused learning. We agree that these are highly relevant works, and we will extend our Related Work section to incorporate a detailed discussion of this stream of literature to better contextualize our contribution.
+
+While the foundational non-MDP methods (Donti et al., 2017; Wilder et al., 2019) do not apply to our sequential trajectory setting, we directly address the MDP extensions. The fundamental distinction between $\text{DT}^2$ and the decision-focused MDP literature is our core objective. The DFL MDP literature broadly targets learning a model such that a policy optimized within it achieves high ground-truth value. In contrast, our goal is explicitly to *rank a fixed, known set of candidate policies*—the primary use case for human-in-the-loop Digital Twins. Consequently, DFL methods are not designed to allocate model capacity toward distinguishing between the values of a given candidate set. Furthermore, DFL methods typically assume access to ground-truth task losses during training, whereas we circumvent the lack of ground-truth rankings in offline settings by uniquely utilizing an OPE proxy (FQE) to guide the ranking loss.
+
+Beyond this shared distinction in problem setting, the specific works cited have technical constraints that make direct empirical comparison inappropriate for our continuous-control setups:
+*   **Futoma et al. (2020):** Operates specifically in a POMDP setting with discrete actions only. While they share our design choice of combining a decision-focused loss and a simulation loss via a hyperparameter, their method is not applicable to the continuous-action environments we consider.
+*   **Wang et al. (2021):** Addresses a fundamentally different problem. They predict MDP parameters (transition or reward functions) from *features* that describe the MDP, rather than learning a simulator from observed state-action trajectory data.
+*   **Sharma et al. (2024):** Focuses on reward transfer—learning a model that supports policy optimization when the reward function changes. They only demonstrate their approach on simple linear or tabular MDP settings, leaving scalability to expressive model classes and continuous control open.
+
+To our knowledge, $\text{DT}^2$ is the first method to directly optimize an expressive generative dynamics model for pairwise policy ranking in the offline, continuous-action setting, while simultaneously maintaining simulation fidelity for human interpretability.
+
+**Update:** We will extend our related works to incorporate this discussion of decision-focused literature.
+
+---
+
+**(B) Comparison with offlime MBRL baselines**
+
+We appreciate the suggestion to compare against offline MBRL baselines. As you noted, while offline MBRL operates on offline data, its purpose (learning a single optimal policy via pessimism/uncertainty penalties) differs significantly from ours (evaluating/ranking a diverse set of candidate policies). Pessimism often distorts the learned dynamics in out-of-distribution regions, which actively harms the ability to accurately rank multiple distinct policies. 
+
+To empirically validate this, we have run additional experiments comparing $\text{DT}^2$ against prominent offline MBRL models. Specifically, we compare to the dynamics models of the two papers you references, **MOReL** (Kidambi et al., 2020) and **MOPO** (Yu et al., 2020), as well as very recent offline MBRL baseline, **ROMI** (Qiao et al., ICLR 2026). Note that we already included an adapted version of **VaGraM** (Voelcker et al., 2022) in our original submission; because VaGraM is an online value-aware MBRL method, we adapted it to see if encoding pre-defined policy values via value-gradients (rather than our ranking loss) could benefit model training.
+
+The table HERE(link) reports the **Regret (std) / Spearman's Rank (std)**. As shown, $\text{DT}^2$ significantly outperforms the offline MBRL models in both regret and ranking correlation across almost all environments.
 
 
-| Method | Pendulum | LunarLander | Hopper | Walker | Cheetah | Ant | Avg. Rank |
-|----------|----------|----------|----------|----------|----------|----------|----------|
-| DT2 |  0.03(0.02) / 0.720(0.064) | 0.62(0.62) / 0.960(0.023)  | 0.60(0.16) / 0.657(0.044)  | 0.21(0.08)/0.912(0.009)|  0.55(0.16)/0.896(0.023) | 1.64(0.68)/0.840(0.035) | 1.33 / 1.33 |
-| NLL | 0.08(0.07) / 0.794 (0.106)| 2.96(1.65) / 0.909(0.027)  | 0.59(0.45) / 0.644(0.062)  | 0.55(0.30)/0.829(0.011)| 2.77(1.28)/0.481(0.164)| 7.10(1.56)/-0.086(0.155) | 3 / 3 |
-| MOReL |  0.08(0.04) / 0.871(0.030) |   21.06(9.77) / 0.726(0.033)  |  0.51(0.17)/ 0.571(0.087)  | 0.35(0.06) / 0.874(0.019)|  5.08(1.20) / -0.286(0.119)  |  5.12(1.23) / 0.221(0.080)  | 2.67 / 3.17 |
-| MOPO | 1.27(0.77)/0.417(0.080) | 1.45(0.52)/0.623(0.094)  | 8.50(4.19)/-0.274(0.123) | 8.13(2.31)/0.206(0.150)| 9.57(1.28)/-0.509(0.122) | 11.98(1.38)/0.051(0.131) | 5 / 5 |
-| ROMI | 0.34()/0.404() |  8.50()/0.796() |0.64()/0.600()| 0.24()/0.829()| 13.76()/-0.829()| 8.59()/0.371()| 4.17 / 3.67 |
-| HDTwin| 32.91(15.80)/-0.143(0.181)|49.10(39.01)/0.537(0.184)|0.94(0.49)/0.400(0.107)|7.50(1.15)/-0.131(0.159)|5.32(2.04)/0.157(0.225)|6.18(2.07)/0.243(0.153)| 4.83 / 4.83 | 
+**Update:** We will update our empirical section to include these additional offline MBRL baselines.
+
+---
+
+Thank you once again. We hope that we have addressed all your comments, and we would greatly appreciate any further feedback. 
+
+---
+
+[1] ...
