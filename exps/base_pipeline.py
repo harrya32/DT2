@@ -2091,6 +2091,7 @@ class BasePipelineConfig:
     force_q_training: bool = False
     force_dynamics_training: bool = False
     results_only: bool = False
+    fqe_only: bool = False
     
     # W&B
     wandb_project: str = ""
@@ -2256,6 +2257,11 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force-q-training", action="store_true")
     parser.add_argument("--force-dynamics-training", action="store_true")
     parser.add_argument("--results-only", action="store_true")
+    parser.add_argument(
+        "--fqe-only",
+        action="store_true",
+        help="Train/load and evaluate only Q/FQE models; skip all dynamics training/loading/evaluation.",
+    )
     
     # W&B
     parser.add_argument("--wandb-entity", type=str, default=None)
@@ -2304,6 +2310,12 @@ def run_pipeline(
         Summary dictionary with all results
     """
     # Validate arguments
+    fqe_only = getattr(args, "fqe_only", False)
+    if fqe_only and args.force_dynamics_training:
+        raise ValueError("--fqe-only cannot be combined with --force-dynamics-training.")
+    if fqe_only and getattr(args, "value_aware_only", False):
+        raise ValueError("--fqe-only cannot be combined with --value-aware-only.")
+
     if args.results_only and (
         args.force_policy_training
         or args.force_dataset_collection
@@ -2476,219 +2488,233 @@ def run_pipeline(
     missing_requested_models: List[str] = []
     need_dynamics_training = (not dynamics_manifest.exists()) or args.force_dynamics_training
 
-    if not need_dynamics_training:
-        print("[Step 4] Using existing dynamics models...")
-        sup_model, ranking_new_models, dynamics_paths, value_aware_model = load_dynamics_models(dynamics_dir, device)
-        morel_model = load_morel_model_from_paths(dynamics_paths, device)
-        mopo_model = load_mopo_model_from_paths(dynamics_paths, device)
-        romi_model = load_romi_model_from_paths(dynamics_paths, device)
-        raw_morel_info = dynamics_paths.get("morel_info")
-        if isinstance(raw_morel_info, dict):
-            morel_info = raw_morel_info
-        raw_mopo_info = dynamics_paths.get("mopo_info")
-        if isinstance(raw_mopo_info, dict):
-            mopo_info = raw_mopo_info
-        raw_romi_info = dynamics_paths.get("romi_info")
-        if isinstance(raw_romi_info, dict):
-            romi_info = raw_romi_info
+    if fqe_only:
+        print("[Step 4] Skipping dynamics training/loading (--fqe-only).")
+        dyn_log = {"dynamics/trained": 0, "dynamics/skipped": 1}
+    else:
+        if not need_dynamics_training:
+            print("[Step 4] Using existing dynamics models...")
+            sup_model, ranking_new_models, dynamics_paths, value_aware_model = load_dynamics_models(dynamics_dir, device)
+            morel_model = load_morel_model_from_paths(dynamics_paths, device)
+            mopo_model = load_mopo_model_from_paths(dynamics_paths, device)
+            romi_model = load_romi_model_from_paths(dynamics_paths, device)
+            raw_morel_info = dynamics_paths.get("morel_info")
+            if isinstance(raw_morel_info, dict):
+                morel_info = raw_morel_info
+            raw_mopo_info = dynamics_paths.get("mopo_info")
+            if isinstance(raw_mopo_info, dict):
+                mopo_info = raw_mopo_info
+            raw_romi_info = dynamics_paths.get("romi_info")
+            if isinstance(raw_romi_info, dict):
+                romi_info = raw_romi_info
 
-        missing_requested_models = find_missing_requested_dynamics_models(
-            requested_models=args.dynamics_models,
-            supervised_model=sup_model,
-            ranking_new_models=ranking_new_models,
-            value_aware_model=value_aware_model,
-            morel_model=morel_model,
-            mopo_model=mopo_model,
-            romi_model=romi_model,
-            value_aware_only=value_aware_only,
-        )
-        if missing_requested_models:
-            print(
-                "[Step 4] Existing dynamics manifest is missing requested models "
-                f"{missing_requested_models}; retraining dynamics."
+            missing_requested_models = find_missing_requested_dynamics_models(
+                requested_models=args.dynamics_models,
+                supervised_model=sup_model,
+                ranking_new_models=ranking_new_models,
+                value_aware_model=value_aware_model,
+                morel_model=morel_model,
+                mopo_model=mopo_model,
+                romi_model=romi_model,
+                value_aware_only=value_aware_only,
             )
-            need_dynamics_training = True
-
-    if need_dynamics_training:
-        if args.results_only:
             if missing_requested_models:
-                raise FileNotFoundError(
-                    "Saved dynamics manifest is missing requested models "
-                    f"{missing_requested_models}. Run once without --results-only "
-                    "to train and save them."
+                print(
+                    "[Step 4] Existing dynamics manifest is missing requested models "
+                    f"{missing_requested_models}; retraining dynamics."
                 )
-            if args.force_dynamics_training:
-                raise FileNotFoundError(
-                    "Cannot use --results-only with --force-dynamics-training; "
-                    "disable one of these flags."
-                )
-            raise FileNotFoundError(
-                f"No saved dynamics models at {dynamics_manifest}. "
-                "Run training once without --results-only."
-            )
-        if value_aware_only:
-            print("[Step 4] Training value-aware dynamics model only...")
-        else:
-            print("[Step 4] Training dynamics models...")
-            print(f"  Models to train: {args.dynamics_models}")
-        start_time = time.perf_counter()
-        (
-            sup_model,
-            ranking_new_models,
-            value_aware_model,
-            morel_model,
-            morel_info,
-            mopo_model,
-            mopo_info,
-            romi_model,
-            romi_info,
-        ) = train_dynamics_models(
-            dyn_dataset,
-            torch_policies,
-            q_models,
-            device=device,
-            dyn_epochs=args.dyn_epochs,
-            dyn_batch=args.dyn_batch,
-            dyn_lr=args.dyn_lr,
-            gamma=args.gamma,
-            lambda_td=args.lambda_td,
-            lambda_rank=args.lambda_rank,
-            rank_temperature=args.rank_temperature,
-            rank_rollout_horizon=args.rank_rollout_horizon,
-            rank_rollout_episodes=args.rank_rollout_episodes,
-            val_fraction=args.dyn_val_fraction,
-            early_stop_patience=args.dyn_early_stop_patience,
-            min_epochs=args.dyn_min_epochs,
-            reward_fn_torch=reward_fn_torch,
-            termination_fn_torch=termination_fn_torch,
-            dynamics_loss=args.dynamics_loss,
-            hidden_dim=args.dyn_hidden_dim,
-            backbone=args.backbone,
-            wandb_run=wandb_run,
-            state_low=state_low,
-            state_upper=state_upper,
-            wrapped_dims=wrapped_dims,
-            dynamics_models=args.dynamics_models,
-            value_aware_only=value_aware_only,
-            act_low=act_low,
-            act_high=act_high,
-            seed=args.seed,
-            env_name=env_id,
-            morel_ensemble_size=args.morel_ensemble_size,
-            morel_hidden_dim=None if args.morel_hidden_dim <= 0 else args.morel_hidden_dim,
-            morel_epochs=None if args.morel_epochs <= 0 else args.morel_epochs,
-            morel_batch_size=args.morel_batch_size,
-            morel_lr=args.morel_lr,
-            morel_threshold=args.morel_threshold,
-            morel_threshold_mode=args.morel_threshold_mode,
-            morel_threshold_beta=args.morel_threshold_beta,
-            morel_threshold_frac_of_max=args.morel_threshold_frac_max,
-            morel_reward_offset=None if args.morel_reward_offset < 0 else args.morel_reward_offset,
-            morel_halt_reward=args.morel_halt_reward,
-            morel_bootstrap=not args.morel_no_bootstrap,
-            mopo_ensemble_size=args.mopo_ensemble_size,
-            mopo_elite_size=args.mopo_elite_size,
-            mopo_hidden_dim=args.mopo_hidden_dim,
-            mopo_hidden_layers=args.mopo_hidden_layers,
-            mopo_epochs=args.mopo_epochs,
-            mopo_batch_size=args.mopo_batch_size,
-            mopo_lr=args.mopo_lr,
-            mopo_holdout_size=args.mopo_holdout_size,
-            mopo_penalty_coef=args.mopo_penalty_coef,
-            mopo_bootstrap=not args.mopo_no_bootstrap,
-            romi_ensemble_size=args.romi_ensemble_size,
-            romi_hidden_dim=args.romi_hidden_dim,
-            romi_hidden_layers=args.romi_hidden_layers,
-            romi_weight_hidden_dim=args.romi_weight_hidden_dim,
-            romi_weight_hidden_layers=args.romi_weight_hidden_layers,
-            romi_epochs=args.romi_epochs,
-            romi_pretrain_epochs=args.romi_pretrain_epochs,
-            romi_batch_size=args.romi_batch_size,
-            romi_dynamics_lr=args.romi_dynamics_lr,
-            romi_weight_lr=args.romi_weight_lr,
-            romi_actor_lr=args.romi_actor_lr,
-            romi_critic_lr=args.romi_critic_lr,
-            romi_real_data_ratio=args.romi_real_data_ratio,
-            romi_rollout_horizon=args.romi_rollout_horizon,
-            romi_rollouts_per_epoch=args.romi_rollouts_per_epoch,
-            romi_policy_updates_per_epoch=args.romi_policy_updates_per_epoch,
-            romi_dynamics_updates_per_epoch=args.romi_dynamics_updates_per_epoch,
-            romi_weight_updates_per_epoch=args.romi_weight_updates_per_epoch,
-            romi_uncertainty_scale=args.romi_uncertainty_scale,
-            romi_uncertainty_samples=args.romi_uncertainty_samples,
-            romi_weight_min=args.romi_weight_min,
-            romi_weight_max=args.romi_weight_max,
-            romi_model_buffer_capacity=args.romi_model_buffer_capacity,
-            romi_bilevel_inner_lr=args.romi_bilevel_inner_lr,
-            romi_bootstrap=not args.romi_no_bootstrap,
-            romi_policy_pretrain_steps=args.romi_policy_pretrain_steps,
-            romi_step_per_epoch=args.romi_step_per_epoch,
-            romi_rollout_freq=args.romi_rollout_freq,
-            romi_rollout_batch_size=args.romi_rollout_batch_size,
-            romi_dynamics_update_freq=args.romi_dynamics_update_freq,
-            romi_adv_train_steps=args.romi_adv_train_steps,
-            romi_model_retain_epochs=args.romi_model_retain_epochs,
-            romi_weight_input_mode=args.romi_weight_input_mode,
-        )
-        dynamics_paths = save_dynamics_models(
-            sup_model,
-            ranking_new_models,
-            dynamics_dir,
-            value_aware_model=value_aware_model,
-            morel_model=morel_model,
-            morel_info=morel_info,
-            mopo_model=mopo_model,
-            mopo_info=mopo_info,
-            romi_model=romi_model,
-            romi_info=romi_info,
-        )
-        dynamics_trained = True
-        dynamics_train_time = time.perf_counter() - start_time
+                need_dynamics_training = True
 
-    dyn_log = {"dynamics/trained": int(dynamics_trained)}
-    if dynamics_train_time is not None:
-        dyn_log["timing/dynamics_training_sec"] = dynamics_train_time
-    if morel_info is not None:
-        if morel_info.get("threshold") is not None:
-            dyn_log["dynamics/morel_threshold"] = morel_info["threshold"]
-        if morel_info.get("halt_reward") is not None:
-            dyn_log["dynamics/morel_halt_reward"] = morel_info["halt_reward"]
-        if morel_info.get("disagreement_mean") is not None:
-            dyn_log["dynamics/morel_disagreement_mean"] = morel_info["disagreement_mean"]
-    if mopo_info is not None:
-        if mopo_info.get("penalty_coef") is not None:
-            dyn_log["dynamics/mopo_penalty_coef"] = mopo_info["penalty_coef"]
-        if mopo_info.get("uncertainty_mean") is not None:
-            dyn_log["dynamics/mopo_uncertainty_mean"] = mopo_info["uncertainty_mean"]
-        if mopo_info.get("uncertainty_max") is not None:
-            dyn_log["dynamics/mopo_uncertainty_max"] = mopo_info["uncertainty_max"]
-        if mopo_info.get("elite_size") is not None:
-            dyn_log["dynamics/mopo_elite_size"] = mopo_info["elite_size"]
-    if romi_info is not None:
-        if romi_info.get("uncertainty_mean") is not None:
-            dyn_log["dynamics/romi_uncertainty_mean"] = romi_info["uncertainty_mean"]
-        if romi_info.get("uncertainty_max") is not None:
-            dyn_log["dynamics/romi_uncertainty_max"] = romi_info["uncertainty_max"]
-        if romi_info.get("ensemble_size") is not None:
-            dyn_log["dynamics/romi_ensemble_size"] = romi_info["ensemble_size"]
+        if need_dynamics_training:
+            if args.results_only:
+                if missing_requested_models:
+                    raise FileNotFoundError(
+                        "Saved dynamics manifest is missing requested models "
+                        f"{missing_requested_models}. Run once without --results-only "
+                        "to train and save them."
+                    )
+                if args.force_dynamics_training:
+                    raise FileNotFoundError(
+                        "Cannot use --results-only with --force-dynamics-training; "
+                        "disable one of these flags."
+                    )
+                raise FileNotFoundError(
+                    f"No saved dynamics models at {dynamics_manifest}. "
+                    "Run training once without --results-only."
+                )
+            if value_aware_only:
+                print("[Step 4] Training value-aware dynamics model only...")
+            else:
+                print("[Step 4] Training dynamics models...")
+                print(f"  Models to train: {args.dynamics_models}")
+            start_time = time.perf_counter()
+            (
+                sup_model,
+                ranking_new_models,
+                value_aware_model,
+                morel_model,
+                morel_info,
+                mopo_model,
+                mopo_info,
+                romi_model,
+                romi_info,
+            ) = train_dynamics_models(
+                dyn_dataset,
+                torch_policies,
+                q_models,
+                device=device,
+                dyn_epochs=args.dyn_epochs,
+                dyn_batch=args.dyn_batch,
+                dyn_lr=args.dyn_lr,
+                gamma=args.gamma,
+                lambda_td=args.lambda_td,
+                lambda_rank=args.lambda_rank,
+                rank_temperature=args.rank_temperature,
+                rank_rollout_horizon=args.rank_rollout_horizon,
+                rank_rollout_episodes=args.rank_rollout_episodes,
+                val_fraction=args.dyn_val_fraction,
+                early_stop_patience=args.dyn_early_stop_patience,
+                min_epochs=args.dyn_min_epochs,
+                reward_fn_torch=reward_fn_torch,
+                termination_fn_torch=termination_fn_torch,
+                dynamics_loss=args.dynamics_loss,
+                hidden_dim=args.dyn_hidden_dim,
+                backbone=args.backbone,
+                wandb_run=wandb_run,
+                state_low=state_low,
+                state_upper=state_upper,
+                wrapped_dims=wrapped_dims,
+                dynamics_models=args.dynamics_models,
+                value_aware_only=value_aware_only,
+                act_low=act_low,
+                act_high=act_high,
+                seed=args.seed,
+                env_name=env_id,
+                morel_ensemble_size=args.morel_ensemble_size,
+                morel_hidden_dim=None if args.morel_hidden_dim <= 0 else args.morel_hidden_dim,
+                morel_epochs=None if args.morel_epochs <= 0 else args.morel_epochs,
+                morel_batch_size=args.morel_batch_size,
+                morel_lr=args.morel_lr,
+                morel_threshold=args.morel_threshold,
+                morel_threshold_mode=args.morel_threshold_mode,
+                morel_threshold_beta=args.morel_threshold_beta,
+                morel_threshold_frac_of_max=args.morel_threshold_frac_max,
+                morel_reward_offset=None if args.morel_reward_offset < 0 else args.morel_reward_offset,
+                morel_halt_reward=args.morel_halt_reward,
+                morel_bootstrap=not args.morel_no_bootstrap,
+                mopo_ensemble_size=args.mopo_ensemble_size,
+                mopo_elite_size=args.mopo_elite_size,
+                mopo_hidden_dim=args.mopo_hidden_dim,
+                mopo_hidden_layers=args.mopo_hidden_layers,
+                mopo_epochs=args.mopo_epochs,
+                mopo_batch_size=args.mopo_batch_size,
+                mopo_lr=args.mopo_lr,
+                mopo_holdout_size=args.mopo_holdout_size,
+                mopo_penalty_coef=args.mopo_penalty_coef,
+                mopo_bootstrap=not args.mopo_no_bootstrap,
+                romi_ensemble_size=args.romi_ensemble_size,
+                romi_hidden_dim=args.romi_hidden_dim,
+                romi_hidden_layers=args.romi_hidden_layers,
+                romi_weight_hidden_dim=args.romi_weight_hidden_dim,
+                romi_weight_hidden_layers=args.romi_weight_hidden_layers,
+                romi_epochs=args.romi_epochs,
+                romi_pretrain_epochs=args.romi_pretrain_epochs,
+                romi_batch_size=args.romi_batch_size,
+                romi_dynamics_lr=args.romi_dynamics_lr,
+                romi_weight_lr=args.romi_weight_lr,
+                romi_actor_lr=args.romi_actor_lr,
+                romi_critic_lr=args.romi_critic_lr,
+                romi_real_data_ratio=args.romi_real_data_ratio,
+                romi_rollout_horizon=args.romi_rollout_horizon,
+                romi_rollouts_per_epoch=args.romi_rollouts_per_epoch,
+                romi_policy_updates_per_epoch=args.romi_policy_updates_per_epoch,
+                romi_dynamics_updates_per_epoch=args.romi_dynamics_updates_per_epoch,
+                romi_weight_updates_per_epoch=args.romi_weight_updates_per_epoch,
+                romi_uncertainty_scale=args.romi_uncertainty_scale,
+                romi_uncertainty_samples=args.romi_uncertainty_samples,
+                romi_weight_min=args.romi_weight_min,
+                romi_weight_max=args.romi_weight_max,
+                romi_model_buffer_capacity=args.romi_model_buffer_capacity,
+                romi_bilevel_inner_lr=args.romi_bilevel_inner_lr,
+                romi_bootstrap=not args.romi_no_bootstrap,
+                romi_policy_pretrain_steps=args.romi_policy_pretrain_steps,
+                romi_step_per_epoch=args.romi_step_per_epoch,
+                romi_rollout_freq=args.romi_rollout_freq,
+                romi_rollout_batch_size=args.romi_rollout_batch_size,
+                romi_dynamics_update_freq=args.romi_dynamics_update_freq,
+                romi_adv_train_steps=args.romi_adv_train_steps,
+                romi_model_retain_epochs=args.romi_model_retain_epochs,
+                romi_weight_input_mode=args.romi_weight_input_mode,
+            )
+            dynamics_paths = save_dynamics_models(
+                sup_model,
+                ranking_new_models,
+                dynamics_dir,
+                value_aware_model=value_aware_model,
+                morel_model=morel_model,
+                morel_info=morel_info,
+                mopo_model=mopo_model,
+                mopo_info=mopo_info,
+                romi_model=romi_model,
+                romi_info=romi_info,
+            )
+            dynamics_trained = True
+            dynamics_train_time = time.perf_counter() - start_time
+
+        dyn_log = {"dynamics/trained": int(dynamics_trained)}
+        if dynamics_train_time is not None:
+            dyn_log["timing/dynamics_training_sec"] = dynamics_train_time
+        if morel_info is not None:
+            if morel_info.get("threshold") is not None:
+                dyn_log["dynamics/morel_threshold"] = morel_info["threshold"]
+            if morel_info.get("halt_reward") is not None:
+                dyn_log["dynamics/morel_halt_reward"] = morel_info["halt_reward"]
+            if morel_info.get("disagreement_mean") is not None:
+                dyn_log["dynamics/morel_disagreement_mean"] = morel_info["disagreement_mean"]
+        if mopo_info is not None:
+            if mopo_info.get("penalty_coef") is not None:
+                dyn_log["dynamics/mopo_penalty_coef"] = mopo_info["penalty_coef"]
+            if mopo_info.get("uncertainty_mean") is not None:
+                dyn_log["dynamics/mopo_uncertainty_mean"] = mopo_info["uncertainty_mean"]
+            if mopo_info.get("uncertainty_max") is not None:
+                dyn_log["dynamics/mopo_uncertainty_max"] = mopo_info["uncertainty_max"]
+            if mopo_info.get("elite_size") is not None:
+                dyn_log["dynamics/mopo_elite_size"] = mopo_info["elite_size"]
+        if romi_info is not None:
+            if romi_info.get("uncertainty_mean") is not None:
+                dyn_log["dynamics/romi_uncertainty_mean"] = romi_info["uncertainty_mean"]
+            if romi_info.get("uncertainty_max") is not None:
+                dyn_log["dynamics/romi_uncertainty_max"] = romi_info["uncertainty_max"]
+            if romi_info.get("ensemble_size") is not None:
+                dyn_log["dynamics/romi_ensemble_size"] = romi_info["ensemble_size"]
     wandb_log(wandb_run, dyn_log)
 
     # =========================================================================
     # Step 5-7: Evaluation
     # =========================================================================
-    print("[Step 5-7] Evaluating policies across true env, Q, and dynamics...")
+    if fqe_only:
+        print("[Step 5-7] Evaluating policies across true env and Q (--fqe-only)...")
+    else:
+        print("[Step 5-7] Evaluating policies across true env, Q, and dynamics...")
     results = []
     initial_states = dataset.initial_states
     ood_results: List[Dict[str, Any]] = []
     ood_ranking_metrics: Dict[str, Dict[str, float]] = {}
 
-    # Generate test/train transitions for MSE evaluation
-    test_states, test_actions, test_next_states = generate_test_transitions(
-        env_id, torch_policies, n_transitions_per_policy=200, seed=args.seed, env_kwargs=env_kwargs
-    )
-    train_states, train_actions, train_next_states = sample_training_transitions(
-        dyn_dataset, n_samples=1000, seed=args.seed
-    )
+    test_states: Optional[np.ndarray] = None
+    test_actions: Optional[np.ndarray] = None
+    test_next_states: Optional[np.ndarray] = None
+    train_states: Optional[np.ndarray] = None
+    train_actions: Optional[np.ndarray] = None
+    train_next_states: Optional[np.ndarray] = None
+    if not fqe_only:
+        # Generate test/train transitions for dynamics MSE evaluation
+        test_states, test_actions, test_next_states = generate_test_transitions(
+            env_id, torch_policies, n_transitions_per_policy=200, seed=args.seed, env_kwargs=env_kwargs
+        )
+        train_states, train_actions, train_next_states = sample_training_transitions(
+            dyn_dataset, n_samples=1000, seed=args.seed
+        )
 
     for snap in snapshots:
         name = snap["name"]
@@ -2703,6 +2729,15 @@ def run_pipeline(
         dyn_sup_mse: Optional[float] = None
         dyn_sup_train_mse: Optional[float] = None
         if sup_model is not None:
+            if (
+                test_states is None
+                or test_actions is None
+                or test_next_states is None
+                or train_states is None
+                or train_actions is None
+                or train_next_states is None
+            ):
+                raise RuntimeError("Dynamics evaluation requested but dynamics test transitions are missing.")
             dyn_sup = evaluate_in_dynamics(
                 sup_model, policy, initial_states, args.eval_horizon,
                 args.gamma, device, args.eval_rollouts, reward_fn_torch,
@@ -2716,6 +2751,15 @@ def run_pipeline(
         dyn_rank_new_mse: Dict[str, float] = {}
         dyn_rank_new_train_mse: Dict[str, float] = {}
         for loss_name, dyn_model in ranking_new_models.items():
+            if (
+                test_states is None
+                or test_actions is None
+                or test_next_states is None
+                or train_states is None
+                or train_actions is None
+                or train_next_states is None
+            ):
+                raise RuntimeError("Dynamics evaluation requested but dynamics test transitions are missing.")
             dyn_rank_new[loss_name] = evaluate_in_dynamics(
                 dyn_model, policy, initial_states, args.eval_horizon,
                 args.gamma, device, args.eval_rollouts, reward_fn_torch,
@@ -2733,6 +2777,15 @@ def run_pipeline(
         dyn_value_aware_mse: Optional[float] = None
         dyn_value_aware_train_mse: Optional[float] = None
         if value_aware_model is not None:
+            if (
+                test_states is None
+                or test_actions is None
+                or test_next_states is None
+                or train_states is None
+                or train_actions is None
+                or train_next_states is None
+            ):
+                raise RuntimeError("Dynamics evaluation requested but dynamics test transitions are missing.")
             dyn_value_aware = evaluate_in_dynamics(
                 value_aware_model, policy, initial_states, args.eval_horizon,
                 args.gamma, device, args.eval_rollouts, reward_fn_torch,
@@ -2918,7 +2971,9 @@ def run_pipeline(
     # =========================================================================
     # Step 8: OOD policy ranking/evaluation (optional)
     # =========================================================================
-    if getattr(args, "eval_ood_policies", False):
+    if fqe_only and getattr(args, "eval_ood_policies", False):
+        print("[Step 8] Skipping unseen OOD dynamics evaluation (--fqe-only).")
+    elif getattr(args, "eval_ood_policies", False):
         print("[Step 8] Evaluating unseen OOD policies in learned dynamics...")
         ood_rollouts = int(max(1, getattr(args, "ood_eval_rollouts", args.eval_rollouts)))
         ood_seed_offset = int(getattr(args, "ood_seed_offset", 10_000))
