@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(0 1 2 3 4)
+DEFAULT_SEEDS=(0 1 2 3 4 5 6 7 8 9)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 OUTPUT_ROOT="results/fqe-only"
@@ -38,12 +38,11 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "Running seed ${seed}..."
-    python exps/pendulum_runner.py --fqe-only --force-q-training --q-epochs 200 --seed "$seed" --output-dir "${OUTPUT_ROOT}/pendulum_pipeline" "${EXTRA_ARGS[@]}"
-    python exps/lunarlander_runner.py --fqe-only --force-q-training --q-epochs 200 --seed "$seed" --output-dir "${OUTPUT_ROOT}/lunarlander_pipeline" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py --fqe-only --force-q-training --q-epochs 200 --seed "$seed" --output-dir "${OUTPUT_ROOT}/hopper_pipeline" "${EXTRA_ARGS[@]}"
-    python exps/walker_runner.py --fqe-only --force-q-training --q-epochs 200 --seed "$seed" --output-dir "${OUTPUT_ROOT}/walker_pipeline" "${EXTRA_ARGS[@]}"
-    python exps/cheetah_runner.py --fqe-only --force-q-training --q-epochs 200 --seed "$seed" --output-dir "${OUTPUT_ROOT}/cheetah_pipeline" "${EXTRA_ARGS[@]}"
-    python exps/ant_runner.py --fqe-only --force-q-training --q-epochs 200 --seed "$seed" --output-dir "${OUTPUT_ROOT}/ant_pipeline" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py --fqe-only --force-q-training --q-epochs 200 --eval-rollouts 100 --seed "$seed" --output-dir "${OUTPUT_ROOT}/pendulum_pipeline" "${EXTRA_ARGS[@]}"
+    #python exps/lunarlander_runner.py --fqe-only --force-q-training --q-epochs 500 --eval-rollouts 100 --seed "$seed" --output-dir "${OUTPUT_ROOT}/lunarlander_pipeline" "${EXTRA_ARGS[@]}"
+    #python exps/walker_runner.py --fqe-only --force-q-training --q-epochs 200 --eval-rollouts 20 --seed "$seed" --output-dir "${OUTPUT_ROOT}/walker_pipeline" "${EXTRA_ARGS[@]}"
+    #python exps/cheetah_runner.py --fqe-only --force-q-training --q-epochs 200 --eval-rollouts 20 --seed "$seed" --output-dir "${OUTPUT_ROOT}/cheetah_pipeline" "${EXTRA_ARGS[@]}"
+
     echo "Completed seed ${seed}"
     echo
 done
