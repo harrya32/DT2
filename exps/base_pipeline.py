@@ -40,6 +40,7 @@ from src.fqe import estimate_V_from_Q_on_s0
 from src.mopo import MopoDynamicsEnsemble, rollout_in_penalized_mdp, train_mopo_dynamics_ensemble
 from src.morel import MorelDynamicsEnsemble, rollout_in_pessimistic_mdp, train_dynamics_ensemble
 from src.networks import DynamicsNet, QNet
+from src.omd import train_omd_dynamics
 from src.policies import TorchPolicy
 from src.romi import RomiDynamicsEnsemble, rollout_in_romi_model, train_romi_full
 
@@ -481,6 +482,7 @@ def save_dynamics_models(
     ranking_new_models: Dict[str, DynamicsNet],
     directory: Path,
     value_aware_model: Optional[DynamicsNet] = None,
+    omd_model: Optional[DynamicsNet] = None,
     morel_model: Optional[MorelDynamicsEnsemble] = None,
     morel_info: Optional[Dict[str, Any]] = None,
     mopo_model: Optional[MopoDynamicsEnsemble] = None,
@@ -496,6 +498,7 @@ def save_dynamics_models(
         "q_aware": {},
         "ranking_new": {},
         "value_aware": None,
+        "omd": None,
         "morel": None,
         "morel_info": None,
         "mopo": None,
@@ -515,6 +518,10 @@ def save_dynamics_models(
     if value_aware_model is not None:
         paths["value_aware"] = (directory / "dynamics_value_aware.pt").as_posix()
         torch.save(copy.deepcopy(value_aware_model).cpu(), paths["value_aware"])
+
+    if omd_model is not None:
+        paths["omd"] = (directory / "dynamics_omd.pt").as_posix()
+        torch.save(copy.deepcopy(omd_model).cpu(), paths["omd"])
 
     if morel_model is not None:
         paths["morel"] = (directory / "dynamics_morel.pt").as_posix()
@@ -543,11 +550,17 @@ def save_dynamics_models(
 def load_dynamics_models(
     directory: Path,
     device: torch.device,
-) -> Tuple[Optional[DynamicsNet], Dict[str, DynamicsNet], Dict[str, object], Optional[DynamicsNet]]:
+) -> Tuple[
+    Optional[DynamicsNet],
+    Dict[str, DynamicsNet],
+    Dict[str, object],
+    Optional[DynamicsNet],
+    Optional[DynamicsNet],
+]:
     """Load dynamics models from a manifest.
     
     Returns:
-        Tuple of (supervised_model, ranking_new_models, paths, value_aware_model)
+        Tuple of (supervised_model, ranking_new_models, paths, value_aware_model, omd_model)
     """
     manifest = directory / "manifest.json"
     with open(manifest, "r", encoding="utf-8") as f:
@@ -569,7 +582,12 @@ def load_dynamics_models(
         value_aware_model = torch.load(paths["value_aware"], map_location=device, weights_only=False)
         value_aware_model.to(device)
 
-    return sup_model, ranking_new_models, paths, value_aware_model
+    omd_model: Optional[DynamicsNet] = None
+    if paths.get("omd") is not None:
+        omd_model = torch.load(paths["omd"], map_location=device, weights_only=False)
+        omd_model.to(device)
+
+    return sup_model, ranking_new_models, paths, value_aware_model, omd_model
 
 
 def load_morel_model_from_paths(
@@ -823,6 +841,7 @@ def find_missing_requested_dynamics_models(
     supervised_model: Optional[DynamicsNet],
     ranking_new_models: Mapping[str, DynamicsNet],
     value_aware_model: Optional[DynamicsNet],
+    omd_model: Optional[DynamicsNet],
     morel_model: Optional[MorelDynamicsEnsemble],
     mopo_model: Optional[MopoDynamicsEnsemble],
     romi_model: Optional[RomiDynamicsEnsemble],
@@ -836,9 +855,11 @@ def find_missing_requested_dynamics_models(
     missing: List[str] = []
     if "supervised" in requested_set and supervised_model is None:
         missing.append("supervised")
-    for loss_name in ("kendall", "hinge", "listnet"):
-        if loss_name in requested_set and loss_name not in ranking_new_models:
+    for loss_name in ("kendall", "hinge", "listnet", "omd"):
+        if loss_name in ("kendall", "hinge", "listnet") and loss_name in requested_set and loss_name not in ranking_new_models:
             missing.append(loss_name)
+    if "omd" in requested_set and omd_model is None:
+        missing.append("omd")
     if "morel" in requested_set and morel_model is None:
         missing.append("morel")
     if "mopo" in requested_set and mopo_model is None:
@@ -1237,9 +1258,15 @@ def train_dynamics_models(
     romi_adv_train_steps: int = 1000,
     romi_model_retain_epochs: int = 5,
     romi_weight_input_mode: str = "sa_snext",
+    omd_inner_updates: int = 1,
+    omd_inner_lr: float = 1e-3,
+    omd_action_samples: int = 8,
+    omd_target_tau: float = 0.01,
+    omd_critic_hidden_dim: int = 256,
 ) -> Tuple[
     Optional[DynamicsNet],
     Dict[str, DynamicsNet],
+    Optional[DynamicsNet],
     Optional[DynamicsNet],
     Optional[MorelDynamicsEnsemble],
     Optional[Dict[str, Any]],
@@ -1251,14 +1278,14 @@ def train_dynamics_models(
     """Train supervised and ranking-aware dynamics models.
     
     Args:
-        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet', 'morel', 'mopo', 'romi'.
+        dynamics_models: List of model types to train. Options: 'supervised', 'kendall', 'hinge', 'listnet', 'omd', 'morel', 'mopo', 'romi'.
                         If None, trains all models.
         value_aware_only: If True, only train the value-aware model (ignore dynamics_models).
         act_low: Lower bound for actions (used by value-aware model).
         act_high: Upper bound for actions (used by value-aware model).
     
     Returns:
-        Tuple of (supervised_model, ranking_new_models, value_aware_model, morel_model, morel_info, mopo_model, mopo_info, romi_model, romi_info)
+        Tuple of (supervised_model, ranking_new_models, value_aware_model, omd_model, morel_model, morel_info, mopo_model, mopo_info, romi_model, romi_info)
     """
     if dynamics_models is None:
         dynamics_models = ["supervised", "kendall", "hinge", "listnet"]
@@ -1291,7 +1318,7 @@ def train_dynamics_models(
             act_low=act_low,
             act_high=act_high,
         )
-        return None, {}, value_aware_model, None, None, None, None, None, None
+        return None, {}, value_aware_model, None, None, None, None, None, None, None
 
     # Supervised model
     sup_model: Optional[DynamicsNet] = None
@@ -1321,6 +1348,7 @@ def train_dynamics_models(
     # Ranking-aware models
     ranking_new_models: Dict[str, DynamicsNet] = {}
     value_aware_model: Optional[DynamicsNet] = None
+    omd_model: Optional[DynamicsNet] = None
     morel_model: Optional[MorelDynamicsEnsemble] = None
     morel_info: Optional[Dict[str, Any]] = None
     mopo_model: Optional[MopoDynamicsEnsemble] = None
@@ -1361,6 +1389,33 @@ def train_dynamics_models(
         )
         ranking_new_models[loss_name] = model
 
+    if "omd" in dynamics_models:
+        omd_model, _omd_info = train_omd_dynamics(
+            dataset=dataset,
+            policies=policies,
+            init_q_models=q_models,
+            gamma=gamma,
+            outer_steps=dyn_epochs,
+            batch_size=dyn_batch,
+            model_lr=dyn_lr,
+            inner_lr=omd_inner_lr,
+            inner_updates=omd_inner_updates,
+            action_samples=omd_action_samples,
+            dynamics_hidden_dim=hidden_dim,
+            critic_hidden_dim=omd_critic_hidden_dim,
+            backbone=backbone,
+            reward_fn_torch=reward_fn_torch,
+            act_low=act_low,
+            act_high=act_high,
+            state_low=state_low,
+            state_high=state_upper,
+            wrapped_dims=wrapped_dims if wrapped_dims is not None else [],
+            target_tau=omd_target_tau,
+            val_fraction=val_fraction,
+            seed=seed,
+            device=device,
+            log_hook=make_epoch_logger(wandb_run, "dynamics/omd"),
+        )
     if "morel" in dynamics_models:
         morel_log_hook: Optional[Callable[[int, int, float, Optional[float]], None]] = None
         if wandb_run is not None:
@@ -1509,6 +1564,7 @@ def train_dynamics_models(
         sup_model,
         ranking_new_models,
         value_aware_model,
+        omd_model,
         morel_model,
         morel_info,
         mopo_model,
@@ -2068,6 +2124,11 @@ class BasePipelineConfig:
     romi_model_retain_epochs: int = 5
     romi_weight_input_mode: str = "sa_snext"
     romi_deterministic_dynamics_eval: bool = False
+    omd_inner_updates: int = 1
+    omd_inner_lr: float = 1e-3
+    omd_action_samples: int = 8
+    omd_target_tau: float = 0.01
+    omd_critic_hidden_dim: int = 256
     
     # Evaluation
     eval_episodes: int = 20
@@ -2146,8 +2207,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         nargs="+",
         default=["supervised", "kendall", "hinge", "listnet"],
-        choices=["supervised", "kendall", "hinge", "listnet", "morel", "mopo", "romi"],
-        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet, morel, mopo, romi",
+        choices=["supervised", "kendall", "hinge", "listnet", "omd", "morel", "mopo", "romi"],
+        help="Dynamics models to train/evaluate. Choose from: supervised, kendall, hinge, listnet, omd, morel, mopo, romi",
     )
     parser.add_argument("--lambda-td", type=float, default=0.1)
     parser.add_argument("--lambda-rank", type=float, default=0.1)
@@ -2219,6 +2280,12 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--romi-model-retain-epochs", type=int, default=5, help="ROMI retain epochs used to derive model buffer size when capacity is not explicitly set")
     parser.add_argument("--romi-weight-input-mode", type=str, default="sa_snext", choices=["sa_snext", "sa"], help="ROMI weighting-network input mode: sa_snext -> w(s,a,s'), sa -> w(s,a)")
     parser.add_argument("--romi-deterministic-dynamics-eval", action="store_true", help="Use deterministic ROMI dynamics means at evaluation time")
+
+    parser.add_argument("--omd-inner-updates", type=int, default=1, help="OMD K inner Q-updates per outer model update")
+    parser.add_argument("--omd-inner-lr", type=float, default=1e-3, help="OMD inner-loop Q learning rate")
+    parser.add_argument("--omd-action-samples", type=int, default=8, help="OMD action samples for Bellman target expectation")
+    parser.add_argument("--omd-target-tau", type=float, default=0.01, help="OMD target-network soft-update coefficient")
+    parser.add_argument("--omd-critic-hidden-dim", type=int, default=256, help="OMD critic hidden width")
     
     # Evaluation
     parser.add_argument("--eval-episodes", type=int, default=20)
@@ -2476,6 +2543,7 @@ def run_pipeline(
     sup_model: Optional[DynamicsNet] = None
     ranking_new_models: Dict[str, DynamicsNet] = {}
     value_aware_model: Optional[DynamicsNet] = None
+    omd_model: Optional[DynamicsNet] = None
     dynamics_paths: Dict[str, object] = {}
     morel_model: Optional[MorelDynamicsEnsemble] = None
     morel_info: Optional[Dict[str, Any]] = None
@@ -2494,7 +2562,7 @@ def run_pipeline(
     else:
         if not need_dynamics_training:
             print("[Step 4] Using existing dynamics models...")
-            sup_model, ranking_new_models, dynamics_paths, value_aware_model = load_dynamics_models(dynamics_dir, device)
+            sup_model, ranking_new_models, dynamics_paths, value_aware_model, omd_model = load_dynamics_models(dynamics_dir, device)
             morel_model = load_morel_model_from_paths(dynamics_paths, device)
             mopo_model = load_mopo_model_from_paths(dynamics_paths, device)
             romi_model = load_romi_model_from_paths(dynamics_paths, device)
@@ -2513,6 +2581,7 @@ def run_pipeline(
                 supervised_model=sup_model,
                 ranking_new_models=ranking_new_models,
                 value_aware_model=value_aware_model,
+                omd_model=omd_model,
                 morel_model=morel_model,
                 mopo_model=mopo_model,
                 romi_model=romi_model,
@@ -2552,6 +2621,7 @@ def run_pipeline(
                 sup_model,
                 ranking_new_models,
                 value_aware_model,
+                omd_model,
                 morel_model,
                 morel_info,
                 mopo_model,
@@ -2645,12 +2715,18 @@ def run_pipeline(
                 romi_adv_train_steps=args.romi_adv_train_steps,
                 romi_model_retain_epochs=args.romi_model_retain_epochs,
                 romi_weight_input_mode=args.romi_weight_input_mode,
+                omd_inner_updates=args.omd_inner_updates,
+                omd_inner_lr=args.omd_inner_lr,
+                omd_action_samples=args.omd_action_samples,
+                omd_target_tau=args.omd_target_tau,
+                omd_critic_hidden_dim=args.omd_critic_hidden_dim,
             )
             dynamics_paths = save_dynamics_models(
                 sup_model,
                 ranking_new_models,
                 dynamics_dir,
                 value_aware_model=value_aware_model,
+                omd_model=omd_model,
                 morel_model=morel_model,
                 morel_info=morel_info,
                 mopo_model=mopo_model,
@@ -2798,6 +2874,32 @@ def run_pipeline(
                 value_aware_model, train_states, train_actions, train_next_states, device
             )
 
+        # OMD model evaluation
+        dyn_omd: Optional[float] = None
+        dyn_omd_mse: Optional[float] = None
+        dyn_omd_train_mse: Optional[float] = None
+        if omd_model is not None:
+            if (
+                test_states is None
+                or test_actions is None
+                or test_next_states is None
+                or train_states is None
+                or train_actions is None
+                or train_next_states is None
+            ):
+                raise RuntimeError("Dynamics evaluation requested but dynamics test transitions are missing.")
+            dyn_omd = evaluate_in_dynamics(
+                omd_model, policy, initial_states, args.eval_horizon,
+                args.gamma, device, args.eval_rollouts, reward_fn_torch,
+                termination_fn_torch=termination_fn_torch,
+            )
+            dyn_omd_mse = calc_dynamics_mse(
+                omd_model, test_states, test_actions, test_next_states, device
+            )
+            dyn_omd_train_mse = calc_dynamics_mse(
+                omd_model, train_states, train_actions, train_next_states, device
+            )
+
         # MOReL pessimistic-MDP evaluation (fixed-policy rollouts)
         dyn_morel_pess: Optional[float] = None
         dyn_morel_pess_stderr: Optional[float] = None
@@ -2910,6 +3012,12 @@ def run_pipeline(
             wandb_payload["eval/dynamics_value_aware_mse"] = dyn_value_aware_mse
         if dyn_value_aware_train_mse is not None:
             wandb_payload["eval/dynamics_value_aware_train_mse"] = dyn_value_aware_train_mse
+        if dyn_omd is not None:
+            wandb_payload["eval/dynamics_omd"] = dyn_omd
+        if dyn_omd_mse is not None:
+            wandb_payload["eval/dynamics_omd_mse"] = dyn_omd_mse
+        if dyn_omd_train_mse is not None:
+            wandb_payload["eval/dynamics_omd_train_mse"] = dyn_omd_train_mse
         if dyn_morel_pess is not None:
             wandb_payload["eval/morel_pessimistic_return"] = dyn_morel_pess
         if dyn_morel_pess_stderr is not None:
@@ -2952,6 +3060,9 @@ def run_pipeline(
                 "value_aware": dyn_value_aware,
                 "value_aware_mse": dyn_value_aware_mse,
                 "value_aware_train_mse": dyn_value_aware_train_mse,
+                "omd": dyn_omd,
+                "omd_mse": dyn_omd_mse,
+                "omd_train_mse": dyn_omd_train_mse,
                 "morel_pessimistic": dyn_morel_pess,
                 "morel_pessimistic_stderr": dyn_morel_pess_stderr,
                 "morel_unknown_rate": dyn_morel_unknown_rate,
@@ -2990,6 +3101,7 @@ def run_pipeline(
         env_values: Dict[str, float] = {}
         sup_values: Dict[str, float] = {}
         value_aware_values: Dict[str, float] = {}
+        omd_values: Dict[str, float] = {}
         ranking_values: Dict[str, Dict[str, float]] = {
             loss_name: {} for loss_name in ranking_new_models.keys()
         }
@@ -3069,6 +3181,22 @@ def run_pipeline(
                 )
                 value_aware_values[policy_name] = dyn_value_aware_ood
 
+            dyn_omd_ood: Optional[float] = None
+            if omd_model is not None:
+                dyn_omd_ood = evaluate_in_dynamics(
+                    dynamics=omd_model,
+                    policy=ood_policy,
+                    initial_states=initial_states,
+                    horizon=args.eval_horizon,
+                    gamma=args.gamma,
+                    device=device,
+                    rollouts=ood_rollouts,
+                    reward_fn_torch=reward_fn_torch,
+                    termination_fn_torch=termination_fn_torch,
+                    deterministic_policy=deterministic_policy,
+                )
+                omd_values[policy_name] = dyn_omd_ood
+
             ood_entry = {
                 "name": policy_name,
                 "deterministic_policy": bool(deterministic_policy),
@@ -3077,6 +3205,7 @@ def run_pipeline(
                     "supervised": dyn_sup_ood,
                     "ranking_new": dyn_rank_new_ood,
                     "value_aware": dyn_value_aware_ood,
+                    "omd": dyn_omd_ood,
                 },
             }
             ood_results.append(ood_entry)
@@ -3089,6 +3218,8 @@ def run_pipeline(
                 ood_payload["ood_eval/dynamics_supervised"] = dyn_sup_ood
             if dyn_value_aware_ood is not None:
                 ood_payload["ood_eval/dynamics_value_aware"] = dyn_value_aware_ood
+            if dyn_omd_ood is not None:
+                ood_payload["ood_eval/dynamics_omd"] = dyn_omd_ood
             for loss_name, val in dyn_rank_new_ood.items():
                 ood_payload[f"ood_eval/dynamics_ranking_new_{loss_name}"] = val
             wandb_log(wandb_run, ood_payload)
@@ -3106,6 +3237,10 @@ def run_pipeline(
             metrics = compute_ranking_metrics(env_values, value_aware_values)
             if metrics:
                 ood_ranking_metrics["value_aware"] = metrics
+        if omd_values:
+            metrics = compute_ranking_metrics(env_values, omd_values)
+            if metrics:
+                ood_ranking_metrics["omd"] = metrics
 
         if ood_ranking_metrics:
             ood_rank_payload: Dict[str, Any] = {}
