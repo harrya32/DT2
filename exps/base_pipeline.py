@@ -1412,6 +1412,8 @@ def train_dynamics_models(
             wrapped_dims=wrapped_dims if wrapped_dims is not None else [],
             target_tau=omd_target_tau,
             val_fraction=val_fraction,
+            early_stop_patience=early_stop_patience,
+            min_epochs=min_epochs,
             seed=seed,
             device=device,
             log_hook=make_epoch_logger(wandb_run, "dynamics/omd"),

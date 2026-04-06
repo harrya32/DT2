@@ -55,12 +55,16 @@ class OmdTrainingInfo:
     outer_losses: List[float]
     val_outer_losses: List[Optional[float]]
     outer_steps: int
+    requested_outer_steps: int
     inner_updates: int
     action_samples: int
     inner_lr: float
     model_lr: float
     target_tau: float
     num_policies: int
+    best_val_loss: Optional[float]
+    best_step: Optional[int]
+    stopped_early: bool
 
 
 def _as_dict(dataset: OfflineDataset | Mapping[str, np.ndarray]) -> Mapping[str, np.ndarray]:
@@ -268,6 +272,9 @@ def train_omd_dynamics(
     wrapped_dims: Optional[Sequence[int]] = None,
     target_tau: float = 0.01,
     val_fraction: float = 0.1,
+    early_stop_patience: int = 50,
+    min_epochs: int = 50,
+    min_delta: float = 0.0,
     grad_clip: float = 10.0,
     seed: int = 0,
     device: Optional[torch.device] = None,
@@ -358,6 +365,11 @@ def train_omd_dynamics(
     inner_losses: List[float] = []
     outer_losses: List[float] = []
     val_outer_losses: List[Optional[float]] = []
+    best_state = copy.deepcopy(dynamics.state_dict()) if val_tensors is not None else None
+    best_val = math.inf
+    best_step: Optional[int] = None
+    epochs_without_improve = 0
+    stopped_early = False
 
     batch_size = int(max(1, batch_size))
     inner_updates = int(max(1, inner_updates))
@@ -521,16 +533,41 @@ def train_omd_dynamics(
         if log_hook is not None:
             log_hook(step, outer_losses[-1], val_loss_value)
 
+        if val_loss_value is not None:
+            if val_loss_value + float(min_delta) < best_val:
+                best_val = float(val_loss_value)
+                best_state = copy.deepcopy(dynamics.state_dict())
+                best_step = int(step + 1)
+                epochs_without_improve = 0
+            else:
+                epochs_without_improve += 1
+
+        if (
+            val_tensors is not None
+            and int(early_stop_patience) > 0
+            and step + 1 >= int(min_epochs)
+            and epochs_without_improve >= int(early_stop_patience)
+        ):
+            stopped_early = True
+            break
+
+    if best_state is not None:
+        dynamics.load_state_dict(best_state)
+
     info = OmdTrainingInfo(
         inner_losses=inner_losses,
         outer_losses=outer_losses,
         val_outer_losses=val_outer_losses,
-        outer_steps=outer_steps,
+        outer_steps=len(outer_losses),
+        requested_outer_steps=outer_steps,
         inner_updates=inner_updates,
         action_samples=action_samples,
         inner_lr=float(inner_lr),
         model_lr=float(model_lr),
         target_tau=float(target_tau),
         num_policies=len(policy_order),
+        best_val_loss=None if not np.isfinite(best_val) else float(best_val),
+        best_step=best_step,
+        stopped_early=bool(stopped_early),
     )
     return dynamics, info

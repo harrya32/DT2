@@ -6,7 +6,6 @@ cd "$ROOT_DIR"
 
 DEFAULT_SEEDS=(5000 5001 5002 5003 5004)
 SEEDS=("${DEFAULT_SEEDS[@]}")
-EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -42,19 +41,18 @@ for seed in "${SEEDS[@]}"; do
         --dynamics-models omd
         --force-dynamics-training
         --eval-rollouts 20
-        --omd-inner-updates 1
+        --omd-inner-updates 3
         --omd-action-samples 8
         --seed "$seed"
     )
 
-    python exps/pendulum_runner.py "${COMMON_ARGS[@]}" "${EXTRA_ARGS[@]}"
-    python exps/lunarlander_runner.py "${COMMON_ARGS[@]}" "${EXTRA_ARGS[@]}"
-    python exps/hopper_runner.py "${COMMON_ARGS[@]}" "${EXTRA_ARGS[@]}"
-    python exps/walker_runner.py "${COMMON_ARGS[@]}" "${EXTRA_ARGS[@]}"
-    python exps/cheetah_runner.py "${COMMON_ARGS[@]}" "${EXTRA_ARGS[@]}"
-    python exps/ant_runner.py "${COMMON_ARGS[@]}" "${EXTRA_ARGS[@]}"
+    python exps/pendulum_runner.py "${COMMON_ARGS[@]}"
+    python exps/lunarlander_runner.py "${COMMON_ARGS[@]}"
+    python exps/hopper_runner.py "${COMMON_ARGS[@]}"
+    python exps/walker_runner.py "${COMMON_ARGS[@]}"
+    python exps/cheetah_runner.py "${COMMON_ARGS[@]}"
+    python exps/ant_runner.py "${COMMON_ARGS[@]}"
 
     echo "[omd] Completed seed ${seed}"
     echo
 done
-
