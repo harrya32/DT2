@@ -64,7 +64,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("results/test/pendulum_pipeline"),
+        default=Path("results/camera_ready/pendulum_pipeline"),
     )
     parser.add_argument("--wandb-project", type=str, default="DT2-pendulum")
     

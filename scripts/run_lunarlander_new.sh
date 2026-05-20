@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DEFAULT_SEEDS=(30 31 32 33 34 35 36 37 38 39)
+DEFAULT_SEEDS=(100 101 102 103 104)
 SEEDS=("${DEFAULT_SEEDS[@]}")
 EXTRA_ARGS=()
 
@@ -37,7 +37,13 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "[lunarlander_pipeline] Running seed ${seed}..."
-    python exps/lunarlander_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dyn-early-stop-patience 20 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+
+    python exps/lunarlander_runner.py --backbone "gru" --q-epochs 200 --force-q-training --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --backbone "transformer" --dyn-seq-len 8 --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 10 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --backbone "mlp" --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --backbone "ode" --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --seed "$seed" "${EXTRA_ARGS[@]}"
+
     echo "[lunarlander_pipeline] Completed seed ${seed}"
     echo
 done

@@ -651,7 +651,7 @@ def evaluate_sb3_policy_mc(
     rng = np.random.default_rng(seed)
     returns = []
     for ep in range(rollouts):
-        obs, _ = env.reset(seed=int(rng.integers(0, 1_000_000)))
+        obs, _ = env.reset(seed=seed + ep)
         total = 0.0
         discount = 1.0
         for _ in range(horizon):

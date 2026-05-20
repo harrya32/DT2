@@ -116,7 +116,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("results/test/walker_pipeline"),
+        default=Path("results/camera_ready/walker_pipeline"),
     )
     parser.add_argument("--wandb-project", type=str, default="DT2-walker")
     
