@@ -9,3 +9,4 @@ wandb/
 wandb/latest_run
 debug.log
 debug-internal.log
+wandb/*

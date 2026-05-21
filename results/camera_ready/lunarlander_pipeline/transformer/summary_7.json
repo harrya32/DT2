@@ -31,7 +31,7 @@
     "dyn_lr": 0.0003,
     "dyn_hidden_dim": 64,
     "dyn_val_fraction": 0.1,
-    "dyn_early_stop_patience": 200,
+    "dyn_early_stop_patience": 20,
     "dyn_min_epochs": 50,
     "dynamics_loss": "nll",
     "dynamics_models": [
@@ -105,8 +105,13 @@
     "romi_model_retain_epochs": 5,
     "romi_weight_input_mode": "sa_snext",
     "romi_deterministic_dynamics_eval": false,
+    "omd_inner_updates": 1,
+    "omd_inner_lr": 0.001,
+    "omd_action_samples": 8,
+    "omd_target_tau": 0.01,
+    "omd_critic_hidden_dim": 256,
     "eval_episodes": 20,
-    "eval_rollouts": 10,
+    "eval_rollouts": 20,
     "eval_horizon": 500,
     "eval_ood_policies": false,
     "ood_policy_types": [
@@ -146,6 +151,7 @@
       "kendall": "results/camera_ready/lunarlander_pipeline/transformer/dynamics/dynamics_ranking_new_kendall.pt"
     },
     "value_aware": null,
+    "omd": null,
     "morel": null,
     "morel_info": null,
     "mopo": null,
@@ -161,23 +167,26 @@
       "name": "ppo_frac_0",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_0",
       "timesteps": 0,
-      "q_estimate": -17.205520629882812,
+      "q_estimate": -18.586088180541992,
       "dynamics": {
-        "supervised": -7978.05615234375,
-        "supervised_mse": 0.0036261749919503927,
-        "supervised_train_mse": 0.002741352654993534,
+        "supervised": -9139.1455078125,
+        "supervised_mse": 0.0036874304059892893,
+        "supervised_train_mse": 0.0027629313990473747,
         "ranking_new": {
-          "kendall": -16699.025390625
+          "kendall": -11413.7275390625
         },
         "ranking_new_mse": {
-          "kendall": 0.004706248641014099
+          "kendall": 0.004438655450940132
         },
         "ranking_new_train_mse": {
-          "kendall": 0.003938664682209492
+          "kendall": 0.0034605248365551233
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
+        "omd": null,
+        "omd_mse": null,
+        "omd_train_mse": null,
         "morel_pessimistic": null,
         "morel_pessimistic_stderr": null,
         "morel_unknown_rate": null,
@@ -191,29 +200,32 @@
         "romi_model_stderr": null,
         "romi_uncertainty_mean": null
       },
-      "env_mc": -6315.49179557471
+      "env_mc": -6426.689279943715
     },
     {
       "name": "ppo_frac_200000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_200000",
       "timesteps": 200000,
-      "q_estimate": -5.047998905181885,
+      "q_estimate": -3.336836338043213,
       "dynamics": {
-        "supervised": -7119.11474609375,
-        "supervised_mse": 0.00361524592153728,
-        "supervised_train_mse": 0.002738101175054908,
+        "supervised": -7161.43310546875,
+        "supervised_mse": 0.0037012649700045586,
+        "supervised_train_mse": 0.002773458603769541,
         "ranking_new": {
-          "kendall": -15413.978515625
+          "kendall": -10606.5205078125
         },
         "ranking_new_mse": {
-          "kendall": 0.0046914685517549515
+          "kendall": 0.0044361199252307415
         },
         "ranking_new_train_mse": {
-          "kendall": 0.003935751970857382
+          "kendall": 0.0034805755130946636
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
+        "omd": null,
+        "omd_mse": null,
+        "omd_train_mse": null,
         "morel_pessimistic": null,
         "morel_pessimistic_stderr": null,
         "morel_unknown_rate": null,
@@ -227,29 +239,32 @@
         "romi_model_stderr": null,
         "romi_uncertainty_mean": null
       },
-      "env_mc": -6256.413025561522
+      "env_mc": -6331.015632978082
     },
     {
       "name": "ppo_frac_400000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_400000",
       "timesteps": 400000,
-      "q_estimate": 7.377105712890625,
+      "q_estimate": 5.447685241699219,
       "dynamics": {
-        "supervised": -6984.0400390625,
-        "supervised_mse": 0.0036188485100865364,
-        "supervised_train_mse": 0.002744430908933282,
+        "supervised": -6566.27197265625,
+        "supervised_mse": 0.0036795407067984343,
+        "supervised_train_mse": 0.002772021107375622,
         "ranking_new": {
-          "kendall": -11468.9775390625
+          "kendall": -10063.6337890625
         },
         "ranking_new_mse": {
-          "kendall": 0.004682652652263641
+          "kendall": 0.004456470720469952
         },
         "ranking_new_train_mse": {
-          "kendall": 0.003937289118766785
+          "kendall": 0.0035131562035530806
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
+        "omd": null,
+        "omd_mse": null,
+        "omd_train_mse": null,
         "morel_pessimistic": null,
         "morel_pessimistic_stderr": null,
         "morel_unknown_rate": null,
@@ -263,29 +278,32 @@
         "romi_model_stderr": null,
         "romi_uncertainty_mean": null
       },
-      "env_mc": -6076.949595485647
+      "env_mc": -6165.549224362968
     },
     {
       "name": "ppo_frac_600000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_600000",
       "timesteps": 600000,
-      "q_estimate": 8.972047805786133,
+      "q_estimate": 12.515116691589355,
       "dynamics": {
-        "supervised": -6729.98388671875,
-        "supervised_mse": 0.0036290304269641638,
-        "supervised_train_mse": 0.00273310299962759,
+        "supervised": -6471.876953125,
+        "supervised_mse": 0.0036814117338508368,
+        "supervised_train_mse": 0.0027696085162460804,
         "ranking_new": {
-          "kendall": -7355.83447265625
+          "kendall": -9862.970703125
         },
         "ranking_new_mse": {
-          "kendall": 0.004702194593846798
+          "kendall": 0.004470678977668285
         },
         "ranking_new_train_mse": {
-          "kendall": 0.00395822012796998
+          "kendall": 0.003461995627731085
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
+        "omd": null,
+        "omd_mse": null,
+        "omd_train_mse": null,
         "morel_pessimistic": null,
         "morel_pessimistic_stderr": null,
         "morel_unknown_rate": null,
@@ -299,29 +317,32 @@
         "romi_model_stderr": null,
         "romi_uncertainty_mean": null
       },
-      "env_mc": -5993.319425378941
+      "env_mc": -6105.037625119674
     },
     {
       "name": "ppo_frac_800000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_800000",
       "timesteps": 800000,
-      "q_estimate": 9.6094388961792,
+      "q_estimate": 5.641741752624512,
       "dynamics": {
-        "supervised": -6185.85498046875,
-        "supervised_mse": 0.0036234622821211815,
-        "supervised_train_mse": 0.002723911078646779,
+        "supervised": -6459.14501953125,
+        "supervised_mse": 0.003694528480991721,
+        "supervised_train_mse": 0.002789325313642621,
         "ranking_new": {
-          "kendall": -8905.6171875
+          "kendall": -9814.5546875
         },
         "ranking_new_mse": {
-          "kendall": 0.004701319616287947
+          "kendall": 0.004451656248420477
         },
         "ranking_new_train_mse": {
-          "kendall": 0.003929343540221453
+          "kendall": 0.003486745059490204
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
+        "omd": null,
+        "omd_mse": null,
+        "omd_train_mse": null,
         "morel_pessimistic": null,
         "morel_pessimistic_stderr": null,
         "morel_unknown_rate": null,
@@ -335,29 +356,32 @@
         "romi_model_stderr": null,
         "romi_uncertainty_mean": null
       },
-      "env_mc": -5990.749889451619
+      "env_mc": -6100.477368683116
     },
     {
       "name": "ppo_frac_1000000",
       "checkpoint": "results/test/lunarlander_pipeline/policies/ppo_frac_1000000",
       "timesteps": 1000000,
-      "q_estimate": 9.419049263000488,
+      "q_estimate": 10.992606163024902,
       "dynamics": {
-        "supervised": -6129.71923828125,
-        "supervised_mse": 0.0036325689870864153,
-        "supervised_train_mse": 0.0027418213430792093,
+        "supervised": -6440.07177734375,
+        "supervised_mse": 0.003677760949358344,
+        "supervised_train_mse": 0.0027735221665352583,
         "ranking_new": {
-          "kendall": -8728.728515625
+          "kendall": -9742.9091796875
         },
         "ranking_new_mse": {
-          "kendall": 0.004743166267871857
+          "kendall": 0.004435611888766289
         },
         "ranking_new_train_mse": {
-          "kendall": 0.003920670133084059
+          "kendall": 0.0034455868881195784
         },
         "value_aware": null,
         "value_aware_mse": null,
         "value_aware_train_mse": null,
+        "omd": null,
+        "omd_mse": null,
+        "omd_train_mse": null,
         "morel_pessimistic": null,
         "morel_pessimistic_stderr": null,
         "morel_unknown_rate": null,
@@ -371,7 +395,7 @@
         "romi_model_stderr": null,
         "romi_uncertainty_mean": null
       },
-      "env_mc": -5983.859984314683
+      "env_mc": -6092.994917462258
     }
   ],
   "ood_results": [],

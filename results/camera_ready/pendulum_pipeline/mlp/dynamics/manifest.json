@@ -2,10 +2,9 @@
   "supervised": "results/camera_ready/pendulum_pipeline/mlp/dynamics/dynamics_supervised.pt",
   "ranking": "results/camera_ready/pendulum_pipeline/mlp/dynamics/dynamics_ranking.pt",
   "q_aware": {},
-  "ranking_new": {
-    "kendall": "results/camera_ready/pendulum_pipeline/mlp/dynamics/dynamics_ranking_new_kendall.pt"
-  },
+  "ranking_new": {},
   "value_aware": null,
+  "omd": null,
   "morel": null,
   "morel_info": null,
   "mopo": null,

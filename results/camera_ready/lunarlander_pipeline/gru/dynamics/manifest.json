@@ -6,6 +6,7 @@
     "kendall": "results/camera_ready/lunarlander_pipeline/gru/dynamics/dynamics_ranking_new_kendall.pt"
   },
   "value_aware": null,
+  "omd": null,
   "morel": null,
   "morel_info": null,
   "mopo": null,
