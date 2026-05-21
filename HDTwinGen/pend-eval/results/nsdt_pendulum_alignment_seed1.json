@@ -3,7 +3,7 @@
     "env_id": "Pendulum-v1",
     "eval_rollouts": 20,
     "eval_horizon": 500,
-    "gamma": 0.97,
+    "gamma": 0.95,
     "seed": 42,
     "device": "cuda",
     "deterministic_policy": true,
@@ -18,30 +18,30 @@
     "state_dict_file": "best_state_dict.pt"
   },
   "metrics": {
-    "spearman_rank_corr": -0.6571428571428573,
-    "regret": 105.28854460145583
+    "spearman_rank_corr": -0.6,
+    "regret": 43.84717444425647
   },
   "policy_selection": {
-    "real_optimal_policy": "ppo_frac_4000000",
+    "real_optimal_policy": "ppo_frac_5000000",
     "simulator_optimal_policy": "ppo_frac_0",
-    "real_optimal_true_value": -101.71531830532633,
-    "simulator_optimal_true_value": -207.00386290678216,
-    "simulator_optimal_sim_value": -993455.5512413025,
+    "real_optimal_true_value": -78.64228407188706,
+    "simulator_optimal_true_value": -122.48945851614353,
+    "simulator_optimal_sim_value": -335877.38954086305,
     "env_rank_vector": {
       "ppo_frac_0": 6.0,
       "ppo_frac_1000000": 5.0,
       "ppo_frac_2000000": 4.0,
       "ppo_frac_3000000": 3.0,
-      "ppo_frac_4000000": 1.0,
-      "ppo_frac_5000000": 2.0
+      "ppo_frac_4000000": 2.0,
+      "ppo_frac_5000000": 1.0
     },
     "sim_rank_vector": {
       "ppo_frac_0": 1.0,
       "ppo_frac_1000000": 2.0,
-      "ppo_frac_2000000": 4.0,
-      "ppo_frac_3000000": 5.0,
+      "ppo_frac_2000000": 6.0,
+      "ppo_frac_3000000": 4.0,
       "ppo_frac_4000000": 3.0,
-      "ppo_frac_5000000": 6.0
+      "ppo_frac_5000000": 5.0
     }
   },
   "results": [
@@ -50,108 +50,108 @@
       "checkpoint": "pend-eval/policies/ppo_frac_0.zip",
       "timesteps": 0,
       "true_env": {
-        "mean": -207.00386290678216,
-        "std": 51.15483834175673,
-        "stderr": 11.438569591018066,
+        "mean": -122.48945851614353,
+        "std": 32.66255478470377,
+        "stderr": 7.303569281740864,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -993455.5512413025,
-        "std": 3239068.684531889,
-        "stderr": 724277.7762404125,
+        "mean": -335877.38954086305,
+        "std": 1107167.6822244604,
+        "stderr": 247570.2199944779,
         "n": 20
       },
-      "delta_mean": -993248.5473783957
+      "delta_mean": -335754.9000823469
     },
     {
       "name": "ppo_frac_1000000",
       "checkpoint": "pend-eval/policies/ppo_frac_1000000.zip",
       "timesteps": 1000000,
       "true_env": {
-        "mean": -105.6371732086886,
-        "std": 41.338394949361586,
-        "stderr": 9.243546118750649,
+        "mean": -80.64751282861383,
+        "std": 30.606564499210283,
+        "stderr": 6.843835877796599,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -3891387.225970515,
-        "std": 4543098.720823103,
-        "stderr": 1015867.7568252797,
+        "mean": -1045192.2681022569,
+        "std": 1227464.8972082215,
+        "stderr": 274469.4950152375,
         "n": 20
       },
-      "delta_mean": -3891281.588797306
+      "delta_mean": -1045111.6205894283
     },
     {
       "name": "ppo_frac_2000000",
       "checkpoint": "pend-eval/policies/ppo_frac_2000000.zip",
       "timesteps": 2000000,
       "true_env": {
-        "mean": -102.37178602651662,
-        "std": 39.81829053280501,
-        "stderr": 8.903640437918831,
+        "mean": -79.0919779122406,
+        "std": 29.641578954082124,
+        "stderr": 6.628058550175474,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -5769238.184475208,
-        "std": 5325570.706818733,
-        "stderr": 1190833.811942829,
+        "mean": -1628261.256795738,
+        "std": 1611325.6967959376,
+        "stderr": 360303.37919279316,
         "n": 20
       },
-      "delta_mean": -5769135.812689181
+      "delta_mean": -1628182.1648178257
     },
     {
       "name": "ppo_frac_3000000",
       "checkpoint": "pend-eval/policies/ppo_frac_3000000.zip",
       "timesteps": 3000000,
       "true_env": {
-        "mean": -101.82720836355496,
-        "std": 39.21859311265133,
-        "stderr": 8.769544018179342,
+        "mean": -78.76135875972508,
+        "std": 29.374470189235435,
+        "stderr": 6.568331214617154,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -5906808.65455279,
-        "std": 4857437.637118164,
-        "stderr": 1086156.0753062172,
+        "mean": -1586186.2427268527,
+        "std": 1375045.493054728,
+        "stderr": 307469.5194625087,
         "n": 20
       },
-      "delta_mean": -5906706.827344427
+      "delta_mean": -1586107.4813680928
     },
     {
       "name": "ppo_frac_4000000",
       "checkpoint": "pend-eval/policies/ppo_frac_4000000.zip",
       "timesteps": 4000000,
       "true_env": {
-        "mean": -101.71531830532633,
-        "std": 39.01151452070687,
-        "stderr": 8.723239837352068,
+        "mean": -78.67647042122483,
+        "std": 29.29649773240349,
+        "stderr": 6.550896043232265,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -5553712.600383116,
-        "std": 4530420.773109683,
-        "stderr": 1013032.8815350402,
+        "mean": -1439524.657495801,
+        "std": 1216548.3436518582,
+        "stderr": 272028.47943203297,
         "n": 20
       },
-      "delta_mean": -5553610.8850648105
+      "delta_mean": -1439445.9810253798
     },
     {
       "name": "ppo_frac_5000000",
       "checkpoint": "pend-eval/policies/ppo_frac_5000000.zip",
       "timesteps": 5000000,
       "true_env": {
-        "mean": -101.79692052276826,
-        "std": 38.93968340196023,
-        "stderr": 8.707177910910334,
+        "mean": -78.64228407188706,
+        "std": 29.276205230679196,
+        "stderr": 6.546358501903359,
         "n": 20
       },
       "nsdt_sim": {
-        "mean": -6181740.286379089,
-        "std": 4638009.809809242,
-        "stderr": 1037090.5215044336,
+        "mean": -1618574.2112252049,
+        "std": 1295382.3301229135,
+        "stderr": 289656.2947006908,
         "n": 20
       },
-      "delta_mean": -6181638.489458566
+      "delta_mean": -1618495.568941133
     }
   ]
 }

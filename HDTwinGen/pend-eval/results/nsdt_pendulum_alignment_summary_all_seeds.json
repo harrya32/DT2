@@ -1,30 +1,30 @@
 {
   "aggregate_over_env_seeds": {
     "num_seeds": 10,
-    "spearman_rank_corr_mean": -0.14285714285714285,
-    "spearman_rank_corr_stderr": 0.18130291861776449,
-    "regret_mean": 32.91073383917187,
-    "regret_stderr": 15.801858860336978
+    "spearman_rank_corr_mean": -0.10285714285714284,
+    "spearman_rank_corr_stderr": 0.20551136376103543,
+    "regret_mean": 13.845659728365671,
+    "regret_stderr": 6.551648192375223
   },
   "per_seed": [
     {
       "env_seed": 0,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed0.json",
-      "spearman_rank_corr": 0.6571428571428573,
-      "regret": 0.08160221744192597,
+      "spearman_rank_corr": 0.7142857142857143,
+      "regret": 0.0,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_5000000",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -101.79692052276826,
-        "simulator_optimal_sim_value": -1969202.0229304,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_sim_value": -596056.9290059619,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 5.0,
@@ -39,57 +39,57 @@
     {
       "env_seed": 1,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed1.json",
-      "spearman_rank_corr": -0.6571428571428573,
-      "regret": 105.28854460145583,
+      "spearman_rank_corr": -0.6,
+      "regret": 43.84717444425647,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_0",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -207.00386290678216,
-        "simulator_optimal_sim_value": -993455.5512413025,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -122.48945851614353,
+        "simulator_optimal_sim_value": -335877.38954086305,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 1.0,
           "ppo_frac_1000000": 2.0,
-          "ppo_frac_2000000": 4.0,
-          "ppo_frac_3000000": 5.0,
+          "ppo_frac_2000000": 6.0,
+          "ppo_frac_3000000": 4.0,
           "ppo_frac_4000000": 3.0,
-          "ppo_frac_5000000": 6.0
+          "ppo_frac_5000000": 5.0
         }
       }
     },
     {
       "env_seed": 2,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed2.json",
-      "spearman_rank_corr": 0.8285714285714287,
-      "regret": 0.08160221744192597,
+      "spearman_rank_corr": 1.0,
+      "regret": 0.0,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_5000000",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -101.79692052276826,
-        "simulator_optimal_sim_value": -127.32938263118267,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_sim_value": -89.81438113003969,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
-          "ppo_frac_3000000": 2.0,
-          "ppo_frac_4000000": 3.0,
+          "ppo_frac_3000000": 3.0,
+          "ppo_frac_4000000": 2.0,
           "ppo_frac_5000000": 1.0
         }
       }
@@ -97,26 +97,26 @@
     {
       "env_seed": 3,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed3.json",
-      "spearman_rank_corr": -0.6571428571428573,
-      "regret": 3.9218549033622594,
+      "spearman_rank_corr": -0.8857142857142858,
+      "regret": 2.0052287567267655,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_1000000",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -105.6371732086886,
-        "simulator_optimal_sim_value": -115.92939803525806,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -80.64751282861383,
+        "simulator_optimal_sim_value": -85.4920124270022,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
-          "ppo_frac_0": 3.0,
+          "ppo_frac_0": 2.0,
           "ppo_frac_1000000": 1.0,
-          "ppo_frac_2000000": 2.0,
+          "ppo_frac_2000000": 3.0,
           "ppo_frac_3000000": 5.0,
           "ppo_frac_4000000": 4.0,
           "ppo_frac_5000000": 6.0
@@ -126,50 +126,50 @@
     {
       "env_seed": 4,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed4.json",
-      "spearman_rank_corr": -0.3142857142857143,
-      "regret": 105.28854460145583,
+      "spearman_rank_corr": -0.2571428571428572,
+      "regret": 43.84717444425647,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_0",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -207.00386290678216,
-        "simulator_optimal_sim_value": -234.52534408569335,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -122.48945851614353,
+        "simulator_optimal_sim_value": -131.9605920791626,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 1.0,
-          "ppo_frac_1000000": 5.0,
+          "ppo_frac_1000000": 6.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 2.0,
           "ppo_frac_4000000": 3.0,
-          "ppo_frac_5000000": 6.0
+          "ppo_frac_5000000": 5.0
         }
       }
     },
     {
       "env_seed": 5,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed5.json",
-      "spearman_rank_corr": -0.4285714285714286,
-      "regret": 3.9218549033622594,
+      "spearman_rank_corr": -0.3142857142857143,
+      "regret": 2.0052287567267655,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_1000000",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -105.6371732086886,
-        "simulator_optimal_sim_value": -5992990.7375,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -80.64751282861383,
+        "simulator_optimal_sim_value": -2523381.65234375,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 5.0,
@@ -185,49 +185,49 @@
       "env_seed": 6,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed6.json",
       "spearman_rank_corr": -0.942857142857143,
-      "regret": 105.28854460145583,
+      "regret": 43.84717444425647,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_0",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -207.00386290678216,
-        "simulator_optimal_sim_value": -138.98774032592775,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -122.48945851614353,
+        "simulator_optimal_sim_value": -82.02468605041504,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 1.0,
           "ppo_frac_1000000": 2.0,
           "ppo_frac_2000000": 3.0,
           "ppo_frac_3000000": 4.0,
-          "ppo_frac_4000000": 5.0,
-          "ppo_frac_5000000": 6.0
+          "ppo_frac_4000000": 6.0,
+          "ppo_frac_5000000": 5.0
         }
       }
     },
     {
       "env_seed": 7,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed7.json",
-      "spearman_rank_corr": 0.028571428571428574,
-      "regret": 3.9218549033622594,
+      "spearman_rank_corr": -0.08571428571428573,
+      "regret": 2.0052287567267655,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_1000000",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -105.6371732086886,
-        "simulator_optimal_sim_value": -1529136.3231321082,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -80.64751282861383,
+        "simulator_optimal_sim_value": -256498.31417421997,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 6.0,
@@ -242,21 +242,21 @@
     {
       "env_seed": 8,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed8.json",
-      "spearman_rank_corr": -0.028571428571428574,
-      "regret": 0.6564677211902818,
+      "spearman_rank_corr": -0.08571428571428573,
+      "regret": 0.44969384035353244,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_2000000",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -102.37178602651662,
-        "simulator_optimal_sim_value": -125.66187722086906,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -79.0919779122406,
+        "simulator_optimal_sim_value": -89.6683879494667,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 6.0,
@@ -271,29 +271,29 @@
     {
       "env_seed": 9,
       "file": "pend-eval/results/nsdt_pendulum_alignment_seed9.json",
-      "spearman_rank_corr": 0.08571428571428573,
-      "regret": 0.6564677211902818,
+      "spearman_rank_corr": 0.4285714285714286,
+      "regret": 0.44969384035353244,
       "policy_selection": {
-        "real_optimal_policy": "ppo_frac_4000000",
+        "real_optimal_policy": "ppo_frac_5000000",
         "simulator_optimal_policy": "ppo_frac_2000000",
-        "real_optimal_true_value": -101.71531830532633,
-        "simulator_optimal_true_value": -102.37178602651662,
-        "simulator_optimal_sim_value": -120.73467167466879,
+        "real_optimal_true_value": -78.64228407188706,
+        "simulator_optimal_true_value": -79.0919779122406,
+        "simulator_optimal_sim_value": -87.4057373329997,
         "env_rank_vector": {
           "ppo_frac_0": 6.0,
           "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 4.0,
           "ppo_frac_3000000": 3.0,
-          "ppo_frac_4000000": 1.0,
-          "ppo_frac_5000000": 2.0
+          "ppo_frac_4000000": 2.0,
+          "ppo_frac_5000000": 1.0
         },
         "sim_rank_vector": {
           "ppo_frac_0": 6.0,
-          "ppo_frac_1000000": 3.0,
+          "ppo_frac_1000000": 5.0,
           "ppo_frac_2000000": 1.0,
           "ppo_frac_3000000": 2.0,
-          "ppo_frac_4000000": 4.0,
-          "ppo_frac_5000000": 5.0
+          "ppo_frac_4000000": 3.0,
+          "ppo_frac_5000000": 4.0
         }
       }
     }
