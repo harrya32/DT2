@@ -1,8 +1,0 @@
-{
-  "supervised": "results/pomdp_pipeline/seed_0/dynamics/dynamics_supervised.pt",
-  "ranking_new": {
-    "kendall": "results/pomdp_pipeline/seed_0/dynamics/dynamics_ranking_new_kendall.pt",
-    "hinge": "results/pomdp_pipeline/seed_0/dynamics/dynamics_ranking_new_hinge.pt",
-    "listnet": "results/pomdp_pipeline/seed_0/dynamics/dynamics_ranking_new_listnet.pt"
-  }
-}
