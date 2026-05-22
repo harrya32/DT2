@@ -38,7 +38,7 @@ fi
 
 for seed in "${SEEDS[@]}"; do
     echo "Running seed ${seed}..."
-    python exps/ant_runner.py --backbone "resnet" --rank-rollout-horizon 50 --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --eval-ood-policies --ood-policy-types random const_zero const_min const_max const_mid --ood-eval-rollouts 50 --seed "$seed"  --output-dir "$OUTPUT_DIR" "${EXTRA_ARGS[@]}"
+    python exps/lunarlander_runner.py --backbone "resnet" --dyn-hidden-dim 64 --force-dynamics-training --dynamics-models supervised kendall --dyn-early-stop-patience 20 --eval-rollouts 20 --eval-ood-policies --ood-policy-types random const_zero const_min const_max const_mid --ood-eval-rollouts 50 --seed "$seed"  --output-dir "$OUTPUT_DIR" "${EXTRA_ARGS[@]}"
     echo "Completed seed ${seed}"
     echo
 done
